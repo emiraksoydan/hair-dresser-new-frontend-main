@@ -402,29 +402,58 @@ export const api = createApi({
                     { type: 'Notification' as const, id: 'LIST' },
                 ];
             },
-            // Cache süresini kısalt - bildirimler sık güncellenir
-            keepUnusedDataFor: 5, // 5 saniye - daha kısa cache süresi
+            keepUnusedDataFor: 60, // 60 saniye cache
         }),
         markNotificationRead: builder.mutation<void, string>({
             query: (id) => ({ url: `Notification/read/${id}`, method: 'POST' }),
-            invalidatesTags: (result, error, id) => [
-                { type: 'Notification' as const, id },
-                { type: 'Notification' as const, id: 'LIST' }, // Badge refetch
-            ],
+            async onQueryStarted(id, { dispatch, queryFulfilled }) {
+                const listPatch = dispatch(
+                    api.util.updateQueryData('getAllNotifications', undefined, (draft) => {
+                        const notification = draft.find((n) => n.id === id);
+                        if (notification) { notification.isRead = true; }
+                    }),
+                );
+                const badgePatch = dispatch(
+                    api.util.updateQueryData('getBadgeCounts', undefined, (draft) => {
+                        if (draft?.data?.notificationUnreadCount !== undefined) {
+                            draft.data.notificationUnreadCount = Math.max(0, draft.data.notificationUnreadCount - 1);
+                        }
+                    }),
+                );
+                try { await queryFulfilled; }
+                catch { listPatch.undo(); badgePatch.undo(); }
+            },
         }),
         deleteNotification: builder.mutation<ApiResponse<boolean>, string>({
             query: (id) => ({ url: `Notification/${id}`, method: 'DELETE' }),
-            invalidatesTags: (result, error, id) => [
-                { type: 'Notification' as const, id },
-                { type: 'Notification' as const, id: 'LIST' },
-            ],
+            async onQueryStarted(id, { dispatch, queryFulfilled }) {
+                let wasUnread = false;
+                const listPatch = dispatch(
+                    api.util.updateQueryData('getAllNotifications', undefined, (draft) => {
+                        const index = draft.findIndex((n) => n.id === id);
+                        if (index >= 0) { wasUnread = !draft[index].isRead; draft.splice(index, 1); }
+                    }),
+                );
+                const badgePatch = wasUnread ? dispatch(
+                    api.util.updateQueryData('getBadgeCounts', undefined, (draft) => {
+                        if (draft?.data?.notificationUnreadCount !== undefined) {
+                            draft.data.notificationUnreadCount = Math.max(0, draft.data.notificationUnreadCount - 1);
+                        }
+                    }),
+                ) : null;
+                try { await queryFulfilled; }
+                catch { listPatch.undo(); badgePatch?.undo(); }
+            },
         }),
         deleteAllNotifications: builder.mutation<ApiResponse<boolean>, void>({
             query: () => ({ url: 'Notification/all', method: 'DELETE' }),
-            invalidatesTags: [
-                { type: 'Notification' as const, id: 'LIST' },
-                'Notification',
-            ],
+            async onQueryStarted(_, { dispatch, queryFulfilled }) {
+                try {
+                    await queryFulfilled;
+                    // Backend bazı bildirimleri silmeyebilir (aktif randevu vs), o yüzden refetch
+                    dispatch(api.util.invalidateTags([{ type: 'Notification' as const, id: 'LIST' }]));
+                } catch { /* hata durumunda listeyi bozmayalım */ }
+            },
         }),
 
         // --- CHAT API ---

@@ -60,7 +60,6 @@ export const useSignalRV2 = () => {
     });
 
     conn.on("notification.updated", (dto: NotificationDto) => {
-      const wasNewNotification = !dto.isRead;
       dispatch(
         api.util.updateQueryData("getAllNotifications", undefined, (draft) => {
           if (!draft) return;
@@ -68,12 +67,8 @@ export const useSignalRV2 = () => {
           if (index >= 0) {
             draft[index] = { ...dto, _updatedAt: Date.now() };
           } else {
-            // Yeni bildirim eklendi - badge count'u güncelle
             draft.unshift({ ...dto, _updatedAt: Date.now() });
-            if (wasNewNotification) {
-              // Badge count'u invalidate et (yeniden çekilsin)
-              dispatch(api.util.invalidateTags([{ type: 'Notification' as const, id: 'LIST' }]));
-            }
+            // badge.updated event'i badge count'u ayrıca güncelleyecek
           }
         }),
       );
@@ -277,7 +272,7 @@ export const useSignalRV2 = () => {
           }),
         );
       } else {
-        dispatch(api.util.invalidateTags([{ type: "Notification", id: "LIST" }, { type: "Chat", id: "LIST" }]));
+        dispatch(api.util.invalidateTags([{ type: "Notification", id: "LIST" }, { type: "Chat", id: "LIST" }, { type: "Appointment", id: "LIST" }]));
       }
     });
 
@@ -321,8 +316,8 @@ export const useSignalRV2 = () => {
 
       connection.onclose(() => {
         dispatch(setConnected({ connected: false }));
-        // Bağlantı koparsa badge count'u invalidate et (yeniden çekilsin)
-        dispatch(api.util.invalidateTags([{ type: "Notification", id: "LIST" }, { type: "Chat", id: "LIST" }]));
+        // Ağ kopukken invalidateTags çağırmıyoruz — HTTP isteği başarısız olur ve error state'e girer
+        // Optimistic updates badge'i senkron tutar; reconnect sonrası invalidateTags zaten çalışır
         if (userIdRef.current === currentUserId && tokenStore.access) {
           attemptReconnect(currentUserId);
         }
@@ -350,7 +345,12 @@ export const useSignalRV2 = () => {
         } catch (e) {
           // Silent fail
         }
-        dispatch(api.util.invalidateTags([{ type: "Notification", id: "LIST" }, { type: "Chat", id: "LIST" }]));
+        // Notification + Chat + Appointment — offline'da kaçırılan event'leri senkronize et
+        dispatch(api.util.invalidateTags([
+          { type: "Notification", id: "LIST" },
+          { type: "Chat", id: "LIST" },
+          { type: "Appointment", id: "LIST" },
+        ]));
       });
 
       await connection.start();
@@ -376,12 +376,12 @@ export const useSignalRV2 = () => {
         // Silent fail
       }
 
-      // Invalidate tags to refetch notifications and badge counts
-      // This ensures that notifications received while app was closed are loaded
-      // Note: invalidateTags will refetch all active (subscribed) queries with matching tags
-      // getBadgeCounts is always mounted in BaseTabLayout, so it will be refetched
-      // getAllNotifications will be refetched when NotificationsSheet is opened
-      dispatch(api.util.invalidateTags([{ type: "Notification", id: "LIST" }, { type: "Chat", id: "LIST" }]));
+      // Uygulama kapalıyken gelen event'leri senkronize et
+      dispatch(api.util.invalidateTags([
+        { type: "Notification", id: "LIST" },
+        { type: "Chat", id: "LIST" },
+        { type: "Appointment", id: "LIST" },
+      ]));
 
     } catch (e) {
       dispatch(setConnected({ connected: false }));
@@ -413,7 +413,7 @@ export const useSignalRV2 = () => {
       if (pollingRetryCountRef.current >= maxPollingRetries) {
         pollingIntervalRef.current = setInterval(() => {
           if (userIdRef.current === expectedUserId && tokenStore.access) {
-            dispatch(api.util.invalidateTags([{ type: "Notification", id: "LIST" }, { type: "Chat", id: "LIST" }]));
+            dispatch(api.util.invalidateTags([{ type: "Notification", id: "LIST" }, { type: "Chat", id: "LIST" }, { type: "Appointment", id: "LIST" }]));
           } else {
             if (pollingIntervalRef.current) {
               clearInterval(pollingIntervalRef.current);
@@ -429,7 +429,7 @@ export const useSignalRV2 = () => {
 
       pollingIntervalRef.current = setInterval(() => {
         if (userIdRef.current === expectedUserId && tokenStore.access) {
-          dispatch(api.util.invalidateTags([{ type: "Notification", id: "LIST" }, { type: "Chat", id: "LIST" }]));
+          dispatch(api.util.invalidateTags([{ type: "Notification", id: "LIST" }, { type: "Chat", id: "LIST" }, { type: "Appointment", id: "LIST" }]));
         } else {
           if (pollingIntervalRef.current) {
             clearInterval(pollingIntervalRef.current);

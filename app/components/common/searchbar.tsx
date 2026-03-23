@@ -11,6 +11,8 @@ interface ExtendedSearchBarProps extends SearchBarProps {
     setIsList?: (val: boolean) => void;
     onFilterPress?: () => void;
     showButtons?: boolean;
+    /** Her zaman bu renkte border göster (focus durumuna bakılmaksızın) */
+    forceBorderColor?: string;
 }
 
 const SearchBar: React.FC<ExtendedSearchBarProps> = ({
@@ -20,6 +22,7 @@ const SearchBar: React.FC<ExtendedSearchBarProps> = ({
     setIsList,
     onFilterPress,
     showButtons = true,
+    forceBorderColor,
 }) => {
     const { t } = useLanguage();
     const { colors } = useTheme();
@@ -28,13 +31,15 @@ const SearchBar: React.FC<ExtendedSearchBarProps> = ({
     // Butonları gösterip göstermeyeceğimizi belirle
     const shouldShowButtons = showButtons && setIsList && onFilterPress;
 
+    const borderColor = forceBorderColor ?? (isFocused ? "#ffb900" : colors.cardBg);
+
     return (
         <View
             className={`flex-row items-center px-3 rounded-xl h-14`}
             style={{
                 backgroundColor: colors.cardBg,
                 borderWidth: 1.5,
-                borderColor: isFocused ? "#ffb900" : colors.cardBg,
+                borderColor,
             }}
         >
             <Icon source="magnify" size={22} color="#9aa1ae" />

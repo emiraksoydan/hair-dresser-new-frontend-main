@@ -130,6 +130,7 @@ const Index = () => {
             const result = await updateProfile({
                 firstName: data.firstName,
                 lastName: data.lastName,
+                phoneNumber: userData?.data?.phoneNumber || '',
             });
             if ('error' in result) {
                 throw new Error('Profile update failed');
@@ -404,6 +405,7 @@ const Index = () => {
                                         textColor={colors.sectionHeaderText}
                                         error={!!errors.firstName}
                                         outlineColor={errors.firstName ? "#b00020" : "#fea60e"}
+                                        activeOutlineColor={errors.firstName ? "#b00020" : "#fea60e"}
                                         theme={textInputTheme}
                                         style={{ backgroundColor: colors.cardBg, marginBottom: 0, fontFamily: 'CenturyGothic' }}
                                     />
@@ -426,6 +428,7 @@ const Index = () => {
                                         textColor={colors.sectionHeaderText}
                                         error={!!errors.lastName}
                                         outlineColor={errors.lastName ? "#b00020" : "#fea60e"}
+                                        activeOutlineColor={errors.lastName ? "#b00020" : "#fea60e"}
                                         theme={textInputTheme}
                                         style={{ backgroundColor: colors.cardBg, marginBottom: 0, fontFamily: 'CenturyGothic' }}
                                     />

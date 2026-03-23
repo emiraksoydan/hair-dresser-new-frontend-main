@@ -2178,7 +2178,7 @@ const FormStoreUpdate = React.memo(({
                         </HelperText>
                       </View>
                     )}
-                    <View className="mt-4 mx-0 px-2 flex-row items-center">
+                    <View className="mt-2 mx-0 px-2 flex-row items-center">
                       <Text className="text-xl flex-1" style={{ color: colors.sectionHeaderText }}>
                         {t("form.chairCount")} : {chairFields.length}
                       </Text>

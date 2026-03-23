@@ -1,9 +1,10 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { View, ScrollView, TouchableOpacity, Animated } from 'react-native';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
+import { View, ScrollView, TouchableOpacity } from 'react-native';
 import { Text } from './Text';
-import { Icon } from 'react-native-paper';
+import { BottomSheetModal, BottomSheetFlatList, BottomSheetBackdrop, type BottomSheetBackdropProps } from '@gorhom/bottom-sheet';
 import { useLanguage } from '../../hook/useLanguage';
 import { useTheme } from '../../hook/useTheme';
+import SearchBar from './searchbar';
 
 interface ServiceOffering {
   id?: string;
@@ -22,10 +23,7 @@ interface ServiceOfferingsListProps {
   showExpandButton?: boolean;
 }
 
-// Approximate height per service item (py-2.5 = 20px padding + ~14px text + 1px border)
-const ITEM_H = 42;
-
-const ServiceItem = ({ service, isFirst, isLast, colors, currency }: {
+const ServiceItem = React.memo(({ service, isFirst, isLast, colors, currency }: {
   service: ServiceOffering;
   isFirst: boolean;
   isLast: boolean;
@@ -52,12 +50,12 @@ const ServiceItem = ({ service, isFirst, isLast, colors, currency }: {
       {service.price} {currency}
     </Text>
   </View>
-);
+));
 
 /**
  * Reusable service offerings list component
  * Supports horizontal scrollable and vertical list layouts
- * Inline expand — no Modal, works correctly inside FlatList grouped items
+ * Sheet expand — no inline animation, uses BottomSheetModal
  */
 export const ServiceOfferingsList: React.FC<ServiceOfferingsListProps> = ({
   offerings,
@@ -68,9 +66,30 @@ export const ServiceOfferingsList: React.FC<ServiceOfferingsListProps> = ({
 }) => {
   const { t } = useLanguage();
   const { colors } = useTheme();
-  const [isExpanded, setIsExpanded] = useState(false);
+  const sheetRef = useRef<BottomSheetModal>(null);
+  const [searchQuery, setSearchQuery] = useState('');
 
   const currency = t('card.currency');
+
+  const filteredOfferings = useMemo(() => {
+    if (!searchQuery.trim()) return offerings;
+    const q = searchQuery.toLowerCase();
+    return offerings.filter((o) => o.serviceName.toLowerCase().includes(q));
+  }, [offerings, searchQuery]);
+
+  const snapPoints = useMemo(() => ['50%', '85%'], []);
+
+  const openSheet = useCallback(() => {
+    setSearchQuery('');
+    sheetRef.current?.present();
+  }, []);
+
+  const renderBackdrop = useCallback(
+    (props: BottomSheetBackdropProps) => (
+      <BottomSheetBackdrop {...props} appearsOnIndex={0} disappearsOnIndex={-1} pressBehavior="close" />
+    ),
+    [],
+  );
 
   if (!offerings || offerings.length === 0) {
     return null;
@@ -103,101 +122,92 @@ export const ServiceOfferingsList: React.FC<ServiceOfferingsListProps> = ({
     );
   }
 
-  // Vertical layout — no expand button
+  // Vertical layout — no expand needed
   const hasMore = showExpandButton && previewCount != null && offerings.length > previewCount;
+  const previewItems = hasMore ? offerings.slice(0, previewCount) : offerings;
 
-  if (!hasMore) {
-    return (
+  return (
+    <>
       <View className={`mt-0 mb-2 ${className}`}>
-        {offerings.map((service, index) => (
+        {previewItems.map((service, index) => (
           <ServiceItem
             key={service.id ?? service.serviceName ?? index}
             service={service}
             isFirst={index === 0}
-            isLast={index === offerings.length - 1}
+            isLast={index === previewItems.length - 1}
             colors={colors}
             currency={currency}
           />
         ))}
-      </View>
-    );
-  }
 
-  // Has expand — render ALL items always, animate height to avoid DOM insertions
-  return (
-    <ExpandableServiceList
-      offerings={offerings}
-      previewCount={previewCount!}
-      colors={colors}
-      currency={currency}
-      isExpanded={isExpanded}
-      onToggle={() => setIsExpanded(v => !v)}
-      t={t}
-      className={className}
-    />
+        {hasMore && (
+          <TouchableOpacity
+            onPress={openSheet}
+            className="py-2 mt-1 items-center"
+            activeOpacity={0.7}
+          >
+            <Text className="text-[#60a5fa] text-sm">
+              {t('common.showAll')} ({offerings.length})
+            </Text>
+          </TouchableOpacity>
+        )}
+      </View>
+
+      {hasMore && (
+        <BottomSheetModal
+          ref={sheetRef}
+          snapPoints={snapPoints}
+          enablePanDownToClose
+          enableOverDrag={false}
+          backdropComponent={renderBackdrop}
+          backgroundStyle={{ backgroundColor: colors.cardBg }}
+          handleIndicatorStyle={{ backgroundColor: colors.borderColor }}
+        >
+          <BottomSheetFlatList
+            data={filteredOfferings}
+            keyExtractor={(item, index) => item.id ?? `${item.serviceName}-${index}`}
+            contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 24 }}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+            ListHeaderComponent={(
+              <>
+                <View className="pt-3 pb-2">
+                  <Text
+                    className="text-lg font-century-gothic-sans-semibold"
+                    style={{ color: colors.sectionHeaderText }}
+                  >
+                    {t('common.showAll')} ({offerings.length})
+                  </Text>
+                </View>
+                <View className="pb-3">
+                  <SearchBar
+                    searchQuery={searchQuery}
+                    setSearchQuery={setSearchQuery}
+                    showButtons={false}
+                    forceBorderColor="#ffb900"
+                  />
+                </View>
+              </>
+            )}
+            ListEmptyComponent={(
+              <View className="py-6 items-center">
+                <Text style={{ color: colors.textSecondary }} className="text-sm">
+                  {t('common.noSearchResults')}
+                </Text>
+              </View>
+            )}
+            renderItem={({ item, index }) => (
+              <ServiceItem
+                service={item}
+                isFirst={index === 0}
+                isLast={index === filteredOfferings.length - 1}
+                colors={colors}
+                currency={currency}
+              />
+            )}
+          />
+        </BottomSheetModal>
+      )}
+    </>
   );
 };
-
-const ExpandableServiceList = React.memo(({
-  offerings,
-  previewCount,
-  colors,
-  currency,
-  isExpanded,
-  onToggle,
-  t,
-  className,
-}: {
-  offerings: ServiceOffering[];
-  previewCount: number;
-  colors: any;
-  currency: string;
-  isExpanded: boolean;
-  onToggle: () => void;
-  t: (key: string) => string;
-  className: string;
-}) => {
-  const collapsedH = previewCount * ITEM_H;
-  const fullH = offerings.length * ITEM_H;
-  const animHeight = useRef(new Animated.Value(collapsedH)).current;
-
-  useEffect(() => {
-    Animated.timing(animHeight, {
-      toValue: isExpanded ? fullH : collapsedH,
-      duration: 180,
-      useNativeDriver: false,
-    }).start();
-  }, [isExpanded, fullH, collapsedH]);
-
-  return (
-    <View className={`mt-0 mb-2 ${className}`}>
-      <Animated.View style={{ height: animHeight, overflow: 'hidden' }}>
-        {offerings.map((service, index) => (
-          <ServiceItem
-            key={service.id ?? service.serviceName ?? index}
-            service={service}
-            isFirst={index === 0}
-            isLast={index === offerings.length - 1}
-            colors={colors}
-            currency={currency}
-          />
-        ))}
-      </Animated.View>
-
-      <TouchableOpacity
-        onPress={onToggle}
-        className="flex-row items-center justify-center py-2 mt-1"
-        activeOpacity={0.7}
-      >
-        <Text className="text-[#60a5fa] text-sm mr-1">
-          {isExpanded ? t('common.showLess') : `${t('common.showAll')} (${offerings.length})`}
-        </Text>
-        <Icon
-          source={isExpanded ? 'chevron-up' : 'chevron-down'}
-          size={16}
-          color="#60a5fa"
-        />
-      </TouchableOpacity>
-    </View>
-  );
-});

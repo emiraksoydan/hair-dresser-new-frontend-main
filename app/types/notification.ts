@@ -38,12 +38,10 @@ export type NotificationDto = {
 
 export interface NotificationPayload {
   appointmentId: string;
-  eventKey: string;
   recipientRole: string;
   date?: string | null;
   startTime?: string | null;
   endTime?: string | null;
-  actorUserId?: string;
 
   store?: {
     storeId: string;

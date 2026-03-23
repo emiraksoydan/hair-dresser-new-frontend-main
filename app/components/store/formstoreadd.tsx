@@ -1672,7 +1672,7 @@ const FormStoreAdd = ({
                   </View>
                 )}
 
-                <View className="mt-4 mx-0 px-2 flex-row items-center">
+                <View className="mt-2 mx-0 px-2 flex-row items-center">
                   <Text className="text-white text-xl flex-1" style={{ color: colors.sectionHeaderText }}>
                     Koltuk Sayısı : {chairFields.length}
                   </Text>
