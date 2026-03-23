@@ -1,0 +1,60 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Century Gothic Font Definitions */
+@font-face {
+  font-family: "CenturyGothic";
+  src: url("./assets/fonts/centurygothic.ttf");
+  font-weight: normal;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: "CenturyGothic-Bold";
+  src: url("./assets/fonts/centurygothic_bold.ttf");
+  font-weight: bold;
+  font-style: normal;
+}
+
+/* Global Font Utilities */
+.font-century-gothic {
+  font-family: "CenturyGothic", sans-serif;
+}
+
+.font-century-gothic-bold {
+  font-family: "CenturyGothic-Bold", "CenturyGothic", sans-serif;
+}
+
+/* Default Font for All Elements */
+* {
+  font-family: "CenturyGothic", sans-serif;
+}
+
+/* Ensure text elements use Century Gothic by default */
+body,
+html,
+text,
+span,
+p,
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+div,
+button,
+input,
+textarea,
+select {
+  font-family: "CenturyGothic", sans-serif;
+}
+
+/* Bold elements use Century Gothic Bold */
+b,
+strong,
+.font-bold,
+.font-semibold {
+  font-family: "CenturyGothic-Bold", "CenturyGothic", sans-serif;
+}

@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "181680585618",
+    "project_id": "gumusmakas-production",
+    "storage_bucket": "gumusmakas-production.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:181680585618:android:058fe3f46038ce9ba65f4b",
+        "android_client_info": {
+          "package_name": "com.hairdresser.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD4Irc_91MJjOw0CE7WpENeJZHNgHjOqtM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
