@@ -4,6 +4,7 @@ import { useAuth } from './useAuth';
 import { useLanguage } from './useLanguage';
 import { FavoriteTargetType } from '../types';
 import { useAlert } from './useAlert';
+import { useActionGuard } from './useActionGuard';
 
 interface UseFavoriteToggleOptions {
   targetId: string;
@@ -18,7 +19,7 @@ interface UseFavoriteToggleReturn {
   isFavorite: boolean;
   favoriteCount: number;
   isLoading: boolean;
-  toggleFavorite: () => Promise<void>;
+  toggleFavorite: () => Promise<void | undefined>;
 }
 
 /**
@@ -36,6 +37,7 @@ export const useFavoriteToggle = ({
   const { isAuthenticated } = useAuth();
   const { t } = useLanguage();
   const { alert, alertError } = useAlert();
+  const guard = useActionGuard();
   const [toggleFavoriteMutation, { isLoading: isTogglingFavorite }] = useToggleFavoriteMutation();
 
   // Query for favorite status (only if authenticated and not skipped)
@@ -67,7 +69,7 @@ export const useFavoriteToggle = ({
     }
   }, [initialFavoriteCount]);
 
-  const toggleFavorite = useCallback(async () => {
+  const toggleFavorite = useCallback(() => guard(async () => {
     if (!isAuthenticated) {
       alert(t('booking.warning'), t('booking.loginRequiredForFavorite'), undefined, 'warning');
       return;
@@ -104,7 +106,7 @@ export const useFavoriteToggle = ({
         error?.data?.message || error?.message || t('appointment.alerts.favoriteFailed')
       );
     }
-  }, [isAuthenticated, targetId, targetType, appointmentId, toggleFavoriteMutation, t, isFavorite, alert, alertError]);
+  }), [guard, isAuthenticated, targetId, targetType, appointmentId, toggleFavoriteMutation, t, isFavorite, alert, alertError]);
 
   return {
     isFavorite,

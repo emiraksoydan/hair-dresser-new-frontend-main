@@ -331,6 +331,18 @@ const messageToKeyMap: Record<string, string> = {
   'Yüklediğiniz görsel uygunsuz içerik barındırmaktadır. Lütfen uygun bir görsel yükleyiniz.': 'moderation.inappropriateImage',
 
   // ============================================================================
+  // SAVED FILTER MESSAGES
+  // ============================================================================
+  'Filtre kaydedildi.': 'filters.savedSuccess',
+  'Filtre güncellendi.': 'filters.updatedSuccess',
+  'Filtre silindi.': 'filters.deletedSuccess',
+  'Kayıtlı filtre bulunamadı.': 'filters.notFound',
+  'Bu filtre size ait değil.': 'filters.notOwner',
+  'En fazla 10 filtre kaydedebilirsiniz.': 'filters.limitReached',
+  'Bu isimde kayıtlı filtre zaten mevcut.': 'filters.nameAlreadyExists',
+  'Aynı filtre kriterleri zaten kayıtlı.': 'filters.criteriaAlreadyExists',
+
+  // ============================================================================
   // BAN MESSAGES
   // ============================================================================
   'Hesabınız yönetici tarafından askıya alınmıştır.': 'errors.userBanned',

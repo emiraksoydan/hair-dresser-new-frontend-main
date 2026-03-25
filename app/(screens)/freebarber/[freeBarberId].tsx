@@ -1,13 +1,14 @@
 import { TouchableOpacity, View, StatusBar } from 'react-native'
 import React from 'react'
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
 import { Icon } from 'react-native-paper';
 import FreeBarberBookingContent from '../../components/freebarber/freebarberbooking';
 import { useTheme } from '../../hook/useTheme';
+import { useSafeNavigation } from '../../hook/useSafeNavigation';
 
 const FreeBarberDetail = () => {
 
-    const router = useRouter();
+    const router = useSafeNavigation();
     const { colors, isDark } = useTheme();
     const { freeBarberId, freeBarber, mode, appointmentId } = useLocalSearchParams<{
         freeBarberId?: string;

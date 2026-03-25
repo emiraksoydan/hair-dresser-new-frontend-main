@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
+import { useSafeNavigation } from '../../hook/useSafeNavigation';
 
 /**
  * BarberStore message detail page
@@ -7,7 +8,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
  */
 const ChatDetailPage = () => {
     const { id: threadId } = useLocalSearchParams<{ id: string }>();
-    const router = useRouter();
+    const router = useSafeNavigation();
 
     useEffect(() => {
         if (threadId) {

@@ -25,11 +25,10 @@ export const Text: React.FC<TextProps> = ({ className, style, ...props }) => {
   const hasFontSizeInStyle = !!(flatStyle as any)?.fontSize;
   const defaultFontSize = hasFontSizeInClass || hasFontSizeInStyle ? {} : { fontSize: 15 };
 
-  const fontStyle = Platform.select({
-    ios: { fontFamily: 'CenturyGothic', ...defaultFontSize },
-    android: { fontFamily: 'CenturyGothic', ...defaultFontSize },
-    default: { ...defaultFontSize },
-  });
+  const fontStyle =
+    Platform.OS === 'ios' || Platform.OS === 'android'
+      ? { fontFamily: 'CenturyGothic', ...defaultFontSize }
+      : { ...defaultFontSize };
 
   return (
     <RNText

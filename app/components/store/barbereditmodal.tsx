@@ -28,6 +28,7 @@ import { getErrorMessage } from "../../utils/errorHandler";
 import { MESSAGES } from "../../constants/messages";
 import { useLanguage } from "../../hook/useLanguage";
 import { useTheme } from "../../hook/useTheme";
+import { useActionGuard } from "../../hook/useActionGuard";
 
 type Props = {
   visible: boolean;
@@ -67,6 +68,7 @@ export const BarberEditModal: React.FC<Props> = ({
   const [triggerGetImagesByOwner] = useLazyGetImagesByOwnerQuery();
   const dispatch = useAppDispatch();
   const profileImage = watch("profileImage");
+  const guard = useActionGuard();
 
   const handlePickAvatar = async () => {
     const file = await handlePickImage();
@@ -157,7 +159,7 @@ export const BarberEditModal: React.FC<Props> = ({
     }
   };
 
-  const submit = async (values: BarberFormValues) => {
+  const submit = (values: BarberFormValues) => guard(async () => {
     try {
       const isCreate = !values.id;
       const barberId = values.id && values.id.trim() ? values.id : uuid();
@@ -258,7 +260,7 @@ export const BarberEditModal: React.FC<Props> = ({
     } catch (e: any) {
       dispatch(showSnack({ message: getErrorMessage(e), isError: true }));
     }
-  };
+  });
   return (
     <Portal>
       <Dialog

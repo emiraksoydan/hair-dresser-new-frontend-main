@@ -30,6 +30,15 @@ export const StoreMarker = memo(({ storeId, coordinate, title, description, imag
         };
     }, []);
 
+    // Güvenlik zamanlayıcısı: onLoad cached image'larda Android'de tetiklenmeyebilir.
+    // En fazla 800ms sonra her durumda tracking'i kapat.
+    useEffect(() => {
+        const safetyTimer = setTimeout(() => {
+            if (mountedRef.current) setTracksViewChanges(false);
+        }, 800);
+        return () => clearTimeout(safetyTimer);
+    }, []);
+
     // Image URL değiştiğinde error'ı sıfırla ve tracking'i aç
     useEffect(() => {
         if (imageUrl !== imageUrlRef.current) {

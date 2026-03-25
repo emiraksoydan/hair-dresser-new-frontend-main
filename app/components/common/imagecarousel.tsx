@@ -1,7 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { View, Image, Dimensions, StyleProp, ViewStyle } from 'react-native';
-import Carousel, { Pagination } from 'react-native-reanimated-carousel';
-import { useSharedValue } from 'react-native-reanimated';
+import Carousel from 'react-native-reanimated-carousel';
 import { useTheme } from '../../hook/useTheme';
 import { ImageGetDto } from '../../types/common';
 
@@ -33,7 +32,6 @@ export const ImageCarousel: React.FC<ImageCarouselProps> = React.memo(({
   const { isDark } = useTheme();
   const width = widthProp ?? Dimensions.get('window').width;
   const [activeIndex, setActiveIndex] = useState(0);
-  const progressValue = useSharedValue<number>(0);
 
   // Memoize image data to prevent re-renders
   const imageData = useMemo(() => images || [], [images]);
@@ -75,9 +73,6 @@ export const ImageCarousel: React.FC<ImageCarouselProps> = React.memo(({
         data={imageData}
         scrollAnimationDuration={800}
         onSnapToItem={(index) => setActiveIndex(index)}
-        onProgressChange={(_, absoluteProgress) => {
-          progressValue.value = absoluteProgress;
-        }}
         {...(mode && mode !== 'default' ? { mode } : {})}
         renderItem={({ item }) => (
           <View
@@ -102,29 +97,23 @@ export const ImageCarousel: React.FC<ImageCarouselProps> = React.memo(({
         )}
       />
 
-      {/* Pagination Dots */}
+      {/* Pagination Dots — state-based, no shared value read during render */}
       {showPagination && imageData.length > 1 && (
-        <View className="absolute bottom-3 left-0 right-0">
-          <Pagination.Basic
-            progress={progressValue}
-            data={imageData}
-            horizontal
-            containerStyle={{ paddingVertical: 4 }}
-            dotStyle={{
-              width: 10,
-              height: 10,
-              borderRadius: 5,
-              backgroundColor: isDark ? 'rgba(255, 255, 255, 0.3)' : 'rgba(0, 0, 0, 0.2)',
-              marginHorizontal: 4,
-            }}
-            activeDotStyle={{
-              width: 10,
-              height: 10,
-              borderRadius: 5,
-              backgroundColor: '#f05e23',
-              marginHorizontal: 0,
-            }}
-          />
+        <View style={{ position: 'absolute', bottom: 12, left: 0, right: 0, flexDirection: 'row', justifyContent: 'center', paddingVertical: 4 }}>
+          {imageData.map((_, index) => (
+            <View
+              key={index}
+              style={{
+                width: 10,
+                height: 10,
+                borderRadius: 5,
+                backgroundColor: index === activeIndex
+                  ? '#f05e23'
+                  : (isDark ? 'rgba(255, 255, 255, 0.3)' : 'rgba(0, 0, 0, 0.2)'),
+                marginHorizontal: 4,
+              }}
+            />
+          ))}
         </View>
       )}
     </View>

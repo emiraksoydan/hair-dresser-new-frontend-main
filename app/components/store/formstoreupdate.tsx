@@ -89,6 +89,7 @@ import { useLanguage } from "../../hook/useLanguage";
 import { useAlert } from "../../hook/useAlert";
 import { StepFormIndicator } from "../common/StepFormIndicator";
 import { useTheme } from "../../hook/useTheme";
+import { useActionGuard } from "../../hook/useActionGuard";
 
 const createChairPricingSchema = (t: (key: string) => string) =>
   z
@@ -509,6 +510,7 @@ const FormStoreUpdate = React.memo(({
   const [uploadImage] = useUploadImageMutation();
   const [deleteImage] = useDeleteImageMutation();
   const [updateImageBlob] = useUpdateImageBlobMutation();
+  const guard = useActionGuard();
   const [isImagePickerLoading, setIsImagePickerLoading] = React.useState(false);
   const [isTaxDocumentLoading, setIsTaxDocumentLoading] = React.useState(false);
   const [loadedStoreImages, setLoadedStoreImages] = React.useState<Set<number>>(
@@ -2780,7 +2782,7 @@ const FormStoreUpdate = React.memo(({
                   disabled={updateLoading || isSubmitting}
                   loading={updateLoading || isSubmitting}
                   mode="contained"
-                  onPress={handleSubmit(OnSubmit)}
+                  onPress={handleSubmit((form) => guard(() => OnSubmit(form)))}
                   buttonColor="#10B981"
                   textColor="white"
                   labelStyle={{ fontSize: 16 }}

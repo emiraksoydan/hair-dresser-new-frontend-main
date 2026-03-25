@@ -9,6 +9,7 @@ import { useLanguage } from "../../hook/useLanguage";
 import { useAlert } from "../../hook/useAlert";
 import LottieView from "lottie-react-native";
 import { useTheme } from "../../hook/useTheme";
+import { useActionGuard } from "../../hook/useActionGuard";
 
 type RequestsSheetProps = {
   onClose: () => void;
@@ -18,6 +19,7 @@ export const RequestsSheet: React.FC<RequestsSheetProps> = ({ onClose }) => {
   const { t } = useLanguage();
   const { showSuccess, showError, showConfirm } = useAlert();
   const { colors } = useTheme();
+  const guard = useActionGuard();
 
   const [showForm, setShowForm] = useState(false);
   const [title, setTitle] = useState("");
@@ -43,7 +45,7 @@ export const RequestsSheet: React.FC<RequestsSheetProps> = ({ onClose }) => {
     }
   };
 
-  const handleSubmit = async () => {
+  const handleSubmit = () => guard(async () => {
     if (!title.trim()) {
       showError(t("profile.requestTitleRequired"));
       return;
@@ -63,13 +65,13 @@ export const RequestsSheet: React.FC<RequestsSheetProps> = ({ onClose }) => {
     } catch (error: any) {
       showError(error?.data?.message || t("profile.requestCreateError") || "İstek gönderilemedi");
     }
-  };
+  });
 
-  const handleDelete = async (requestId: string) => {
+  const handleDelete = (requestId: string) => {
     showConfirm(
       t("profile.deleteRequestTitle"),
       t("profile.deleteRequestMessage"),
-      async () => {
+      () => guard(async () => {
         try {
           await deleteRequest(requestId).unwrap();
           showSuccess(t("profile.deleteSuccess"));
@@ -77,7 +79,7 @@ export const RequestsSheet: React.FC<RequestsSheetProps> = ({ onClose }) => {
         } catch (error: any) {
           showError(error?.data?.message || t("profile.deleteError") || "İstek silinemedi");
         }
-      }
+      })
     );
   };
 

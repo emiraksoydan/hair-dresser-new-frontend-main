@@ -7,7 +7,7 @@ import React, { useMemo, useCallback } from 'react';
 import { View, TouchableOpacity, RefreshControl, ScrollView } from 'react-native';
 import { Text } from '../common/Text';
 import { LegendList } from '@legendapp/list';
-import { useRouter } from 'expo-router';
+import { useSafeNavigation } from '../../hook/useSafeNavigation';
 import { Icon } from 'react-native-paper';
 import { useGetChatThreadsQuery } from '../../store/api';
 import { ChatThreadListItemDto, ChatThreadParticipantDto, AppointmentStatus, UserType, BarberType, ImageOwnerType } from '../../types';
@@ -28,7 +28,7 @@ interface MessageThreadListProps {
 }
 
 export const MessageThreadList: React.FC<MessageThreadListProps> = ({ routePrefix, iconSource }) => {
-    const router = useRouter();
+    const router = useSafeNavigation();
     const { t } = useLanguage();
     const { colors, isDark } = useTheme();
     const { data: threads, isLoading, refetch, isFetching, error, isError } = useGetChatThreadsQuery();

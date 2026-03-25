@@ -2,6 +2,24 @@
  * Filter types that match backend FilterRequestDto structure exactly
  */
 
+export interface SavedFilterGetDto {
+  id: string;
+  name: string;
+  filterCriteriaJson: string;
+  createdAt: string;
+}
+
+export interface SavedFilterCreateDto {
+  name: string;
+  filterCriteriaJson: string;
+}
+
+export interface SavedFilterUpdateDto {
+  id: string;
+  name: string;
+  filterCriteriaJson: string;
+}
+
 export interface FilterRequestDto {
   // Konum bilgileri (nearby için)
   latitude?: number;

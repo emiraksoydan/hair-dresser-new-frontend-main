@@ -7,15 +7,17 @@ import { RequestGetDto } from "../../types";
 import { useLanguage } from "../../hook/useLanguage";
 import { useAlert } from "../../hook/useAlert";
 import { LottieViewComponent } from "../../components/common/lottieview";
-import { useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useTheme } from "../../hook/useTheme";
+import { useActionGuard } from "../../hook/useActionGuard";
+import { useSafeNavigation } from "../../hook/useSafeNavigation";
 
 export default function RequestsPage() {
-    const router = useRouter();
+    const router = useSafeNavigation();
     const { t } = useLanguage();
     const { showSuccess, showError, showConfirm } = useAlert();
     const { colors } = useTheme();
+    const guard = useActionGuard();
 
     const [showForm, setShowForm] = useState(false);
     const [title, setTitle] = useState("");
@@ -41,7 +43,7 @@ export default function RequestsPage() {
         }
     };
 
-    const handleSubmit = async () => {
+    const handleSubmit = () => guard(async () => {
         if (!title.trim()) {
             showError(t("profile.requestTitleRequired"));
             return;
@@ -61,13 +63,13 @@ export default function RequestsPage() {
         } catch (error: any) {
             showError(error?.data?.message || t("profile.requestCreateError") || "İstek gönderilemedi");
         }
-    };
+    });
 
-    const handleDelete = async (requestId: string) => {
+    const handleDelete = (requestId: string) => {
         showConfirm(
             t("profile.deleteRequestTitle"),
             t("profile.deleteRequestMessage"),
-            async () => {
+            () => guard(async () => {
                 try {
                     await deleteRequest(requestId).unwrap();
                     showSuccess(t("profile.deleteSuccess"));
@@ -75,7 +77,7 @@ export default function RequestsPage() {
                 } catch (error: any) {
                     showError(error?.data?.message || t("profile.deleteError") || "İstek silinemedi");
                 }
-            }
+            })
         );
     };
 
@@ -202,7 +204,7 @@ export default function RequestsPage() {
                     ListEmptyComponent={
                         <View className="flex-1 items-center justify-center px-4 pt-12">
                             <LottieViewComponent
-                                animationSource={require("../../../assets/animations/empty.json")}
+                                animationSource={require("../../../assets/animations/request.json")}
                                 message={t("profile.requestEmpty")}
                                 animationSize={120}
                             />

@@ -9,15 +9,19 @@ import {
 import { Text } from "../../components/common/Text";
 import MapView from "react-native-maps";
 import { IconButton } from "react-native-paper";
-import { useRouter } from "expo-router";
+import { useSafeNavigation } from "../../hook/useSafeNavigation";
 import SearchBar from "../../components/common/searchbar";
 import { BottomSheetModal, BottomSheetView } from "@gorhom/bottom-sheet";
 import { useBottomSheet } from "../../hook/useBottomSheet";
 import MotiViewExpand from "../../components/common/motiviewexpand";
 import { toggleExpand } from "../../utils/common/expand-toggle";
 import { BarberStoreGetDto, FreeBarGetDto } from "../../types";
-import { useGetSettingQuery, useGetMeQuery } from "../../store/api";
+import { useGetSettingQuery, useGetMeQuery, useGetSavedFiltersQuery, useCreateSavedFilterMutation, useDeleteSavedFilterMutation, useUpdateSavedFilterMutation } from "../../store/api";
+import { useAppDispatch } from "../../store/hook";
+import { showSnack } from "../../store/snackbarSlice";
+import { getErrorMessage, getMessage } from "../../utils/errorHandler";
 import { FilterDrawer } from "../../components/common/filterdrawer";
+import { SavedFilterChips } from "../../components/common/savedfilterchips";
 import { StoreCardInner } from "../../components/store/storecard";
 import StoreBookingContent from "../../components/store/storebooking";
 import { FreeBarberCardInner } from "../../components/freebarber/freebarbercard";
@@ -34,13 +38,16 @@ import { useNearbyFreeBarber } from "../../hook/useNearByFreeBarber";
 import { useBackendFilters } from "../../hook/useBackendFilters";
 import { useLanguage } from "../../hook/useLanguage";
 import { useTheme } from "../../hook/useTheme";
+import { useActionGuard } from "../../hook/useActionGuard";
 
 const { width: screenWidth } = Dimensions.get("window");
 
 const Index = () => {
   const { colors, isDark } = useTheme();
+  const dispatch = useAppDispatch();
   const { t } = useLanguage();
-  const router = useRouter();
+  const router = useSafeNavigation();
+  const guard = useActionGuard();
 
   // Current user for favorites filter
   const { data: currentUser } = useGetMeQuery();
@@ -51,9 +58,18 @@ const Index = () => {
     criteria: filterCriteria,
     updateCriteria: updateFilterCriteria,
     clearFilters,
+    loadFromSaved,
+    activeSavedFilterId,
     hasActiveFilters,
     createFilterRequestDto,
   } = useBackendFilters();
+
+  // Kayıtlı filtreler
+  const { data: savedFiltersData } = useGetSavedFiltersQuery();
+  const savedFilters = savedFiltersData?.data ?? [];
+  const [createSavedFilter] = useCreateSavedFilterMutation();
+  const [deleteSavedFilter] = useDeleteSavedFilterMutation();
+  const [updateSavedFilter] = useUpdateSavedFilterMutation();
 
   // Create filter DTO for backend - includes all filter criteria
   const filterDto = useMemo(() => {
@@ -448,16 +464,20 @@ const Index = () => {
             : ""
         }
       >
-        <View className="flex flex-row items-center gap-2 mt-2">
-          <View className="flex flex-1">
-            <SearchBar
-              searchQuery={searchQuery}
-              setSearchQuery={setSearchQuery}
-              isList={isList}
-              setIsList={setIsList}
-              onFilterPress={() => setFilterDrawerVisible(true)}
-            />
-          </View>
+        <View style={{ marginTop: 8, backgroundColor: colors.cardBg, borderRadius: 12, borderWidth: 1.5, borderColor: colors.cardBg }}>
+          <SearchBar
+            transparent
+            searchQuery={searchQuery}
+            setSearchQuery={setSearchQuery}
+            isList={isList}
+            setIsList={setIsList}
+            onFilterPress={() => setFilterDrawerVisible(true)}
+          />
+          {savedFilters.length > 0 && (
+            <View style={{ paddingHorizontal: 10, paddingBottom: 8 }}>
+              <SavedFilterChips savedFilters={savedFilters} activeFilterId={activeSavedFilterId} onLoad={(json, id) => loadFromSaved(json, id)} />
+            </View>
+          )}
         </View>
       </View>
 
@@ -748,6 +768,35 @@ const Index = () => {
           updateFilterCriteria({ favoritesOnly: value })
         }
         onClearFilters={handleClearFilters}
+        savedFilters={savedFilters}
+        activeSavedFilterId={activeSavedFilterId}
+        hasActiveFilters={hasActiveFilters}
+        currentFilterCriteriaJson={JSON.stringify(filterCriteria)}
+        onLoadSavedFilter={(json) => loadFromSaved(json)}
+        onDeleteSavedFilter={(filterId) => guard(async () => {
+          try {
+            const res = await deleteSavedFilter(filterId).unwrap();
+            dispatch(showSnack({ message: getMessage(res.message) || '' }));
+          } catch (e) {
+            dispatch(showSnack({ message: getErrorMessage(e), isError: true }));
+          }
+        })}
+        onSaveCurrentFilter={(name) => guard(async () => {
+          try {
+            const res = await createSavedFilter({ name, filterCriteriaJson: JSON.stringify(filterCriteria) }).unwrap();
+            dispatch(showSnack({ message: getMessage(res.message) || '' }));
+          } catch (e) {
+            dispatch(showSnack({ message: getErrorMessage(e), isError: true }));
+          }
+        })}
+        onUpdateSavedFilter={(filterId, name, criteriaJson) => guard(async () => {
+          try {
+            const res = await updateSavedFilter({ id: filterId, name, filterCriteriaJson: criteriaJson }).unwrap();
+            dispatch(showSnack({ message: getMessage(res.message) || '' }));
+          } catch (e) {
+            dispatch(showSnack({ message: getErrorMessage(e), isError: true }));
+          }
+        })}
       />
 
       {/* Map detail bottom sheet */}

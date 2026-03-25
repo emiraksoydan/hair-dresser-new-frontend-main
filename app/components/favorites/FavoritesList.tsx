@@ -8,7 +8,7 @@ import { StoreCardInner } from '../store/storecard';
 import { FreeBarberCardInner } from '../freebarber/freebarbercard';
 import { CustomerCardInner } from '../customer/customercard';
 import { ManuelBarberCardInner } from '../manuelbarber/manuelbarbercard';
-import { useRouter } from 'expo-router';
+import { useSafeNavigation } from '../../hook/useSafeNavigation';
 import { BarberStoreGetDto, FreeBarGetDto, UserFavoriteDto, ManuelBarberFavoriteDto } from '../../types';
 import { Icon } from 'react-native-paper';
 import { BottomSheetModal, BottomSheetView } from '@gorhom/bottom-sheet';
@@ -40,7 +40,7 @@ const FavoritesList: React.FC<FavoritesListProps> = ({ mode = 'store' }) => {
         skip: !isUserSuccess || !isFreeBarberUser,
     });
     const { data: settingData } = useGetSettingQuery();
-    const router = useRouter();
+    const router = useSafeNavigation();
 
     // Bottom sheet hooks
     const ratingsSheet = useBottomSheet({

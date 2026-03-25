@@ -1,4 +1,6 @@
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useLocalSearchParams } from "expo-router";
+import { useSafeNavigation } from "../../hook/useSafeNavigation";
+import { useActionGuard } from "../../hook/useActionGuard";
 import React, { useEffect, useMemo, useState, useCallback } from "react";
 import {
   FlatList,
@@ -82,7 +84,8 @@ const StoreBookingContent = ({
   const { data: workingHours } = useGetWorkingHoursByTargetQuery(storeId, {
     skip: !storeId,
   });
-  const router = useRouter();
+  const router = useSafeNavigation();
+  const guard = useActionGuard();
   const { t } = useLanguage();
   const isAddStoreMode = mode === "add-store";
   const [createCustomerAppointment, { isLoading: isCreatingCustomer }] =
@@ -635,7 +638,7 @@ const StoreBookingContent = ({
             }
             className={`py-4 flex-row justify-center gap-2 rounded-2xl mt-2 items-center ${!canSubmit ? "bg-[#4b5563] opacity-60" : "opacity-100"}`}
             style={canSubmit ? { backgroundColor: '#fea60e', elevation: 6, shadowColor: '#fea60e', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.3, shadowRadius: 6 } : undefined}
-            onPress={async () => {
+            onPress={() => guard(async () => {
               try {
                 // Error kontrolü: Sunucu çalışmıyorsa işlem yapılamaz
                 if (!checkCanPerformAction()) {
@@ -831,7 +834,7 @@ const StoreBookingContent = ({
                   alertError(t("common.error"), errorMessage);
                 }
               }
-            }}
+            })}
           >
             {isCreatingCustomer ||
               isCreatingFreeBarber ||

@@ -20,7 +20,15 @@ import {
   useGetMineStoresQuery,
   useGetSettingQuery,
   useGetMeQuery,
+  useGetSavedFiltersQuery,
+  useCreateSavedFilterMutation,
+  useDeleteSavedFilterMutation,
+  useUpdateSavedFilterMutation,
 } from "../../store/api";
+import { useAppDispatch } from "../../store/hook";
+import { showSnack } from "../../store/snackbarSlice";
+import { getErrorMessage, getMessage } from "../../utils/errorHandler";
+import { SavedFilterChips } from "../../components/common/savedfilterchips";
 import { FilterDrawer } from "../../components/common/filterdrawer";
 import FormStoreUpdate from "../../components/store/formstoreupdate";
 import { StoreMineCardComp } from "../../components/store/storeminecard";
@@ -37,10 +45,13 @@ import { CrudSkeletonComponent } from "../../components/common/crudskeleton";
 import { useLanguage } from "../../hook/useLanguage";
 import { UnifiedStateWrapper } from "../../components/common/UnifiedStateManager";
 import { useTheme } from "../../hook/useTheme";
+import { useActionGuard } from "../../hook/useActionGuard";
 
 const Index = () => {
   const { colors, isDark } = useTheme();
+  const dispatch = useAppDispatch();
   const { t } = useLanguage();
+  const guard = useActionGuard();
 
   // Current user for filters
   const { data: currentUser } = useGetMeQuery();
@@ -51,9 +62,18 @@ const Index = () => {
     criteria: filterCriteria,
     updateCriteria: updateFilterCriteria,
     clearFilters,
+    loadFromSaved,
+    activeSavedFilterId,
     hasActiveFilters,
     createFilterRequestDto,
   } = useBackendFilters();
+
+  // Kayıtlı filtreler
+  const { data: savedFiltersData } = useGetSavedFiltersQuery();
+  const savedFilters = savedFiltersData?.data ?? [];
+  const [createSavedFilter] = useCreateSavedFilterMutation();
+  const [deleteSavedFilter] = useDeleteSavedFilterMutation();
+  const [updateSavedFilter] = useUpdateSavedFilterMutation();
 
   // Create filter DTO for backend
   const freeBarberFilterDto = useMemo(() => {
@@ -261,9 +281,28 @@ const Index = () => {
         }
       }
 
+      // Status filter (isOpenNow) — field exists on BarberStoreMineDto
+      if (filterCriteria.status && filterCriteria.status !== 'all') {
+        const isOpen = store.isOpenNow ?? false;
+        if (filterCriteria.status === 'available' && !isOpen) return false;
+        if (filterCriteria.status === 'unavailable' && isOpen) return false;
+      }
+
+      // Price range filter — BarberStoreMineDto uses pricingValue, not minPrice
+      if (filterCriteria.minPrice && filterCriteria.minPrice !== '') {
+        const minPrice = parseFloat(filterCriteria.minPrice);
+        const storePrice = store.pricingValue ?? 0;
+        if (!isNaN(minPrice) && storePrice < minPrice) return false;
+      }
+      if (filterCriteria.maxPrice && filterCriteria.maxPrice !== '') {
+        const maxPrice = parseFloat(filterCriteria.maxPrice);
+        const storePrice = store.pricingValue ?? 0;
+        if (!isNaN(maxPrice) && storePrice > maxPrice) return false;
+      }
+
       return true;
     });
-  }, [displayStores, searchQuery, filterCriteria.userType, filterCriteria.mainCategory, filterCriteria.minRating, filterCriteria.pricingType]);
+  }, [displayStores, searchQuery, filterCriteria.userType, filterCriteria.mainCategory, filterCriteria.minRating, filterCriteria.pricingType, filterCriteria.status, filterCriteria.minPrice, filterCriteria.maxPrice]);
 
   // API'den gelen filtrelenmiş veriyi kullan, yoksa normal veriyi göster
   const filteredFreeBarbers = useMemo(() => {
@@ -280,9 +319,20 @@ const Index = () => {
       ) {
         return false;
       }
+      // Rating filter
+      if (filterCriteria.minRating && filterCriteria.minRating > 0) {
+        const barberRating = (barber as any).rating ?? 0;
+        if (barberRating < filterCriteria.minRating) return false;
+      }
+      // Status filter
+      if (filterCriteria.status && filterCriteria.status !== 'all') {
+        const isAvailable = (barber as any).isAvailable ?? false;
+        if (filterCriteria.status === 'available' && !isAvailable) return false;
+        if (filterCriteria.status === 'unavailable' && isAvailable) return false;
+      }
       return true;
     });
-  }, [displayFreeBarbers, searchQuery, filterCriteria.userType]);
+  }, [displayFreeBarbers, searchQuery, filterCriteria.userType, filterCriteria.minRating, filterCriteria.status]);
 
   const renderStoreItem = useCallback(
     ({ item }: { item: BarberStoreMineDto }) => (
@@ -490,16 +540,20 @@ const Index = () => {
             : ""
         }
       >
-        <View className="flex flex-row items-center gap-2 mt-2">
-          <View className="flex flex-1">
-            <SearchBar
-              searchQuery={searchQuery}
-              setSearchQuery={setSearchQuery}
-              isList={isList}
-              setIsList={setIsList}
-              onFilterPress={() => setFilterDrawerVisible(true)}
-            />
-          </View>
+        <View style={{ marginTop: 8, backgroundColor: colors.cardBg, borderRadius: 12, borderWidth: 1.5, borderColor: colors.cardBg }}>
+          <SearchBar
+            transparent
+            searchQuery={searchQuery}
+            setSearchQuery={setSearchQuery}
+            isList={isList}
+            setIsList={setIsList}
+            onFilterPress={() => setFilterDrawerVisible(true)}
+          />
+          {savedFilters.length > 0 && (
+            <View style={{ paddingHorizontal: 10, paddingBottom: 8 }}>
+              <SavedFilterChips savedFilters={savedFilters} activeFilterId={activeSavedFilterId} onLoad={(json, id) => loadFromSaved(json, id)} />
+            </View>
+          )}
         </View>
       </View>
 
@@ -779,6 +833,35 @@ const Index = () => {
           updateFilterCriteria({ favoritesOnly: value })
         }
         onClearFilters={handleClearFilters}
+        savedFilters={savedFilters}
+        activeSavedFilterId={activeSavedFilterId}
+        hasActiveFilters={hasActiveFilters}
+        currentFilterCriteriaJson={JSON.stringify(filterCriteria)}
+        onLoadSavedFilter={(json) => loadFromSaved(json)}
+        onDeleteSavedFilter={(filterId) => guard(async () => {
+          try {
+            const res = await deleteSavedFilter(filterId).unwrap();
+            dispatch(showSnack({ message: getMessage(res.message) || '' }));
+          } catch (e) {
+            dispatch(showSnack({ message: getErrorMessage(e), isError: true }));
+          }
+        })}
+        onSaveCurrentFilter={(name) => guard(async () => {
+          try {
+            const res = await createSavedFilter({ name, filterCriteriaJson: JSON.stringify(filterCriteria) }).unwrap();
+            dispatch(showSnack({ message: getMessage(res.message) || '' }));
+          } catch (e) {
+            dispatch(showSnack({ message: getErrorMessage(e), isError: true }));
+          }
+        })}
+        onUpdateSavedFilter={(filterId, name, criteriaJson) => guard(async () => {
+          try {
+            const res = await updateSavedFilter({ id: filterId, name, filterCriteriaJson: criteriaJson }).unwrap();
+            dispatch(showSnack({ message: getMessage(res.message) || '' }));
+          } catch (e) {
+            dispatch(showSnack({ message: getErrorMessage(e), isError: true }));
+          }
+        })}
       />
 
       <BottomSheetModal

@@ -61,6 +61,7 @@ import { MESSAGES } from "../../constants/messages";
 import { useCanPerformAction } from "../../hook/useCanPerformAction";
 import { StepFormIndicator } from "../common/StepFormIndicator";
 import { useTheme } from "../../hook/useTheme";
+import { useActionGuard } from "../../hook/useActionGuard";
 
 // --- Schema Definitions ---
 const createLocationSchema = (t: (key: string) => string) =>
@@ -295,6 +296,7 @@ export const FormFreeBarberOperation = React.memo(
     const [uploadImage] = useUploadImageMutation();
     const [deleteImage] = useDeleteImageMutation();
     const [updateImageBlob] = useUpdateImageBlobMutation();
+    const guard = useActionGuard();
     const [isImagePickerLoading, setIsImagePickerLoading] =
       React.useState(false);
     const [isCertificateLoading, setIsCertificateLoading] =
@@ -2193,7 +2195,7 @@ export const FormFreeBarberOperation = React.memo(
                       disabled={addFreeBarberLoad || updateFreeBarberLoad}
                       loading={addFreeBarberLoad || updateFreeBarberLoad}
                       mode="contained"
-                      onPress={handleSubmit(OnSubmit, onErrors)}
+                      onPress={handleSubmit((form) => guard(() => OnSubmit(form)), onErrors)}
                       buttonColor="#10B981"
                       textColor="white"
                       labelStyle={{ fontSize: 16 }}

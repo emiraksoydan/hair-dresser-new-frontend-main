@@ -25,8 +25,9 @@ import { TouchableOpacity, View, ActivityIndicator } from "react-native";
 import { Text } from "../common/Text";
 import { Icon } from "react-native-paper";
 import { NotificationItemOptimized } from "./NotificationItemOptimized";
-import { useRouter } from "expo-router";
+import { useSafeNavigation } from "../../hook/useSafeNavigation";
 import { useAlert } from "../../hook/useAlert";
+import { useActionGuard } from "../../hook/useActionGuard";
 
 // ---------------------------------------------------------------------------
 // 2. Ana NotificationsSheet Bileşeni
@@ -49,7 +50,8 @@ export function NotificationsSheet({
   onDeleteInfo?: (message: string) => void;
   onDeleteError?: (message: string) => void;
 }) {
-  const router = useRouter();
+  const router = useSafeNavigation();
+  const guard = useActionGuard();
   const dispatch = useAppDispatch();
   const { data, isFetching, refetch } = useGetAllNotificationsQuery();
   const [markRead] = useMarkNotificationReadMutation();
@@ -126,7 +128,7 @@ export function NotificationsSheet({
   // --- Backend-Authoritative Decision Handler ---
   // NO optimistic updates - UI changes only when SignalR events arrive from backend
   const handleDecision = useCallback(
-    async (notification: NotificationDto, approve: boolean) => {
+    (notification: NotificationDto, approve: boolean) => guard(async () => {
       if (!notification.appointmentId) return;
 
       let parsedPayload: any = null;
@@ -255,8 +257,9 @@ export function NotificationsSheet({
           result?.message || t("common.operationFailed"),
         );
       }
-    },
+    }),
     [
+      guard,
       userType,
       storeDecision,
       freeBarberDecision,

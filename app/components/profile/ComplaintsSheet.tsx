@@ -9,6 +9,8 @@ import { useLanguage } from "../../hook/useLanguage";
 import { useAlert } from "../../hook/useAlert";
 import LottieView from "lottie-react-native";
 import { useTheme } from "../../hook/useTheme";
+import { useActionGuard } from "../../hook/useActionGuard";
+import { DEFAULT_AVATAR } from '../../constants/images';
 
 type ComplaintsSheetProps = {
   onClose: () => void;
@@ -18,6 +20,7 @@ export const ComplaintsSheet: React.FC<ComplaintsSheetProps> = ({ onClose }) => 
   const { t } = useLanguage();
   const { showSuccess, showError, showConfirm } = useAlert();
   const { colors } = useTheme();
+  const guard = useActionGuard();
 
   const { data: complaints, isLoading, refetch } = useGetMyComplaintsQuery();
   const [deleteComplaint, { isLoading: isDeleting }] = useDeleteComplaintMutation();
@@ -51,11 +54,11 @@ export const ComplaintsSheet: React.FC<ComplaintsSheetProps> = ({ onClose }) => 
     }
   };
 
-  const handleDelete = async (complaintId: string) => {
+  const handleDelete = (complaintId: string) => {
     showConfirm(
       t("profile.deleteConfirmTitle"),
       t("profile.deleteConfirmMessage"),
-      async () => {
+      () => guard(async () => {
         try {
           await deleteComplaint(complaintId).unwrap();
           showSuccess(t("profile.complanintDeleteSuccess"));
@@ -63,7 +66,7 @@ export const ComplaintsSheet: React.FC<ComplaintsSheetProps> = ({ onClose }) => 
         } catch (error: any) {
           showError(error?.data?.message || t("profile.complaintDeleteError"));
         }
-      }
+      })
     );
   };
 
@@ -79,7 +82,7 @@ export const ComplaintsSheet: React.FC<ComplaintsSheetProps> = ({ onClose }) => 
           {/* Profil fotoğrafı */}
           <View className="relative mr-3">
             <Image
-              source={imageUrl ? { uri: imageUrl } : { uri: 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQxxOeOXHNrUgfxDbpJZJCxcDOjTlrBRlH7wA&s' }}
+              source={imageUrl ? { uri: imageUrl } : DEFAULT_AVATAR}
               style={{ width: 40, height: 40, borderRadius: 20 }}
               resizeMode="cover"
             />

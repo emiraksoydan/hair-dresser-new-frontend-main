@@ -1,4 +1,3 @@
-import { useRouter } from 'expo-router';
 import { InteractionManager, View, ScrollView, RefreshControl, TouchableOpacity } from 'react-native'
 import { Text } from '../../components/common/Text'
 import { Avatar, IconButton, TextInput, HelperText, Icon, Switch, Portal, Modal as PaperModal } from 'react-native-paper';
@@ -25,6 +24,9 @@ import { useLanguage } from '../../hook/useLanguage';
 import { LanguageSelector } from '../../components/common/LanguageSelector';
 import { useThemeContext } from '../../context/ThemeContext';
 import { useTheme } from '../../hook/useTheme';
+import { DEFAULT_AVATAR } from '../../constants/images';
+import { useSafeNavigation } from '../../hook/useSafeNavigation';
+import { useActionGuard } from '../../hook/useActionGuard';
 
 const createProfileSchema = (t: (key: string) => string) => z.object({
     firstName: z.string({ required_error: t('auth.firstName') + ' ' + t('common.required') })
@@ -42,7 +44,8 @@ const createProfileSchema = (t: (key: string) => string) => z.object({
 type ProfileFormValues = z.infer<ReturnType<typeof createProfileSchema>>;
 
 const Index = () => {
-    const expoRouter = useRouter();
+    const router = useSafeNavigation();
+    const guard = useActionGuard();
     const { t, currentLanguage } = useLanguage();
     const { themeMode, toggleTheme } = useThemeContext();
     const { colors, isDark } = useTheme();
@@ -65,15 +68,24 @@ const Index = () => {
     const [phoneChangeStep, setPhoneChangeStep] = useState<'input' | 'otp'>('input');
     const [newPhoneInput, setNewPhoneInput] = useState('');
     const [otpCode, setOtpCode] = useState('');
+    const [localShowImageAnimation, setLocalShowImageAnimation] = useState<boolean | null>(null);
+    const displayShowImageAnimation = localShowImageAnimation !== null ? localShowImageAnimation : (settingData?.data?.showImageAnimation ?? true);
 
+    useEffect(() => {
+        if (settingData?.data) {
+            setLocalShowImageAnimation(settingData.data.showImageAnimation);
+        }
+    }, [settingData?.data?.showImageAnimation]);
 
     // Memoize theme objects
 
 
     // Memoize avatar source
     const avatarSource = useMemo(() => {
-        const baseUrl = userData?.data?.image?.imageUrl || 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQxxOeOXHNrUgfxDbpJZJCxcDOjTlrBRlH7wA&s';
-        return { uri: baseUrl };
+        if (userData?.data?.image?.imageUrl) {
+            return { uri: userData.data.image.imageUrl };
+        }
+        return DEFAULT_AVATAR;
     }, [userData?.data?.image?.imageUrl]);
 
     // Memoize full name
@@ -200,7 +212,7 @@ const Index = () => {
         }
     }, [newPhoneInput, otpCode, updatePhone, dispatch, t, closePhoneModal, refetch]);
 
-    const handleImagePick = useCallback(async () => {
+    const handleImagePick = useCallback(() => guard(async () => {
         try {
             const file = await handlePickImage();
             if (!file || !userData?.data?.id) return;
@@ -241,7 +253,7 @@ const Index = () => {
         } catch (error: any) {
             dispatch(showSnack({ message: error?.message ?? t('profile.photoUploadError'), isError: true }));
         }
-    }, [userData?.data?.id, userData?.data?.imageId, uploadImage, updateImageBlob, dispatch, t]);
+    }), [guard, userData?.data?.id, userData?.data?.imageId, uploadImage, updateImageBlob, dispatch, t]);
 
     const handleRefresh = useCallback(async () => {
         setRefreshing(true);
@@ -277,7 +289,7 @@ const Index = () => {
                         await clearStoredTokens();
 
                         // 4. Auth sayfasına yönlendir
-                        expoRouter.replace("(auth)");
+                        router.replace("(auth)");
                     });
             } else {
                 setIsLoggingOutState(false);
@@ -286,7 +298,7 @@ const Index = () => {
             // Error handled silently
             setIsLoggingOutState(false);
         }
-    }, [logout, expoRouter, dispatch]);
+    }, [logout, router, dispatch]);
 
     // Memoize error message - Hook'lar early return'lerden önce olmalı
     const errorMessage = useMemo(() => {
@@ -493,7 +505,7 @@ const Index = () => {
                 <Text className='text-lg mb-4 font-century-gothic-bold' style={{ color: colors.sectionHeaderText }}>{t('profile.userActions')}</Text>
                 <View className='rounded-xl mb-6' style={{ backgroundColor: colors.cardBg }}>
                     <TouchableOpacity
-                        onPress={() => expoRouter.push('/(screens)/profile/blocked-users')}
+                        onPress={() => router.push('/(screens)/profile/blocked-users')}
                         activeOpacity={0.7}
                         className='flex-row items-center justify-between p-4'
                         style={{ borderBottomColor: colors.borderColor, borderBottomWidth: 1 }}
@@ -507,7 +519,7 @@ const Index = () => {
 
                     {/* Şikayetlerim */}
                     <TouchableOpacity
-                        onPress={() => expoRouter.push('/(screens)/profile/complaints')}
+                        onPress={() => router.push('/(screens)/profile/complaints')}
                         activeOpacity={0.7}
                         className='flex-row items-center justify-between p-4'
                         style={{ borderBottomColor: colors.borderColor, borderBottomWidth: 1 }}
@@ -521,7 +533,7 @@ const Index = () => {
 
                     {/* İsteklerim */}
                     <TouchableOpacity
-                        onPress={() => expoRouter.push('/(screens)/profile/requests')}
+                        onPress={() => router.push('/(screens)/profile/requests')}
                         activeOpacity={0.7}
                         className='flex-row items-center justify-between p-4'
                     >
@@ -560,14 +572,16 @@ const Index = () => {
                             <Text className='text-sm' style={{ color: colors.textSecondary }}>{t('profile.imageAnimationDescription')}</Text>
                         </View>
                         <Switch
-                            value={settingData?.data?.showImageAnimation ?? true}
+                            value={displayShowImageAnimation}
                             onValueChange={async (value) => {
                                 if (isUpdatingSettingRef.current) return;
                                 isUpdatingSettingRef.current = true;
+                                setLocalShowImageAnimation(value);
                                 try {
                                     const settingResult = await updateSetting({ showImageAnimation: value }).unwrap();
                                     dispatch(showSnack({ message: settingResult.message || t('settings.updateSuccess'), isError: false }));
                                 } catch (error: any) {
+                                    setLocalShowImageAnimation(!value);
                                     const errorMessage = error?.data?.message || getErrorMessage(error);
                                     dispatch(showSnack({ message: errorMessage || t('profile.settingUpdateError'), isError: true }));
                                 } finally {

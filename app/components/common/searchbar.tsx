@@ -13,6 +13,8 @@ interface ExtendedSearchBarProps extends SearchBarProps {
     showButtons?: boolean;
     /** Her zaman bu renkte border göster (focus durumuna bakılmaksızın) */
     forceBorderColor?: string;
+    /** Arka plan ve border'ı kaldırır — bir container içinde kullanım için */
+    transparent?: boolean;
 }
 
 const SearchBar: React.FC<ExtendedSearchBarProps> = ({
@@ -23,6 +25,7 @@ const SearchBar: React.FC<ExtendedSearchBarProps> = ({
     onFilterPress,
     showButtons = true,
     forceBorderColor,
+    transparent = false,
 }) => {
     const { t } = useLanguage();
     const { colors } = useTheme();
@@ -37,9 +40,9 @@ const SearchBar: React.FC<ExtendedSearchBarProps> = ({
         <View
             className={`flex-row items-center px-3 rounded-xl h-14`}
             style={{
-                backgroundColor: colors.cardBg,
-                borderWidth: 1.5,
-                borderColor,
+                backgroundColor: transparent ? 'transparent' : colors.cardBg,
+                borderWidth: transparent ? 0 : 1.5,
+                borderColor: transparent ? 'transparent' : borderColor,
             }}
         >
             <Icon source="magnify" size={22} color="#9aa1ae" />

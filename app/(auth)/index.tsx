@@ -23,7 +23,6 @@ import { OtpInput } from "react-native-otp-entry";
 import { tokenStore } from "../lib/tokenStore";
 import { loadTokens, saveTokens } from "../lib/tokenStorage";
 import { OtpPurpose, UserType } from "../types";
-import { useRouter } from "expo-router";
 import { pathByUserType } from "../utils/auth/redirect-by-user-type";
 import { useAppDispatch } from "../store/hook";
 import { getUserTypeFromToken } from "../utils/auth/auth";
@@ -31,6 +30,7 @@ import { useTheme } from "../hook/useTheme";
 import { useLanguage } from "../hook/useLanguage";
 import { LanguageSelector } from "../components/common/LanguageSelector";
 import { LegalAgreementCheckbox } from "../components/auth/LegalAgreementCheckbox";
+import { useSafeNavigation } from "../hook/useSafeNavigation";
 
 // Schema'yı dinamik olarak oluşturmak için fonksiyon
 const createSchemas = (t: (key: string) => string) => {
@@ -157,7 +157,7 @@ const Index = () => {
     }
   }, [currentLanguage, trigger, errors]);
 
-  const route = useRouter();
+  const route = useSafeNavigation();
   const [modalVisible, setModalVisible] = useState(false);
   const [phone, setPhone] = useState("");
   const [left, setLeft] = useState(0);

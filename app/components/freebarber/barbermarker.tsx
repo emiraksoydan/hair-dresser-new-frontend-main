@@ -22,6 +22,14 @@ export const BarberMarker = memo(({ barber, onPress }: BarberMarkerProps) => {
         };
     }, []);
 
+    // Güvenlik zamanlayıcısı: onLoad cached image'larda Android'de tetiklenmeyebilir.
+    useEffect(() => {
+        const safetyTimer = setTimeout(() => {
+            if (mountedRef.current) setTracksViewChanges(false);
+        }, 800);
+        return () => clearTimeout(safetyTimer);
+    }, []);
+
     const c = safeCoord((barber as any).latitude, (barber as any).longitude);
     if (!c) return null;
 

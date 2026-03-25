@@ -18,6 +18,7 @@ import { OwnerAvatar } from "../common/owneravatar";
 import { useLanguage } from "../../hook/useLanguage";
 import { useAlert } from "../../hook/useAlert";
 import { useTheme } from "../../hook/useTheme";
+import { useActionGuard } from "../../hook/useActionGuard";
 
 type RatingBottomSheetProps = {
   appointmentId: string;
@@ -41,6 +42,7 @@ export const RatingBottomSheet: React.FC<RatingBottomSheetProps> = ({
   const [rating, setRating] = useState(0);
   const [comment, setComment] = useState("");
   const [createRating, { isLoading }] = useCreateRatingMutation();
+  const guard = useActionGuard();
   const { t } = useLanguage();
   const { alert, alertSuccess, alertError } = useAlert();
   const { colors } = useTheme();
@@ -59,7 +61,7 @@ export const RatingBottomSheet: React.FC<RatingBottomSheetProps> = ({
           ? ImageOwnerType.ManuelBarber
           : ImageOwnerType.User;
 
-  const handleSubmit = useCallback(async () => {
+  const handleSubmit = useCallback(() => guard(async () => {
     if (rating === 0) {
       alert(t("booking.warning"), t("rating.selectRating"), undefined, 'warning');
       return;
@@ -83,7 +85,7 @@ export const RatingBottomSheet: React.FC<RatingBottomSheetProps> = ({
     alertSuccess(t("common.success"), t("rating.ratingSaved"));
     onSuccess?.();
     onClose();
-  }, [
+  }), [
     rating,
     comment,
     appointmentId,
@@ -95,6 +97,7 @@ export const RatingBottomSheet: React.FC<RatingBottomSheetProps> = ({
     alert,
     alertSuccess,
     alertError,
+    guard,
   ]);
 
   return (

@@ -7,15 +7,18 @@ import { ComplaintGetDto, UserType } from "../../types";
 import { useLanguage } from "../../hook/useLanguage";
 import { useAlert } from "../../hook/useAlert";
 import { LottieViewComponent } from "../../components/common/lottieview";
-import { useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useTheme } from "../../hook/useTheme";
+import { useActionGuard } from "../../hook/useActionGuard";
+import { useSafeNavigation } from "../../hook/useSafeNavigation";
+import { DEFAULT_AVATAR } from '../../constants/images';
 
 export default function ComplaintsPage() {
-    const router = useRouter();
+    const router = useSafeNavigation();
     const { t } = useLanguage();
     const { showSuccess, showError, showConfirm } = useAlert();
     const { colors } = useTheme();
+    const guard = useActionGuard();
 
     const { data: complaints, isLoading, refetch, isFetching } = useGetMyComplaintsQuery();
     const [deleteComplaint, { isLoading: isDeleting }] = useDeleteComplaintMutation();
@@ -49,11 +52,11 @@ export default function ComplaintsPage() {
         }
     };
 
-    const handleDelete = async (complaintId: string) => {
+    const handleDelete = (complaintId: string) => {
         showConfirm(
             t("profile.deleteConfirmTitle"),
             t("profile.deleteConfirmMessage"),
-            async () => {
+            () => guard(async () => {
                 try {
                     await deleteComplaint(complaintId).unwrap();
                     showSuccess(t("profile.complanintDeleteSuccess"));
@@ -61,7 +64,7 @@ export default function ComplaintsPage() {
                 } catch (error: any) {
                     showError(error?.data?.message || t("profile.complaintDeleteError"));
                 }
-            }
+            })
         );
     };
 
@@ -75,7 +78,7 @@ export default function ComplaintsPage() {
                 <View className="flex-row items-start">
                     <View className="relative mr-3">
                         <Image
-                            source={imageUrl ? { uri: imageUrl } : { uri: 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQxxOeOXHNrUgfxDbpJZJCxcDOjTlrBRlH7wA&s' }}
+                            source={imageUrl ? { uri: imageUrl } : DEFAULT_AVATAR}
                             style={{ width: 40, height: 40, borderRadius: 20 }}
                             resizeMode="cover"
                         />
@@ -144,7 +147,7 @@ export default function ComplaintsPage() {
                     ListEmptyComponent={
                         <View className="flex-1 items-center justify-center px-4 pt-12">
                             <LottieViewComponent
-                                animationSource={require("../../../assets/animations/empty.json")}
+                                animationSource={require("../../../assets/animations/complaint.json")}
                                 message={t("profile.complaintEmpty")}
                                 animationSize={120}
                             />

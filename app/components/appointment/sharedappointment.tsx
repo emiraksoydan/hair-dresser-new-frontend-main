@@ -25,10 +25,12 @@ import { useBottomSheet } from "../../hook/useBottomSheet";
 import { useLanguage } from "../../hook/useLanguage";
 import { useAlert } from "../../hook/useAlert";
 import { useTheme } from "../../hook/useTheme";
+import { useActionGuard } from "../../hook/useActionGuard";
 
 export default function SharedAppointmentScreen() {
   const { t } = useLanguage();
   const { userId, userType } = useAuth();
+  const guard = useActionGuard();
   const insets = useSafeAreaInsets();
   const { alert, alertSuccess, alertError, confirm } = useAlert();
   const { colors } = useTheme();
@@ -323,7 +325,7 @@ export default function SharedAppointmentScreen() {
       confirm(
         t("block.confirmTitle"),
         t("block.confirmMessage", { name: targetName }),
-        async () => {
+        () => guard(async () => {
           const blockResult = await blockUser({ blockedToUserId: targetUserId });
           if ("error" in blockResult) {
             const errorMessage =
@@ -333,13 +335,13 @@ export default function SharedAppointmentScreen() {
             return;
           }
           alertSuccess(t("common.success"), t("block.createSuccess"));
-        },
+        }),
         undefined,
         t("block.submit"),
         t("common.cancel"),
       );
     },
-    [blockUser, t, confirm, alertError, alertSuccess],
+    [blockUser, t, confirm, alertError, alertSuccess, guard],
   );
 
   // Şikayet veya Engelleme işlemini başlat (tek veya çoklu hedef kontrolü)
@@ -392,7 +394,7 @@ export default function SharedAppointmentScreen() {
 
   // Favori toggle
   const handleToggleFavorite = useCallback(
-    async (targetId: string, appointmentId?: string) => {
+    (targetId: string, appointmentId?: string) => guard(async () => {
       const favoriteResult = await toggleFavorite({
         targetId,
         appointmentId: appointmentId || null,
@@ -403,8 +405,8 @@ export default function SharedAppointmentScreen() {
           t("appointment.alerts.favoriteFailed");
         alertError(t("common.error"), errorMessage);
       }
-    },
-    [toggleFavorite, t, alertError],
+    }),
+    [toggleFavorite, t, alertError, guard],
   );
 
   // --- İşlemler ---
@@ -412,7 +414,7 @@ export default function SharedAppointmentScreen() {
     confirm(
       t("appointment.alerts.cancellationTitle"),
       t("appointment.alerts.confirmCancellation"),
-      async () => {
+      () => guard(async () => {
         const cancelResult = await cancelAppointment(id);
         if ("error" in cancelResult) {
           const errorMessage =
@@ -422,7 +424,7 @@ export default function SharedAppointmentScreen() {
           return;
         }
         alertSuccess(t("common.success"), t("appointment.alerts.cancelled"));
-      },
+      }),
       undefined,
       t("appointment.actions.cancel"),
       t("appointment.alerts.cancel"),
@@ -433,7 +435,7 @@ export default function SharedAppointmentScreen() {
     confirm(
       t("appointment.alerts.completionTitle"),
       t("appointment.alerts.confirmCompletion"),
-      async () => {
+      () => guard(async () => {
         const completeResult = await completeAppointment(id);
         if ("error" in completeResult) {
           const errorMessage =
@@ -443,7 +445,7 @@ export default function SharedAppointmentScreen() {
           return;
         }
         alertSuccess(t("common.success"), t("appointment.alerts.completed"));
-      },
+      }),
       undefined,
       t("appointment.actions.complete"),
       t("appointment.alerts.cancel"),
@@ -455,7 +457,7 @@ export default function SharedAppointmentScreen() {
       confirm(
         t("appointment.alerts.deleteTitle"),
         t("appointment.alerts.confirmDelete"),
-        async () => {
+        () => guard(async () => {
           const deleteResult = await deleteAppointment(appointmentId);
           if ("error" in deleteResult) {
             const errorMessage =
@@ -465,20 +467,20 @@ export default function SharedAppointmentScreen() {
             return;
           }
           alertSuccess(t("common.success"), t("appointment.alerts.deleted"));
-        },
+        }),
         undefined,
         t("appointment.actions.delete"),
         t("common.cancel"),
       );
     },
-    [deleteAppointment, t, confirm, alertError, alertSuccess],
+    [deleteAppointment, t, confirm, alertError, alertSuccess, guard],
   );
 
   const handleDeleteAll = useCallback(async () => {
     confirm(
       t("appointment.alerts.deleteAllTitle"),
       t("appointment.alerts.confirmDeleteAll"),
-      async () => {
+      () => guard(async () => {
         const deleteAllResult = await deleteAllAppointments();
         if ("error" in deleteAllResult) {
           const errorMessage =
@@ -491,12 +493,12 @@ export default function SharedAppointmentScreen() {
           t("common.success"),
           t("appointment.alerts.deletedAll"),
         );
-      },
+      }),
       undefined,
       t("appointment.actions.delete"),
       t("common.cancel"),
     );
-  }, [deleteAllAppointments, t, confirm, alertError, alertSuccess]);
+  }, [deleteAllAppointments, t, confirm, alertError, alertSuccess, guard]);
 
   // Rating Component - Ortalama rating ve kullanıcının rating'i göster
   const RatingDisplay = ({

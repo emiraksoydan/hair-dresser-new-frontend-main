@@ -163,9 +163,9 @@ export const ServiceOfferingsList: React.FC<ServiceOfferingsListProps> = ({
           backgroundStyle={{ backgroundColor: colors.cardBg }}
           handleIndicatorStyle={{ backgroundColor: colors.borderColor }}
         >
-          <BottomSheetFlatList
+          <BottomSheetFlatList<ServiceOffering>
             data={filteredOfferings}
-            keyExtractor={(item, index) => item.id ?? `${item.serviceName}-${index}`}
+            keyExtractor={(item: ServiceOffering, index: number) => item.id ?? `${item.serviceName}-${index}`}
             contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 24 }}
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
@@ -196,7 +196,7 @@ export const ServiceOfferingsList: React.FC<ServiceOfferingsListProps> = ({
                 </Text>
               </View>
             )}
-            renderItem={({ item, index }) => (
+            renderItem={({ item, index }: { item: ServiceOffering; index: number }) => (
               <ServiceItem
                 service={item}
                 isFirst={index === 0}

@@ -15,7 +15,7 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { Text } from "../common/Text";
-import { useRouter } from "expo-router";
+import { useSafeNavigation } from "../../hook/useSafeNavigation";
 import { Icon } from "react-native-paper";
 import {
   BottomSheetModal,
@@ -64,7 +64,7 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({
   threadId,
 }) => {
   const { colors, isDark } = useTheme();
-  const router = useRouter();
+  const router = useSafeNavigation();
   const [messageText, setMessageText] = useState("");
   const flatListRef = useRef<FlatList>(null);
   const { userId: currentUserId, userType: currentUserType } = useAuth();

@@ -19,7 +19,7 @@ import {
     BlockedGetDto, CreateBlockedDto, UnblockDto, BlockStatusDto,
     CategoryHierarchyDto
 } from '../types';
-import { FilterRequestDto } from '../types/filter';
+import { FilterRequestDto, SavedFilterGetDto, SavedFilterCreateDto, SavedFilterUpdateDto } from '../types/filter';
 import { transformArrayResponse, transformObjectResponse, transformBooleanResponse, transformApiResponse } from '../utils/api/transform-response';
 
 // Cache duration constants (in seconds)
@@ -35,7 +35,7 @@ const CACHE_DURATIONS = {
 export const api = createApi({
     reducerPath: 'api',
     baseQuery: baseQueryWithReauth,
-    tagTypes: ['MineStores', 'GetStoreById', "MineFreeBarberPanel", "Notification", "Chat", "Appointment", "Favorite", "IsFavorite", "StoreForUsers", "FreeBarberForUsers", "UserProfile", "Setting", "HelpGuide", "Complaint", "Request", "Blocked", "Rating", "Subscription"],
+    tagTypes: ['MineStores', 'GetStoreById', "MineFreeBarberPanel", "Notification", "Chat", "Appointment", "Favorite", "IsFavorite", "StoreForUsers", "FreeBarberForUsers", "UserProfile", "Setting", "HelpGuide", "Complaint", "Request", "Blocked", "Rating", "Subscription", "SavedFilter"],
     // Only refetch on reconnect for critical data (Notification)
     // refetchOnFocus is disabled to prevent unnecessary requests
     refetchOnReconnect: false,
@@ -1203,6 +1203,30 @@ export const api = createApi({
             keepUnusedDataFor: CACHE_DURATIONS.REAL_TIME,
         }),
 
+        // --- SAVED FILTERS ---
+        getSavedFilters: builder.query<ApiResponse<SavedFilterGetDto[]>, void>({
+            query: () => 'SavedFilter',
+            providesTags: [{ type: 'SavedFilter' as const, id: 'LIST' }],
+            keepUnusedDataFor: CACHE_DURATIONS.USER_DATA,
+            transformResponse: (response: unknown): ApiResponse<SavedFilterGetDto[]> => {
+                const transformed = transformApiResponse<SavedFilterGetDto[]>(response);
+                if (transformed) return { success: transformed.success, message: transformed.message, data: transformed.data };
+                return response as ApiResponse<SavedFilterGetDto[]>;
+            },
+        }),
+        createSavedFilter: builder.mutation<ApiResponse<SavedFilterGetDto>, SavedFilterCreateDto>({
+            query: (body) => ({ url: 'SavedFilter', method: 'POST', body }),
+            invalidatesTags: [{ type: 'SavedFilter', id: 'LIST' }],
+        }),
+        updateSavedFilter: builder.mutation<ApiResponse<SavedFilterGetDto>, SavedFilterUpdateDto>({
+            query: (body) => ({ url: 'SavedFilter', method: 'PUT', body }),
+            invalidatesTags: [{ type: 'SavedFilter', id: 'LIST' }],
+        }),
+        deleteSavedFilter: builder.mutation<ApiResponse<boolean>, string>({
+            query: (filterId) => ({ url: `SavedFilter/${filterId}`, method: 'DELETE' }),
+            invalidatesTags: [{ type: 'SavedFilter', id: 'LIST' }],
+        }),
+
         // --- SUBSCRIPTION ---
         getSubscriptionStatus: builder.query<{
             success: boolean;
@@ -1327,4 +1351,9 @@ export const {
     useGetSubscriptionStatusQuery,
     useSendPhoneChangeOtpMutation,
     useUpdatePhoneMutation,
+    // SavedFilter
+    useGetSavedFiltersQuery,
+    useCreateSavedFilterMutation,
+    useUpdateSavedFilterMutation,
+    useDeleteSavedFilterMutation,
 } = api;

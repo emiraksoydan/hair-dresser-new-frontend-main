@@ -16,6 +16,7 @@ import { TypeLabel } from "../common/TypeLabel";
 import { getShortBarberTypeLabel } from "../../utils/card-helpers";
 import { useAlert } from "../../hook/useAlert";
 import { useTheme } from "../../hook/useTheme";
+import { useActionGuard } from "../../hook/useActionGuard";
 
 type Props = {
   freeBarber: FreeBarGetDto;
@@ -50,6 +51,7 @@ const FreeBarberCard: React.FC<Props> = ({
   const carouselWidth = Math.max(0, cardWidthFreeBarber - 20);
   const { t } = useLanguage();
   const { alertSuccess, alertError, confirm } = useAlert();
+  const guard = useActionGuard();
   const { getAllServicesForType } = useCategoryHierarchy({});
 
   const hasBeautySalonCertificate = Boolean(
@@ -111,7 +113,7 @@ const FreeBarberCard: React.FC<Props> = ({
     confirm(
       t("booking.callBarber"),
       t("card.callBarberConfirm", { name: freeBarber.fullName }),
-      async () => {
+      () => guard(async () => {
         const freeBarberUserId = freeBarber.freeBarberUserId;
         if (!freeBarberUserId) {
           alertError(
@@ -137,12 +139,13 @@ const FreeBarberCard: React.FC<Props> = ({
         if (onCallFreeBarber) {
           onCallFreeBarber(freeBarber.id);
         }
-      },
+      }),
       undefined,
       t("booking.callBarber"),
       t("common.cancel"),
     );
   }, [
+    guard,
     storeId,
     freeBarber.id,
     freeBarber.fullName,

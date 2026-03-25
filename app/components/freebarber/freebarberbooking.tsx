@@ -18,7 +18,8 @@ import {
 } from "react-native";
 import { BottomSheetScrollView } from "@gorhom/bottom-sheet";
 import { Text } from "../common/Text";
-import { useRouter } from "expo-router";
+import { useSafeNavigation } from "../../hook/useSafeNavigation";
+import { useActionGuard } from "../../hook/useActionGuard";
 import { Icon, IconButton } from "react-native-paper";
 import {
   useGetFreeBarberForUsersQuery,
@@ -78,7 +79,8 @@ const FreeBarberBookingContent = ({
   appointmentId,
   storeId,
 }: Props) => {
-  const router = useRouter();
+  const router = useSafeNavigation();
+  const guard = useActionGuard();
   const isAddStoreMode = mode === "add-store";
   const { data: freeBarberData, isLoading } = useGetFreeBarberForUsersQuery(
     barberId,
@@ -390,7 +392,7 @@ const FreeBarberBookingContent = ({
                       ? 0.7
                       : 1,
                 }}
-                onPress={async () => {
+                onPress={() => guard(async () => {
                   try {
                     // Eğer dışarıdan storeId geldiyse onu kullan, yoksa kullanıcının dükkanlarını kontrol et
                     let targetStoreId = storeId || selectedMyStoreId;
@@ -471,7 +473,7 @@ const FreeBarberBookingContent = ({
                       alertError(t("common.error"), errorMsg);
                     }
                   }
-                }}
+                })}
               >
                 {isCallingFreeBarber ? (
                   <ActivityIndicator color="white" />
@@ -650,7 +652,7 @@ const FreeBarberBookingContent = ({
                 disabled={isCreating}
                 className={`py-4 flex-row justify-center gap-2 rounded-2xl items-center ${isCreating ? "bg-[#4b5563]" : ""}`}
                 style={isCreating ? { opacity: 0.7 } : { backgroundColor: '#fea60e', opacity: 1, elevation: 6, shadowColor: '#fea60e', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.3, shadowRadius: 6 }}
-                onPress={async () => {
+                onPress={() => guard(async () => {
                   try {
                     // Error veya location denied kontrolü
                     if (!checkCanPerformAction()) {
@@ -719,7 +721,7 @@ const FreeBarberBookingContent = ({
                       alertError(t("common.error"), errorMsg);
                     }
                   }
-                }}
+                })}
               >
                 {isCreating ? (
                   <ActivityIndicator color="white" />
@@ -801,7 +803,7 @@ const FreeBarberBookingContent = ({
                 disabled={isCreating}
                 className={`py-4 flex-row justify-center gap-2 rounded-xl items-center ${isCreating ? "bg-[#4b5563]" : ""}`}
                 style={isCreating ? { opacity: 0.7 } : { backgroundColor: '#fea60e', opacity: 1 }}
-                onPress={async () => {
+                onPress={() => guard(async () => {
                   try {
                     // Error veya location denied kontrolü
                     if (!checkCanPerformAction()) {
@@ -872,7 +874,7 @@ const FreeBarberBookingContent = ({
                       alertError(t("common.error"), errorMsg);
                     }
                   }
-                }}
+                })}
               >
                 {isCreating ? (
                   <ActivityIndicator color="white" />

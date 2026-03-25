@@ -16,6 +16,7 @@ import { MESSAGES } from "../../constants/messages";
 import { Dropdown } from "react-native-element-dropdown";
 import { useLanguage } from "../../hook/useLanguage";
 import { useTheme } from "../../hook/useTheme";
+import { useActionGuard } from "../../hook/useActionGuard";
 
 type ChairModalBarber = {
   id: string;
@@ -64,6 +65,7 @@ export const ChairEditModal: React.FC<Props> = ({
   const { t } = useLanguage();
   const { colors } = useTheme();
   const dispatch = useAppDispatch();
+  const guard = useActionGuard();
 
   // Modal açıldığında initial değerleri tekrar yükle
   useEffect(() => {
@@ -90,7 +92,7 @@ export const ChairEditModal: React.FC<Props> = ({
     }
   };
 
-  const submit = async (values: ChairFormInitial) => {
+  const submit = (values: ChairFormInitial) => guard(async () => {
     const payloadName = values.mode === "named" ? (values.name ?? null) : null;
     const payloadBarberId =
       values.mode === "barber" ? (values.barberId ?? null) : null;
@@ -147,7 +149,7 @@ export const ChairEditModal: React.FC<Props> = ({
       }),
     );
     onClose();
-  };
+  });
 
   return (
     <Portal>

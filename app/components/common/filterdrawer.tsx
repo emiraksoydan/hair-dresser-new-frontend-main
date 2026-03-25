@@ -3,7 +3,7 @@
  * Soldan açılır, hem swipe hem de buton ile kontrol edilebilir
  */
 
-import React, { useEffect, useMemo, useRef } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { View, TouchableOpacity, ScrollView, Dimensions, Modal, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text } from './Text';
@@ -74,6 +74,16 @@ interface FilterDrawerProps {
 
     // Temizle butonu
     onClearFilters: () => void;
+
+    // Kayıtlı filtreler
+    savedFilters?: import('../../types/filter').SavedFilterGetDto[];
+    activeSavedFilterId?: string;
+    onLoadSavedFilter?: (filterCriteriaJson: string) => void;
+    onDeleteSavedFilter?: (filterId: string) => void;
+    onSaveCurrentFilter?: (name: string) => void;
+    onUpdateSavedFilter?: (filterId: string, name: string, filterCriteriaJson: string) => void;
+    hasActiveFilters?: boolean;
+    currentFilterCriteriaJson?: string;
 }
 
 // Chip bileşeni - tekrar kullanılabilir
@@ -135,11 +145,25 @@ export const FilterDrawer: React.FC<FilterDrawerProps> = ({
     showFavoritesOnly,
     onChangeFavoritesOnly,
     onClearFilters,
+    savedFilters,
+    activeSavedFilterId,
+    onLoadSavedFilter,
+    onDeleteSavedFilter,
+    onSaveCurrentFilter,
+    onUpdateSavedFilter,
+    hasActiveFilters,
+    currentFilterCriteriaJson,
 }) => {
     const { t } = useLanguage();
     const { colors } = useTheme();
     const insets = useSafeAreaInsets();
     const translateX = useSharedValue(-DRAWER_WIDTH);
+    const visibleValue = useSharedValue(visible ? 1 : 0);
+    const [saveNameInput, setSaveNameInput] = useState('');
+    const [showSaveInput, setShowSaveInput] = useState(false);
+
+    const activeFilter = activeSavedFilterId ? savedFilters?.find(sf => sf.id === activeSavedFilterId) : undefined;
+    const isUpdateMode = !!activeFilter;
 
     const multiSelectStylesDynamic = useMemo(() => ({
         style: {
@@ -247,8 +271,10 @@ export const FilterDrawer: React.FC<FilterDrawerProps> = ({
     useEffect(() => {
         if (visible) {
             translateX.value = withTiming(0, { duration: 300 });
+            visibleValue.value = 1;
         } else {
             translateX.value = withTiming(-DRAWER_WIDTH, { duration: 300 });
+            visibleValue.value = 0;
         }
     }, [visible]);
 
@@ -257,7 +283,7 @@ export const FilterDrawer: React.FC<FilterDrawerProps> = ({
     }));
 
     const backdropStyle = useAnimatedStyle(() => ({
-        opacity: visible ? withTiming(1, { duration: 300 }) : withTiming(0, { duration: 300 }),
+        opacity: withTiming(visibleValue.value, { duration: 300 }),
     }));
 
     const panGesture = Gesture.Pan()
@@ -353,6 +379,30 @@ export const FilterDrawer: React.FC<FilterDrawerProps> = ({
                             showsVerticalScrollIndicator={false}
                             contentContainerStyle={{ paddingBottom: 100, paddingTop: 16 }}
                         >
+                            {/* Kayıtlı Filtreler */}
+                            {onLoadSavedFilter && savedFilters && savedFilters.length > 0 && (
+                                <>
+                                    <Text style={{ color: colors.sectionHeaderText, fontSize: 14, fontFamily: 'CenturyGothicBold', marginBottom: 10 }}>
+                                        {t('filters.savedFilters')}
+                                    </Text>
+                                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 16 }} contentContainerStyle={{ gap: 8 }}>
+                                        {savedFilters.map((sf) => (
+                                            <View key={sf.id} style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: colors.cardBg2, borderRadius: 20, borderWidth: 1, borderColor: colors.borderColor, paddingLeft: 12, paddingRight: 4, paddingVertical: 6 }}>
+                                                <TouchableOpacity onPress={() => { onLoadSavedFilter(sf.filterCriteriaJson); onClose(); }} activeOpacity={0.7}>
+                                                    <Text style={{ color: colors.sectionHeaderText, fontSize: 13, fontFamily: 'CenturyGothic', marginRight: 4 }}>{sf.name}</Text>
+                                                </TouchableOpacity>
+                                                {onDeleteSavedFilter && (
+                                                    <TouchableOpacity onPress={() => onDeleteSavedFilter(sf.id)} style={{ padding: 4 }} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                                                        <Icon source="close" size={14} color={colors.textSecondary} />
+                                                    </TouchableOpacity>
+                                                )}
+                                            </View>
+                                        ))}
+                                    </ScrollView>
+                                    <Divider style={{ backgroundColor: colors.borderColor, marginBottom: 16 }} />
+                                </>
+                            )}
+
                             {/* Kullanıcı Türü */}
                             {showUserTypeFilter && (
                                 <>
@@ -645,19 +695,69 @@ export const FilterDrawer: React.FC<FilterDrawerProps> = ({
                             </ScrollView>
                         </ScrollView>
 
-                        {/* Footer - Temizle Butonu */}
-                        <View style={{ paddingHorizontal: 16, paddingVertical: 12, borderTopWidth: 1, borderTopColor: colors.borderColor }}>
+                        {/* Footer */}
+                        <View style={{ paddingHorizontal: 16, paddingVertical: 12, borderTopWidth: 1, borderTopColor: colors.borderColor, gap: 8 }}>
+                            {/* Filtre Kaydet / Güncelle */}
+                            {(onSaveCurrentFilter || (isUpdateMode && onUpdateSavedFilter)) && hasActiveFilters && (
+                                showSaveInput ? (
+                                    <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+                                        <TextInput
+                                            mode="outlined"
+                                            dense
+                                            placeholder={t('filters.saveFilterName')}
+                                            value={saveNameInput}
+                                            onChangeText={setSaveNameInput}
+                                            textColor={colors.sectionHeaderText}
+                                            outlineColor={colors.borderColor}
+                                            activeOutlineColor="#ffb900"
+                                            theme={{ roundness: 10, colors: { onSurfaceVariant: colors.textSecondary } }}
+                                            style={{ flex: 1, backgroundColor: colors.cardBg2, height: 44 }}
+                                        />
+                                        <TouchableOpacity
+                                            onPress={() => {
+                                                if (saveNameInput.trim()) {
+                                                    if (isUpdateMode && onUpdateSavedFilter && activeFilter) {
+                                                        onUpdateSavedFilter(activeFilter.id, saveNameInput.trim(), currentFilterCriteriaJson ?? activeFilter.filterCriteriaJson);
+                                                    } else if (onSaveCurrentFilter) {
+                                                        onSaveCurrentFilter(saveNameInput.trim());
+                                                    }
+                                                    setSaveNameInput('');
+                                                    setShowSaveInput(false);
+                                                }
+                                            }}
+                                            style={{ backgroundColor: '#ffb900', borderRadius: 10, paddingHorizontal: 14, height: 44, alignItems: 'center', justifyContent: 'center' }}
+                                            activeOpacity={0.8}
+                                        >
+                                            <Icon source="check" size={20} color="#1a1b25" />
+                                        </TouchableOpacity>
+                                        <TouchableOpacity
+                                            onPress={() => { setShowSaveInput(false); setSaveNameInput(''); }}
+                                            style={{ borderRadius: 10, paddingHorizontal: 10, height: 44, alignItems: 'center', justifyContent: 'center' }}
+                                            activeOpacity={0.8}
+                                        >
+                                            <Icon source="close" size={20} color={colors.textSecondary} />
+                                        </TouchableOpacity>
+                                    </View>
+                                ) : (
+                                    <TouchableOpacity
+                                        onPress={() => {
+                                            if (isUpdateMode && activeFilter) setSaveNameInput(activeFilter.name);
+                                            setShowSaveInput(true);
+                                        }}
+                                        style={{ width: '100%', borderWidth: 1.5, borderColor: isUpdateMode ? '#ffb900' : colors.borderColor, borderRadius: 12, paddingVertical: 12, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6 }}
+                                        activeOpacity={0.8}
+                                    >
+                                        <Icon source={isUpdateMode ? "bookmark-check" : "bookmark-outline"} size={18} color={isUpdateMode ? '#ffb900' : colors.textSecondary} />
+                                        <Text style={{ color: isUpdateMode ? '#ffb900' : colors.textSecondary, fontSize: 14, fontFamily: 'CenturyGothic' }}>
+                                            {isUpdateMode ? t('filters.updateFilter') : t('filters.saveFilter')}
+                                        </Text>
+                                    </TouchableOpacity>
+                                )
+                            )}
+                            {/* Temizle */}
                             <TouchableOpacity
                                 onPress={onClearFilters}
-                                style={{
-                                    width: '100%',
-                                    borderWidth: 1.5,
-                                    borderColor: '#ffb900',
-                                    borderRadius: 12,
-                                    paddingVertical: 12,
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                }}
+                                style={{ width: '100%', borderWidth: 1.5, borderColor: '#ffb900', borderRadius: 12, paddingVertical: 12, alignItems: 'center', justifyContent: 'center' }}
                                 activeOpacity={0.8}
                             >
                                 <Text style={{ color: '#ffb900', fontSize: 14, fontWeight: '600', fontFamily: 'CenturyGothic' }}>

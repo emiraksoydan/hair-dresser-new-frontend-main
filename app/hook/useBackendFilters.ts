@@ -59,6 +59,7 @@ export interface UseBackendFiltersOptions {
 }
 
 export const useBackendFilters = (options: UseBackendFiltersOptions = {}) => {
+  const [activeSavedFilterId, setActiveSavedFilterId] = useState<string | undefined>(undefined);
   const [criteria, setCriteria] = useState<BackendFilterCriteria>(() => ({
     searchQuery: '',
     userType: USER_TYPE_KEYS.ALL, // Language-independent key
@@ -157,6 +158,7 @@ export const useBackendFilters = (options: UseBackendFiltersOptions = {}) => {
     };
 
     setCriteria(defaultCriteria);
+    setActiveSavedFilterId(undefined);
 
     if (options.onFilterChange) {
       const filterDto = toFilterRequestDto(defaultCriteria, undefined, undefined, t);
@@ -233,10 +235,23 @@ export const useBackendFilters = (options: UseBackendFiltersOptions = {}) => {
     return toFilterRequestDto(criteria, location, currentUserId, t);
   }, [criteria, toFilterRequestDto]);
 
+  // Kayıtlı filtreyi yükler — filterCriteriaJson'u parse edip criteria'ya uygular
+  const loadFromSaved = useCallback((filterCriteriaJson: string, filterId?: string) => {
+    try {
+      const parsed: BackendFilterCriteria = JSON.parse(filterCriteriaJson);
+      setCriteria(prev => ({ ...prev, ...parsed }));
+      setActiveSavedFilterId(filterId);
+    } catch {
+      // Bozuk JSON ise sessizce geç
+    }
+  }, []);
+
   return {
     criteria,
     updateCriteria,
     clearFilters,
+    loadFromSaved,
+    activeSavedFilterId,
     activeFilterCount,
     hasActiveFilters,
     hasActiveSearch,

@@ -46,6 +46,8 @@ export interface NotificationPayload {
   store?: {
     storeId: string;
     storeOwnerUserId: string; // camelCase - backend JSON serialization camelCase kullanıyor
+    /** Dükkan sahibinin müşteri numarası (backend: StoreNotifyDto.StoreOwnerNumber) */
+    storeOwnerNumber?: string | null;
     storeName: string;
     imageUrl?: string;
     type?: number; // BarberType: 0 = MaleHairdresser, 1 = FemaleHairdresser, 2 = BeautySalon

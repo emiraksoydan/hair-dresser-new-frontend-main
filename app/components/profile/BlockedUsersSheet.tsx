@@ -8,6 +8,8 @@ import { useLanguage } from "../../hook/useLanguage";
 import { useAlert } from "../../hook/useAlert";
 import LottieView from "lottie-react-native";
 import { useTheme } from "../../hook/useTheme";
+import { useActionGuard } from "../../hook/useActionGuard";
+import { DEFAULT_AVATAR } from '../../constants/images';
 
 type BlockedUsersSheetProps = {
   onClose: () => void;
@@ -17,6 +19,7 @@ export const BlockedUsersSheet: React.FC<BlockedUsersSheetProps> = ({ onClose })
   const { t } = useLanguage();
   const { showSuccess, showError } = useAlert();
   const { colors } = useTheme();
+  const guard = useActionGuard();
 
   const { data: blockedUsers, isLoading, refetch } = useGetMyBlockedUsersQuery();
   const [unblockUser, { isLoading: isUnblocking }] = useUnblockUserMutation();
@@ -48,7 +51,7 @@ export const BlockedUsersSheet: React.FC<BlockedUsersSheetProps> = ({ onClose })
     }
   };
 
-  const handleUnblock = async (blockedToUserId: string) => {
+  const handleUnblock = (blockedToUserId: string) => guard(async () => {
     try {
       await unblockUser({ blockedToUserId }).unwrap();
       showSuccess(t("profile.unblockSuccess"));
@@ -56,7 +59,7 @@ export const BlockedUsersSheet: React.FC<BlockedUsersSheetProps> = ({ onClose })
     } catch (error: any) {
       showError(error?.data?.message || t("profile.unblockError"));
     }
-  };
+  });
 
   const renderBlockedItem = ({ item }: { item: BlockedGetDto }) => {
     const displayName = item.targetUserName || "Bilinmeyen Kullanıcı";
@@ -67,7 +70,7 @@ export const BlockedUsersSheet: React.FC<BlockedUsersSheetProps> = ({ onClose })
       <View style={{ backgroundColor: colors.cardBg }} className="mb-3 flex-row items-center rounded-xl p-4">
         <View className="relative mr-3">
           <Image
-            source={imageUrl ? { uri: imageUrl } : { uri: 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQxxOeOXHNrUgfxDbpJZJCxcDOjTlrBRlH7wA&s' }}
+            source={imageUrl ? { uri: imageUrl } : DEFAULT_AVATAR}
             style={{ width: 48, height: 48, borderRadius: 24 }}
             resizeMode="cover"
           />

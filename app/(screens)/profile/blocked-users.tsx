@@ -7,15 +7,18 @@ import { BlockedGetDto, UserType } from "../../types";
 import { useLanguage } from "../../hook/useLanguage";
 import { useAlert } from "../../hook/useAlert";
 import { LottieViewComponent } from "../../components/common/lottieview";
-import { useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useTheme } from "../../hook/useTheme";
+import { useActionGuard } from "../../hook/useActionGuard";
+import { useSafeNavigation } from "../../hook/useSafeNavigation";
+import { DEFAULT_AVATAR } from '../../constants/images';
 
 export default function BlockedUsersPage() {
-    const router = useRouter();
+    const router = useSafeNavigation();
     const { t } = useLanguage();
     const { showSuccess, showError } = useAlert();
     const { colors } = useTheme();
+    const guard = useActionGuard();
 
     const { data: blockedUsers, isLoading, refetch, isFetching } = useGetMyBlockedUsersQuery();
     const [unblockUser, { isLoading: isUnblocking }] = useUnblockUserMutation();
@@ -47,7 +50,7 @@ export default function BlockedUsersPage() {
         }
     };
 
-    const handleUnblock = async (blockedToUserId: string) => {
+    const handleUnblock = (blockedToUserId: string) => guard(async () => {
         try {
             await unblockUser({ blockedToUserId }).unwrap();
             showSuccess(t("profile.unblockSuccess"));
@@ -55,7 +58,7 @@ export default function BlockedUsersPage() {
         } catch (error: any) {
             showError(error?.data?.message || t("profile.unblockError"));
         }
-    };
+    });
 
     const renderBlockedItem = ({ item }: { item: BlockedGetDto }) => {
         const displayName = item.targetUserName || "Bilinmeyen Kullanıcı";
@@ -69,7 +72,7 @@ export default function BlockedUsersPage() {
             >
                 <View className="relative mr-3">
                     <Image
-                        source={imageUrl ? { uri: imageUrl } : { uri: 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQxxOeOXHNrUgfxDbpJZJCxcDOjTlrBRlH7wA&s' }}
+                        source={imageUrl ? { uri: imageUrl } : DEFAULT_AVATAR}
                         style={{ width: 48, height: 48, borderRadius: 24 }}
                         resizeMode="cover"
                     />
@@ -127,7 +130,7 @@ export default function BlockedUsersPage() {
                     ListEmptyComponent={
                         <View className="flex-1 items-center justify-center px-4 pt-12">
                             <LottieViewComponent
-                                animationSource={require("../../../assets/animations/empty.json")}
+                                animationSource={require("../../../assets/animations/block.json")}
                                 message={t("profile.blockedEmpty")}
                                 animationSize={120}
                             />

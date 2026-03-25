@@ -7,6 +7,8 @@ import { useCreateComplaintMutation } from "../../store/api";
 import { useLanguage } from "../../hook/useLanguage";
 import { useAlert } from "../../hook/useAlert";
 import { useTheme } from "../../hook/useTheme";
+import { useActionGuard } from "../../hook/useActionGuard";
+import { DEFAULT_AVATAR } from '../../constants/images';
 
 type ComplaintBottomSheetProps = {
   appointmentId: string;
@@ -28,10 +30,11 @@ export const ComplaintBottomSheet: React.FC<ComplaintBottomSheetProps> = ({
   const { t } = useLanguage();
   const { showSuccess, showError } = useAlert();
   const { colors } = useTheme();
+  const guard = useActionGuard();
   const [reason, setReason] = useState("");
   const [createComplaint, { isLoading }] = useCreateComplaintMutation();
 
-  const handleSubmit = async () => {
+  const handleSubmit = () => guard(async () => {
     if (!reason.trim()) {
       showError(t("complaint.reasonRequired"));
       return;
@@ -50,7 +53,7 @@ export const ComplaintBottomSheet: React.FC<ComplaintBottomSheetProps> = ({
     } catch (error: any) {
       showError(error?.data?.message || t("complaint.createError"));
     }
-  };
+  });
 
   return (
     <BottomSheetScrollView style={{ flex: 1, backgroundColor: colors.sheetBg }}>
@@ -71,13 +74,7 @@ export const ComplaintBottomSheet: React.FC<ComplaintBottomSheetProps> = ({
           style={{ backgroundColor: colors.cardBg2 }}
         >
           <Image
-            source={
-              targetImage
-                ? { uri: targetImage }
-                : {
-                    uri: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQxxOeOXHNrUgfxDbpJZJCxcDOjTlrBRlH7wA&s",
-                  }
-            }
+            source={targetImage ? { uri: targetImage } : DEFAULT_AVATAR}
             style={{ width: 48, height: 48, borderRadius: 24 }}
             resizeMode="cover"
           />

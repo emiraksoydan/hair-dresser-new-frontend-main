@@ -27,12 +27,24 @@ export const FreeBarberMarker = memo(({ barberId, coordinate, title, imageUrl, b
     // Component mount/unmount tracking
     useEffect(() => {
         mountedRef.current = true;
-        // Her mount'ta resmi yeniden yükle
         setTracksViewChanges(true);
-        setImageLoaded(false);
+        // URL değişmediyse imageLoaded'ı sıfırlama — cached image'dan onLoadEnd gelmeyebilir
+        if (imageUrl !== imageUrlRef.current) {
+            setImageLoaded(false);
+        }
+
+        // Güvenlik zamanlayıcısı: onLoadEnd/onLoad cached image'larda Android'de
+        // tetiklenmeyebilir, bu yüzden 800ms sonra her durumda spinner'ı ve tracking'i kapat
+        const safetyTimer = setTimeout(() => {
+            if (mountedRef.current) {
+                setImageLoading(false);
+                setTracksViewChanges(false);
+            }
+        }, 800);
 
         return () => {
             mountedRef.current = false;
+            clearTimeout(safetyTimer);
         };
     }, []);
 

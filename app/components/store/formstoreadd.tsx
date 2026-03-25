@@ -70,6 +70,7 @@ import { useOptimizedChairOptions } from "../../hooks/useOptimizedFieldArray";
 import { useAuth } from "../../hook/useAuth";
 import { useLanguage } from "../../hook/useLanguage";
 import { useTheme } from "../../hook/useTheme";
+import { useActionGuard } from "../../hook/useActionGuard";
 import { MESSAGES } from "../../constants/messages";
 import { ensureLocationGateWithUI } from "../location/location-gate";
 import { LocationStatus } from "../../types";
@@ -584,6 +585,7 @@ const FormStoreAdd = ({
   const [triggerGetMineStores] = useLazyGetMineStoresQuery();
   const [uploadMultipleImages] = useUploadMultipleImagesMutation();
   const [uploadImage] = useUploadImageMutation();
+  const guard = useActionGuard();
   const [isImagePickerLoading, setIsImagePickerLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [activeDay, setActiveDay] = useState<number>(1);
@@ -2243,7 +2245,7 @@ const FormStoreAdd = ({
               disabled={isLoading || isSubmitting}
               loading={isLoading || isSubmitting}
               mode="contained"
-              onPress={handleSubmit(OnSubmit)}
+              onPress={handleSubmit((data) => guard(() => OnSubmit(data)))}
               buttonColor="#10B981"
               textColor="white"
               labelStyle={{ fontSize: 16 }}

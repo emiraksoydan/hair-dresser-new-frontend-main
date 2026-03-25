@@ -18,6 +18,7 @@ import { TouchableOpacity, ActivityIndicator } from "react-native";
 import { useLanguage } from "../../hook/useLanguage";
 import { useCategoryHierarchy } from "../../hook/useCategoryHierarchy";
 import { useTheme } from "../../hook/useTheme";
+import { useActionGuard } from "../../hook/useActionGuard";
 
 type Props = {
   freeBarber: FreeBarberPanelDto;
@@ -81,8 +82,9 @@ const FreeBarberMineCard: React.FC<Props> = ({
   const dispatch = useAppDispatch();
   const [updateAvailability, { isLoading: isUpdatingAvailability }] =
     useUpdateFreeBarberAvailabilityMutation();
+  const guard = useActionGuard();
 
-  const handleToggleAvailability = useCallback(async () => {
+  const handleToggleAvailability = useCallback(() => guard(async () => {
     const nextState = !freeBarber.isAvailable;
     const updateResult = await updateAvailability(nextState);
     if ("error" in updateResult) {
@@ -98,7 +100,7 @@ const FreeBarberMineCard: React.FC<Props> = ({
         isError: !result?.success,
       }),
     );
-  }, [freeBarber.isAvailable, updateAvailability, dispatch]);
+  }), [freeBarber.isAvailable, updateAvailability, dispatch, guard]);
 
   return (
     <View

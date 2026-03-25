@@ -26,7 +26,8 @@ import {
   StoreSelectionType,
 } from "../../types";
 import { FreeBarberPanelSection } from "../../components/freebarber/freebarberpanelsection";
-import { useRouter, useLocalSearchParams } from "expo-router";
+import { useLocalSearchParams } from "expo-router";
+import { useSafeNavigation } from "../../hook/useSafeNavigation";
 import { Icon, IconButton } from "react-native-paper";
 import MapView from "react-native-maps";
 import { safeCoord } from "../../utils/location/geo";
@@ -37,10 +38,19 @@ import {
   useGetAllNotificationsQuery,
   useGetSettingQuery,
   useGetMeQuery,
+  useGetSavedFiltersQuery,
+  useCreateSavedFilterMutation,
+  useDeleteSavedFilterMutation,
+  useUpdateSavedFilterMutation,
 } from "../../store/api";
+import { useAppDispatch } from "../../store/hook";
+import { showSnack } from "../../store/snackbarSlice";
+import { getErrorMessage, getMessage } from "../../utils/errorHandler";
+import { SavedFilterChips } from "../../components/common/savedfilterchips";
 import { useTrackFreeBarberLocation } from "../../hook/useTrackFreeBarberLocation";
 import { RatingsBottomSheet } from "../../components/rating/ratingsbottomsheet";
 import { useBackendFilters } from "../../hook/useBackendFilters";
+import { useActionGuard } from "../../hook/useActionGuard";
 import { StoreMarker } from "../../components/common/storemarker";
 import { FreeBarberMarker } from "../../components/freebarber/freebarbermarker";
 import { DeferredRender } from "../../components/common/deferredrender";
@@ -48,8 +58,10 @@ import { CrudSkeletonComponent } from "../../components/common/crudskeleton";
 
 const Index = () => {
   const { colors, isDark } = useTheme();
+  const dispatch = useAppDispatch();
   const { t } = useLanguage();
-  const router = useRouter();
+  const router = useSafeNavigation();
+  const guard = useActionGuard();
 
   const { data: notifications = [], refetch: refetchNotifications } =
     useGetAllNotificationsQuery();
@@ -124,9 +136,18 @@ const Index = () => {
     criteria: filterCriteria,
     updateCriteria: updateFilterCriteria,
     clearFilters,
+    loadFromSaved,
+    activeSavedFilterId,
     hasActiveFilters,
     createFilterRequestDto,
   } = useBackendFilters(); // Varsayılan olarak tüm filtreler "all" (Hepsi) seçili
+
+  // Kayıtlı filtreler
+  const { data: savedFiltersData } = useGetSavedFiltersQuery();
+  const savedFilters = savedFiltersData?.data ?? [];
+  const [createSavedFilter] = useCreateSavedFilterMutation();
+  const [deleteSavedFilter] = useDeleteSavedFilterMutation();
+  const [updateSavedFilter] = useUpdateSavedFilterMutation();
 
   // Free barber paneli için current user ID (favoriler için)
   const { data: currentUser } = useGetMeQuery();
@@ -306,9 +327,25 @@ const Index = () => {
       ) {
         return false;
       }
+      // Category filter
+      if (filterCriteria.mainCategory && filterCriteria.mainCategory !== 'all') {
+        const storeTypeName = store.type === 0 ? 'MaleHairdresser' : store.type === 1 ? 'FemaleHairdresser' : 'BeautySalon';
+        if (storeTypeName !== filterCriteria.mainCategory) return false;
+      }
+      // Rating filter
+      if (filterCriteria.minRating && filterCriteria.minRating > 0) {
+        const storeRating = (store as any).averageRating ?? (store as any).rating ?? 0;
+        if (storeRating < filterCriteria.minRating) return false;
+      }
+      // Status filter
+      if (filterCriteria.status && filterCriteria.status !== 'all') {
+        const isOpen = (store as any).isOpenNow ?? false;
+        if (filterCriteria.status === 'available' && !isOpen) return false;
+        if (filterCriteria.status === 'unavailable' && isOpen) return false;
+      }
       return true;
     });
-  }, [displayStores, searchQuery, filterCriteria.userType]);
+  }, [displayStores, searchQuery, filterCriteria.userType, filterCriteria.mainCategory, filterCriteria.minRating, filterCriteria.status]);
 
   const goStoreDetail = useCallback(
     (store: BarberStoreGetDto) => {
@@ -480,16 +517,20 @@ const Index = () => {
 
   return (
     <View className="flex flex-1 pl-4 pr-2" style={{ backgroundColor: colors.screenBg }}>
-      <View className="flex flex-row items-center gap-2 mt-2">
-        <View className="flex flex-1">
-          <SearchBar
-            searchQuery={searchQuery}
-            setSearchQuery={setSearchQuery}
-            isList={isList}
-            setIsList={setIsList}
-            onFilterPress={() => setFilterDrawerVisible(true)}
-          />
-        </View>
+      <View style={{ marginTop: 8, backgroundColor: colors.cardBg, borderRadius: 12, borderWidth: 1.5, borderColor: colors.cardBg }}>
+        <SearchBar
+          transparent
+          searchQuery={searchQuery}
+          setSearchQuery={setSearchQuery}
+          isList={isList}
+          setIsList={setIsList}
+          onFilterPress={() => setFilterDrawerVisible(true)}
+        />
+        {savedFilters.length > 0 && (
+          <View style={{ paddingHorizontal: 10, paddingBottom: 8 }}>
+            <SavedFilterChips savedFilters={savedFilters} activeFilterId={activeSavedFilterId} onLoad={(json, id) => loadFromSaved(json, id)} />
+          </View>
+        )}
       </View>
 
       {isMapMode && (
@@ -719,6 +760,35 @@ const Index = () => {
           updateFilterCriteria({ favoritesOnly: value })
         }
         onClearFilters={handleClearFilters}
+        savedFilters={savedFilters}
+        activeSavedFilterId={activeSavedFilterId}
+        hasActiveFilters={hasActiveFilters}
+        currentFilterCriteriaJson={JSON.stringify(filterCriteria)}
+        onLoadSavedFilter={(json) => loadFromSaved(json)}
+        onDeleteSavedFilter={(filterId) => guard(async () => {
+          try {
+            const res = await deleteSavedFilter(filterId).unwrap();
+            dispatch(showSnack({ message: getMessage(res.message) || '' }));
+          } catch (e) {
+            dispatch(showSnack({ message: getErrorMessage(e), isError: true }));
+          }
+        })}
+        onSaveCurrentFilter={(name) => guard(async () => {
+          try {
+            const res = await createSavedFilter({ name, filterCriteriaJson: JSON.stringify(filterCriteria) }).unwrap();
+            dispatch(showSnack({ message: getMessage(res.message) || '' }));
+          } catch (e) {
+            dispatch(showSnack({ message: getErrorMessage(e), isError: true }));
+          }
+        })}
+        onUpdateSavedFilter={(filterId, name, criteriaJson) => guard(async () => {
+          try {
+            const res = await updateSavedFilter({ id: filterId, name, filterCriteriaJson: criteriaJson }).unwrap();
+            dispatch(showSnack({ message: getMessage(res.message) || '' }));
+          } catch (e) {
+            dispatch(showSnack({ message: getErrorMessage(e), isError: true }));
+          }
+        })}
       />
 
       <BottomSheetModal
