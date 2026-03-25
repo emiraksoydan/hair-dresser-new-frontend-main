@@ -754,7 +754,7 @@ const FormStoreUpdate = React.memo(({
     const initialChairs = (data.barberStoreChairs ?? []).map((c) => ({
       id: c.id,
       name: c.name ?? undefined,
-      barberId: c.manualBarberId ?? undefined,
+      barberId: c.manuelBarberId ?? undefined,
     }));
     const initialPricing: FormUpdateValues["pricingType"] =
       data.pricingType?.toLowerCase() === "rent"

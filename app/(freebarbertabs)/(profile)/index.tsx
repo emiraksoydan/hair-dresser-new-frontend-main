@@ -657,6 +657,25 @@ const Index = () => {
                                  subscriptionData.data.status === 'Expired' ? t('subscription.expiredInfo') :
                                  subscriptionData.data.status === 'Trial' ? t('subscription.trialInfo') : ''}
                             </Text>
+                            <TouchableOpacity
+                                onPress={() => router.push('/(screens)/subscription')}
+                                activeOpacity={0.8}
+                                style={{
+                                    marginTop: 12,
+                                    flexDirection: 'row',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    backgroundColor: '#fea60e',
+                                    borderRadius: 10,
+                                    paddingVertical: 10,
+                                    gap: 6,
+                                }}
+                            >
+                                <Icon source="crown-outline" size={16} color="#fff" />
+                                <Text style={{ color: '#fff', fontSize: 13, fontFamily: 'CenturyGothic-Bold' }}>
+                                    {t('subscription.viewPlans')}
+                                </Text>
+                            </TouchableOpacity>
                         </View>
                     </View>
                 )}

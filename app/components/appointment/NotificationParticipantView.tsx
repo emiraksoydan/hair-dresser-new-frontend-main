@@ -37,7 +37,7 @@ export const NotificationParticipantView: React.FC<
 }) => {
   const { t } = useLanguage();
   const { colors } = useTheme();
-  const hasManualBarber =
+  const hasManuelBarber =
     !!payload?.chair?.manuelBarberId || !!payload?.chair?.manuelBarberName;
 
   if (recipientRole === "store") {
@@ -115,7 +115,7 @@ export const NotificationParticipantView: React.FC<
                 )}
               </View>
             </View>
-          ) : hasManualBarber ? (
+          ) : hasManuelBarber ? (
             <View className="flex-row items-start">
               <OwnerAvatar
                 ownerId={payload?.chair?.manuelBarberId}
@@ -366,7 +366,7 @@ export const NotificationParticipantView: React.FC<
                 )}
               </View>
             </View>
-          ) : hasManualBarber ? (
+          ) : hasManuelBarber ? (
             <View className="flex-row items-start">
               <OwnerAvatar
                 ownerId={payload?.chair?.manuelBarberId}

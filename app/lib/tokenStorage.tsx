@@ -1,13 +1,25 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
-const KEY = 'auth_tokens_v1';
+import * as Keychain from 'react-native-keychain';
+
+const SERVICE = 'com.hairdresser.app.tokens';
 
 export async function saveTokens(tokens: any) {
-    await AsyncStorage.setItem(KEY, JSON.stringify(tokens));
+    await Keychain.setGenericPassword(
+        'tokens',
+        JSON.stringify(tokens),
+        { service: SERVICE, accessible: Keychain.ACCESSIBLE.WHEN_UNLOCKED_THIS_DEVICE_ONLY }
+    );
 }
+
 export async function loadTokens() {
-    const s = await AsyncStorage.getItem(KEY);
-    return s ? JSON.parse(s) : null;
+    const result = await Keychain.getGenericPassword({ service: SERVICE });
+    if (!result) return null;
+    try {
+        return JSON.parse(result.password);
+    } catch {
+        return null;
+    }
 }
+
 export async function clearStoredTokens() {
-    await AsyncStorage.removeItem(KEY);
+    await Keychain.resetGenericPassword({ service: SERVICE });
 }

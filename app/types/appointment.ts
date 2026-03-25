@@ -62,6 +62,8 @@ export type CreateStoreToFreeBarberRequestDto = {
 
 
 export enum AppointmentFilter {
+  /** Admin API: tüm durumlar */
+  All = 0,
   Active = 1,
   Completed = 2,
   Cancelled = 3,

@@ -569,22 +569,6 @@ export const api = createApi({
                             }),
                         );
                         // Also update by appointment if exists
-                        if (messageDto.appointmentId) {
-                            dispatch(
-                                api.util.updateQueryData("getChatMessages", { appointmentId: messageDto.appointmentId }, (draft) => {
-                                    if (!draft) return;
-                                    if (!draft.find((m) => m.messageId === messageDto.messageId)) {
-                                        draft.push({
-                                            messageId: messageDto.messageId,
-                                            senderUserId: messageDto.senderUserId,
-                                            text: messageDto.text,
-                                            createdAt: messageDto.createdAt,
-                                        });
-                                        draft.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-                                    }
-                                }),
-                            );
-                        }
                     }
                 } catch {
                     // Error handling - SignalR will update cache anyway
@@ -1236,6 +1220,8 @@ export const api = createApi({
                 subscriptionEndDate: string | null;
                 isBanned: boolean;
                 banReason: string | null;
+                autoRenew: boolean;
+                cancelAtPeriodEnd: boolean;
                 trialDaysLeft: number;
                 subscriptionDaysLeft: number;
             };
@@ -1243,6 +1229,28 @@ export const api = createApi({
             query: () => 'Subscription/status',
             providesTags: ['Subscription'],
             keepUnusedDataFor: CACHE_DURATIONS.USER_DATA,
+        }),
+
+        createPaytrToken: builder.mutation<ApiResponse<{ token: string; merchantOid: string; paymentAmount: number }>, { plan: 'FreeBarber' | 'BarberStore'; months?: number }>({
+            query: (body) => ({
+                url: 'Subscription/paytr/token',
+                method: 'POST',
+                body,
+            }),
+        }),
+        cancelSubscription: builder.mutation<ApiResponse<boolean>, void>({
+            query: () => ({
+                url: 'Subscription/cancel',
+                method: 'POST',
+            }),
+            invalidatesTags: ['Subscription'],
+        }),
+        reactivateSubscription: builder.mutation<ApiResponse<boolean>, void>({
+            query: () => ({
+                url: 'Subscription/reactivate',
+                method: 'POST',
+            }),
+            invalidatesTags: ['Subscription'],
         }),
 
     }),
@@ -1313,6 +1321,9 @@ export const {
     useIsFavoriteQuery,
     useGetMyFavoritesQuery,
     useRemoveFavoriteMutation,
+    useCreatePaytrTokenMutation,
+    useCancelSubscriptionMutation,
+    useReactivateSubscriptionMutation,
     useGetAllCategoriesQuery,
     useGetParentCategoriesQuery,
     useLazyGetChildCategoriesQuery,

@@ -1,0 +1,42 @@
+{
+  "cli": {
+    "version": ">= 14.0.0"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      }
+    },
+    "preview": {
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      }
+    },
+    "production": {
+      "autoIncrement": true,
+      "android": {
+        "buildType": "app-bundle"
+      },
+      "ios": {
+        "credentialsSource": "remote"
+      }
+    }
+  },
+  "submit": {
+    "production": {
+      "android": {
+        "serviceAccountKeyPath": "./pc-api-key.json",
+        "track": "internal"
+      },
+      "ios": {
+        "appleId": "APPLE_ID_EMAIL_BURAYA",
+        "ascAppId": "APP_STORE_CONNECT_APP_ID_BURAYA",
+        "appleTeamId": "APPLE_TEAM_ID_BURAYA"
+      }
+    }
+  }
+}

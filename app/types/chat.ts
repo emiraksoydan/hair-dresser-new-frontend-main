@@ -42,7 +42,6 @@ export type ChatMessagesReadEvent = {
 
 export type ChatMessageDto = {
   threadId: string;
-  appointmentId?: string | null; // Nullable: favori thread'lerde null
   messageId: string;
   senderUserId: string;
   text: string;

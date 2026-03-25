@@ -124,7 +124,7 @@ export type BarberChairUpdateDto = {
 export type BarberChairDto = {
   id: string;
   name?: string;
-  manualBarberId?: string;
+  manuelBarberId?: string;
 };
 
 export type ServiceOfferingCreateDto = {

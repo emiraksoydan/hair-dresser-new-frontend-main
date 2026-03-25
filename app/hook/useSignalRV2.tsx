@@ -105,18 +105,6 @@ export const useSignalRV2 = () => {
       // Çünkü api.tsx'deki onQueryStarted, HTTP yanıtından sonra cache'e ekliyor.
       // SignalR ile de eklenirse: optimistic(tempId) + real(uuid) aynı anda görünür → çift balon sorunu.
       if (!isOwnMessage) {
-        if (dto.appointmentId) {
-          dispatch(
-            api.util.updateQueryData("getChatMessages", { appointmentId: dto.appointmentId }, (draft) => {
-              if (!draft) return;
-              if (!draft.find((m) => m.messageId === dto.messageId)) {
-                draft.push({ messageId: dto.messageId, senderUserId: dto.senderUserId, text: dto.text, createdAt: dto.createdAt });
-                draft.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-              }
-            }),
-          );
-        }
-
         dispatch(
           api.util.updateQueryData("getChatMessagesByThread", { threadId: dto.threadId }, (draft) => {
             if (!draft) return;
