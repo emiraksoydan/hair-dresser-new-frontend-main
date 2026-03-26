@@ -63,14 +63,15 @@ const FreeBarberMineCard: React.FC<Props> = ({
     return { mainOfferings: main, beautyOfferings: beauty };
   }, [freeBarber.offerings, getAllServicesForType]);
 
-  const { isFavorite, favoriteCount, isLoading, toggleFavorite } =
+  const { isFavorite, favoriteCount, isLoading, favoriteDisabled, toggleFavorite } =
     useFavoriteToggle({
       targetId: freeBarber.id,
       targetType: FavoriteTargetType.FreeBarber,
-      initialIsFavorite: false,
       initialFavoriteCount: freeBarber.favoriteCount || 0,
       skipQuery: false,
+      counterpartyUserId: freeBarber.freeBarberUserId ?? null,
     });
+
   const handlePressCard = useCallback(() => {
     onPressUpdate?.(freeBarber);
   }, [onPressUpdate, freeBarber]);
@@ -190,6 +191,7 @@ const FreeBarberMineCard: React.FC<Props> = ({
                 isFavorite={isFavorite}
                 favoriteCount={favoriteCount}
                 isLoading={isLoading}
+                favoriteDisabled={favoriteDisabled}
                 onPress={toggleFavorite}
                 variant="icon"
                 className="pb-2"
@@ -205,6 +207,7 @@ const FreeBarberMineCard: React.FC<Props> = ({
                 isFavorite={isFavorite}
                 favoriteCount={favoriteCount}
                 isLoading={isLoading}
+                favoriteDisabled={favoriteDisabled}
                 onPress={toggleFavorite}
                 variant="button"
                 className="pb-1"
@@ -253,7 +256,10 @@ const FreeBarberMineCard: React.FC<Props> = ({
 export const FreeBarberMineCardComp = React.memo(
   FreeBarberMineCard,
   (prev, next) =>
-    prev.freeBarber === next.freeBarber &&
+    prev.freeBarber.id === next.freeBarber.id &&
+    prev.freeBarber.favoriteCount === next.freeBarber.favoriteCount &&
+    prev.freeBarber.fullName === next.freeBarber.fullName &&
+    prev.freeBarber.isAvailable === next.freeBarber.isAvailable &&
     prev.isList === next.isList &&
     prev.expanded === next.expanded &&
     prev.cardWidthFreeBarber === next.cardWidthFreeBarber &&

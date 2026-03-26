@@ -1,5 +1,5 @@
-import { useCallback, useState, useEffect } from 'react';
-import { useToggleFavoriteMutation, useIsFavoriteQuery } from '../store/api';
+import { useCallback, useState, useEffect, useMemo } from 'react';
+import { useToggleFavoriteMutation, useIsFavoriteQuery, useGetAllBlockedUserIdsQuery } from '../store/api';
 import { useAuth } from './useAuth';
 import { useLanguage } from './useLanguage';
 import { FavoriteTargetType } from '../types';
@@ -13,12 +13,15 @@ interface UseFavoriteToggleOptions {
   initialIsFavorite?: boolean;
   initialFavoriteCount?: number;
   skipQuery?: boolean;
+  /** Profil sahibinin UserId — engel varsa favori kapalı (liste tek istekle cache paylaşır) */
+  counterpartyUserId?: string | null;
 }
 
 interface UseFavoriteToggleReturn {
   isFavorite: boolean;
   favoriteCount: number;
   isLoading: boolean;
+  favoriteDisabled: boolean;
   toggleFavorite: () => Promise<void | undefined>;
 }
 
@@ -33,12 +36,22 @@ export const useFavoriteToggle = ({
   initialIsFavorite = false,
   initialFavoriteCount = 0,
   skipQuery = false,
+  counterpartyUserId = null,
 }: UseFavoriteToggleOptions): UseFavoriteToggleReturn => {
   const { isAuthenticated } = useAuth();
   const { t } = useLanguage();
   const { alert, alertError } = useAlert();
   const guard = useActionGuard();
   const [toggleFavoriteMutation, { isLoading: isTogglingFavorite }] = useToggleFavoriteMutation();
+
+  const { data: blockedUserIds = [] } = useGetAllBlockedUserIdsQuery(undefined, {
+    skip: !isAuthenticated || !counterpartyUserId,
+  });
+
+  const favoriteDisabled = useMemo(() => {
+    if (!counterpartyUserId) return false;
+    return blockedUserIds.includes(counterpartyUserId);
+  }, [counterpartyUserId, blockedUserIds]);
 
   // Query for favorite status (only if authenticated and not skipped)
   const { data: isFavoriteData } = useIsFavoriteQuery(targetId, {
@@ -48,19 +61,18 @@ export const useFavoriteToggle = ({
   const [isFavorite, setIsFavorite] = useState(initialIsFavorite);
   const [favoriteCount, setFavoriteCount] = useState(initialFavoriteCount);
 
-  // Update state when query data changes
+  // Kalp durumu: skipQuery ise props; değilse önce API (isFavorite), yoksa props — iki effect'in birbirini ezmesi engellenir
   useEffect(() => {
+    if (skipQuery) {
+      if (initialIsFavorite !== undefined) setIsFavorite(initialIsFavorite);
+      return;
+    }
     if (isFavoriteData !== undefined) {
       setIsFavorite(isFavoriteData);
-    }
-  }, [isFavoriteData]);
-
-  // Update state when initial values change (for props-based updates)
-  useEffect(() => {
-    if (initialIsFavorite !== undefined) {
+    } else if (initialIsFavorite !== undefined) {
       setIsFavorite(initialIsFavorite);
     }
-  }, [initialIsFavorite]);
+  }, [skipQuery, initialIsFavorite, isFavoriteData]);
 
   // Update favorite count when initial value changes
   useEffect(() => {
@@ -72,6 +84,10 @@ export const useFavoriteToggle = ({
   const toggleFavorite = useCallback(() => guard(async () => {
     if (!isAuthenticated) {
       alert(t('booking.warning'), t('booking.loginRequiredForFavorite'), undefined, 'warning');
+      return;
+    }
+    if (favoriteDisabled) {
+      alertError(t('common.error'), t('favorites.cannotFavoriteBlocked'));
       return;
     }
 
@@ -106,12 +122,13 @@ export const useFavoriteToggle = ({
         error?.data?.message || error?.message || t('appointment.alerts.favoriteFailed')
       );
     }
-  }), [guard, isAuthenticated, targetId, targetType, appointmentId, toggleFavoriteMutation, t, isFavorite, alert, alertError]);
+  }), [guard, isAuthenticated, targetId, targetType, appointmentId, toggleFavoriteMutation, t, isFavorite, alert, alertError, favoriteDisabled]);
 
   return {
     isFavorite,
     favoriteCount,
     isLoading: isTogglingFavorite,
+    favoriteDisabled,
     toggleFavorite,
   };
 };

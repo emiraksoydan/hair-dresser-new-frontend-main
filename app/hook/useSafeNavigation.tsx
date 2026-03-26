@@ -40,9 +40,20 @@ export const useSafeNavigation = () => {
         [router],
     );
 
+    /** Oturum açma gibi kritik yönlendirmelerde throttle yüzünden replace'in sessizce atlanmaması için */
+    const replaceImmediate = useCallback(
+        (...args: Parameters<typeof router.replace>) => {
+            lastCallRef.current = 0;
+            isNavigatingRef.current = false;
+            router.replace(...args);
+        },
+        [router],
+    );
+
     return {
         ...router,
         push: safePush,
         replace: safeReplace,
-    } as ReturnType<typeof useRouter>;
+        replaceImmediate,
+    } as ReturnType<typeof useRouter> & { replaceImmediate: typeof replaceImmediate };
 };

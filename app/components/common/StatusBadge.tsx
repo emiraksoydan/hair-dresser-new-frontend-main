@@ -10,6 +10,8 @@ interface StatusBadgeProps {
   barberType?: BarberType;
   isList?: boolean;
   className?: string;
+  /** Küçük chip satırları (favori kartı foto üstü vb.) */
+  compact?: boolean;
 }
 
 /**
@@ -21,6 +23,7 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({
   barberType,
   isList = false,
   className = '',
+  compact = false,
 }) => {
   const { t } = useLanguage();
 
@@ -85,15 +88,17 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({
   };
 
   const config = getBadgeConfig();
-  const textSize = isList ? 'text-sm' : 'text-xs';
+  const textSize = compact ? 'text-sm' : isList ? 'text-sm' : 'text-xs';
+  const iconSize = compact ? 14 : isList ? 14 : 12;
+  const chipPad = compact ? 'px-2.5 py-1' : 'px-2 py-0.5';
 
   return (
-    <View className={`${config.bgColor} px-2 py-0.5 rounded-xl flex-row items-center justify-center ${className}`}>
+    <View className={`${config.bgColor} ${chipPad} rounded-xl flex-row items-center justify-center max-w-[48%] ${className}`}>
       {config.icon && (
         <Icon
           source={config.icon}
           color="white"
-          size={isList ? 14 : 12}
+          size={iconSize}
         />
       )}
       {config.text && (

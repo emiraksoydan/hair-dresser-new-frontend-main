@@ -79,13 +79,14 @@ const FreeBarberCard: React.FC<Props> = ({
 
   const isAvailable = freeBarber.isAvailable ?? true;
 
-  const { isFavorite, favoriteCount, isLoading, toggleFavorite } =
+  const { isFavorite, favoriteCount, isLoading, favoriteDisabled, toggleFavorite } =
     useFavoriteToggle({
       targetId: freeBarber.id,
       targetType: FavoriteTargetType.FreeBarber,
       initialIsFavorite: freeBarber.isFavorited ?? false,
       initialFavoriteCount: freeBarber.favoriteCount || 0,
       skipQuery: true, // FreeBarberCard uses isFavorited from props
+      counterpartyUserId: freeBarber.freeBarberUserId ?? null,
     });
 
   const handlePressCard = useCallback(() => {
@@ -202,33 +203,45 @@ const FreeBarberCard: React.FC<Props> = ({
               autoPlay={showImageAnimation}
             />
             {isList && (
-              <View className="absolute top-2 right-[3] z-10 gap-2 justify-end flex-row items-center">
+              <View
+                className="absolute top-2 left-2 right-2 z-10 flex-row flex-wrap justify-end items-center gap-2"
+                pointerEvents="box-none"
+              >
                 {hasBeautySalonCertificate && (
-                  <View className="bg-purple-600/90 px-2 py-0.5 rounded-full">
-                    <Text className="text-white text-sm font-century-gothic-sans-semibold">
+                  <View className="bg-purple-600/90 px-2.5 py-1 rounded-full max-w-[48%]">
+                    <Text
+                      className="text-white text-sm font-century-gothic-sans-semibold"
+                      numberOfLines={1}
+                    >
                       {t("card.beautyExpert")}
                     </Text>
                   </View>
                 )}
                 {typeLabel && (
-                  <TypeLabel label={typeLabel} color={typeLabelColor} />
+                  <TypeLabel
+                    label={typeLabel}
+                    color={typeLabelColor}
+                    compact
+                  />
                 )}
                 <StatusBadge
                   type="barber-type"
                   barberType={freeBarber.type}
                   isList={true}
+                  compact
                 />
                 <StatusBadge
                   type={isAvailable ? "available" : "busy"}
                   isList={true}
+                  compact
                 />
                 {mode === "barbershop" && isAvailable && !hasCalled && (
                   <TouchableOpacity
                     onPress={handleCallFreeBarber}
                     disabled={isCalling}
-                    className="bg-[#ffb900] flex-row items-center px-2 py-0.5 rounded-full"
+                    className="bg-[#ffb900] flex-row items-center px-2.5 py-1 rounded-full"
                   >
-                    <Text className="text-white text-xs font-century-gothic-sans-semibold">
+                    <Text className="text-white text-sm font-century-gothic-sans-semibold">
                       {isCalling ? t("card.calling") : t("card.callBarber")}
                     </Text>
                   </TouchableOpacity>
@@ -251,6 +264,7 @@ const FreeBarberCard: React.FC<Props> = ({
                   isFavorite={isFavorite}
                   favoriteCount={favoriteCount}
                   isLoading={isLoading}
+                  favoriteDisabled={favoriteDisabled}
                   onPress={toggleFavorite}
                   variant="icon"
                   className="pb-2"
@@ -266,6 +280,7 @@ const FreeBarberCard: React.FC<Props> = ({
                   isFavorite={isFavorite}
                   favoriteCount={favoriteCount}
                   isLoading={isLoading}
+                  favoriteDisabled={favoriteDisabled}
                   onPress={toggleFavorite}
                   variant="button"
                   className="pb-1"
@@ -321,6 +336,7 @@ export const FreeBarberCardInner = React.memo(FreeBarberCard, (prev, next) => {
     prev.freeBarber.rating === next.freeBarber.rating &&
     prev.freeBarber.reviewCount === next.freeBarber.reviewCount &&
     prev.freeBarber.favoriteCount === next.freeBarber.favoriteCount &&
+    (prev.freeBarber.isFavorited ?? false) === (next.freeBarber.isFavorited ?? false) &&
     prev.freeBarber.imageList === next.freeBarber.imageList &&
     prev.freeBarber.offerings === next.freeBarber.offerings &&
     (prev.freeBarber.beautySalonCertificateImageId ?? null) === (next.freeBarber.beautySalonCertificateImageId ?? null);

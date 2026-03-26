@@ -6,6 +6,8 @@ interface TypeLabelProps {
   label: string;
   color?: string;
   className?: string;
+  /** Kart üstü chip satırlarında diğer rozetlerle aynı boyut */
+  compact?: boolean;
 }
 
 /**
@@ -15,12 +17,18 @@ export const TypeLabel: React.FC<TypeLabelProps> = ({
   label,
   color = 'bg-purple-500',
   className = '',
+  compact = false,
 }) => {
   if (!label) return null;
 
   return (
-    <View className={`${color} px-2 py-1 rounded-xl flex-row items-center justify-center ${className}`}>
-      <Text className="text-white text-base font-century-gothic-sans-medium">
+    <View
+      className={`${color} ${compact ? 'px-2.5 py-1 rounded-full' : 'px-2 py-1 rounded-xl'} flex-row items-center justify-center max-w-[48%] ${className}`}
+    >
+      <Text
+        className={`text-white font-century-gothic-sans-medium ${compact ? 'text-sm' : 'text-base'}`}
+        numberOfLines={1}
+      >
         {label}
       </Text>
     </View>

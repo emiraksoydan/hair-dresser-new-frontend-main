@@ -4,6 +4,7 @@ import { RootState } from "../store/redux-store";
 import { Portal, Snackbar } from "react-native-paper";
 import React, { useRef, useCallback, useEffect } from "react";
 import { useDispatch } from "react-redux";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useLanguage } from "./useLanguage";
 
 // useSnackbar hook kaldırıldı - direkt slice kullanın:
@@ -19,6 +20,7 @@ export const GlobalSnackbar: React.FC = () => {
   );
   const dispatch = useDispatch();
   const { t } = useLanguage();
+  const insets = useSafeAreaInsets();
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const handleDismiss = useCallback(() => {
@@ -52,6 +54,12 @@ export const GlobalSnackbar: React.FC = () => {
         visible={visible}
         onDismiss={handleDismiss}
         duration={3000}
+        wrapperStyle={{
+          top: 0,
+          bottom: "auto",
+          paddingTop: insets.top,
+          paddingBottom: 0,
+        }}
         style={{
           backgroundColor: isError ? "#b91c1c" : "#15803d", // Kırmızı: hata, Yeşil: başarı
         }}

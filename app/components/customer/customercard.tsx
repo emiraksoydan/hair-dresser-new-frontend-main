@@ -36,11 +36,12 @@ const CustomerCard: React.FC<Props> = ({
     const customerName = `${customer.firstName} ${customer.lastName}`;
     const { t } = useLanguage();
     const { colors } = useTheme();
-    const { isFavorite, favoriteCount, isLoading, toggleFavorite } = useFavoriteToggle({
+    const { isFavorite, favoriteCount, isLoading, favoriteDisabled, toggleFavorite } = useFavoriteToggle({
         targetId: customer.id,
         targetType: FavoriteTargetType.Customer,
         initialIsFavorite: false,
         initialFavoriteCount: customer.favoriteCount || 0,
+        counterpartyUserId: customer.id,
     });
 
     const handlePressCard = useCallback(() => {
@@ -85,6 +86,7 @@ const CustomerCard: React.FC<Props> = ({
                                 isFavorite={isFavorite}
                                 favoriteCount={favoriteCount}
                                 isLoading={isLoading}
+                                favoriteDisabled={favoriteDisabled}
                                 onPress={toggleFavorite}
                                 variant="icon"
                                 className="pb-2"
@@ -99,6 +101,7 @@ const CustomerCard: React.FC<Props> = ({
                                 isFavorite={isFavorite}
                                 favoriteCount={favoriteCount}
                                 isLoading={isLoading}
+                                favoriteDisabled={favoriteDisabled}
                                 onPress={toggleFavorite}
                                 variant="button"
                                 className="pb-1"
@@ -131,6 +134,7 @@ export const CustomerCardInner = React.memo(CustomerCard, (prev, next) => {
         prev.customer.rating === next.customer.rating &&
         prev.customer.reviewCount === next.customer.reviewCount &&
         prev.customer.favoriteCount === next.customer.favoriteCount &&
+        (prev.customer.isFavorited ?? false) === (next.customer.isFavorited ?? false) &&
         prev.customer.imageUrl === next.customer.imageUrl;
 
     const sameProps =

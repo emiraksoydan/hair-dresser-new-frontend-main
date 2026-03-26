@@ -1,5 +1,5 @@
 import React, { memo } from "react";
-import { Image, View } from "react-native";
+import { Image, StyleProp, View, ViewStyle } from "react-native";
 import { Icon } from "react-native-paper";
 import { useGetImagesByOwnerQuery } from "../../store/api";
 import { ImageOwnerType } from "../../types";
@@ -16,6 +16,8 @@ type Props = {
     iconSize?: number;
     iconColor?: string;
     iconContainerClassName?: string;
+    /** Sarı/turuncu halka veya dış boşluk için dış View */
+    wrapperStyle?: StyleProp<ViewStyle>;
 };
 
 const OwnerAvatarInner: React.FC<Props> = ({
@@ -29,6 +31,7 @@ const OwnerAvatarInner: React.FC<Props> = ({
     iconSize = 24,
     iconColor = "#6b7280",
     iconContainerClassName,
+    wrapperStyle,
 }) => {
     const { colors } = useTheme();
 
@@ -47,24 +50,31 @@ const OwnerAvatarInner: React.FC<Props> = ({
     const validFallbackUrl = fallbackUrl && fallbackUrl.trim().length > 0 ? fallbackUrl : null;
     const resolvedUrl = apiImageUrl || validFallbackUrl || null;
 
-    if (resolvedUrl) {
-        return (
+    const inner =
+        resolvedUrl ? (
             <Image
                 source={{ uri: resolvedUrl }}
                 className={imageClassName}
                 resizeMode={resizeMode}
             />
+        ) : (
+            <View
+                className={`${imageClassName} ${iconContainerClassName ?? ""} items-center justify-center`}
+                style={
+                    !iconContainerClassName
+                        ? { backgroundColor: colors.cardBg2 }
+                        : undefined
+                }
+            >
+                <Icon source={iconSource} size={iconSize} color={iconColor} />
+            </View>
         );
+
+    if (wrapperStyle) {
+        return <View style={wrapperStyle}>{inner}</View>;
     }
 
-    return (
-        <View
-            className={`${imageClassName} ${iconContainerClassName ?? ''} items-center justify-center`}
-            style={!iconContainerClassName ? { backgroundColor: colors.cardBg2 } : undefined}
-        >
-            <Icon source={iconSource} size={iconSize} color={iconColor} />
-        </View>
-    );
+    return inner;
 };
 
 export const OwnerAvatar = memo(OwnerAvatarInner);

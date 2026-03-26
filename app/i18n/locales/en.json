@@ -110,6 +110,8 @@
     "expiredInfo": "Your trial period has ended. Please subscribe to continue using the app.",
     "bannedInfo": "Your account has been suspended. Please contact support for more information.",
     "activeDesc": "Your subscription is active.",
+    "customerPlansTitle": "Customer account",
+    "customerPlansInfo": "Paid subscription plans are only for free barber and shop accounts. As a customer you can keep using the app without a subscription.",
     "freeBarberPlanName": "Free Barber",
     "freeBarberPlanDesc": "For independent barbers",
     "freeBarberPrice": "149",
@@ -220,7 +222,9 @@
       "address": "Address",
       "chair": "Chair",
       "myServices": "My Services",
-      "services": "Services"
+      "services": "Services",
+      "scheduleDate": "Date",
+      "scheduleTime": "Time"
     }
   },
   "time": {
@@ -340,7 +344,8 @@
     "myPanel": "My Panel",
     "myStores": "My Stores",
     "nearbyStores": "Nearby Stores",
-    "nearbyFreeBarbers": "Nearby Free Barbers"
+    "nearbyFreeBarbers": "Nearby Free Barbers",
+    "favoritesReceived": "People who favorited you: {{count}}"
   },
   "labels": {
     "freeBarber": "Free Barber",
@@ -723,6 +728,7 @@
     "commentPlaceholder": "Write your comment...",
     "yourBadge": "You",
     "title": "Rate",
+    "starSectionTitle": "Your rating",
     "rateFor": "Rate for",
     "commentOptional": "Comment (Optional)",
     "submit": "Submit Rating"
@@ -771,6 +777,7 @@
     "removedSuccess": "Removed from favorites.",
     "notFound": "Favorite not found.",
     "cannotFavoriteYourself": "You cannot add yourself to favorites.",
+    "cannotFavoriteBlocked": "You cannot favorite users you blocked or who blocked you.",
     "targetUserNotFound": "Target user not found."
   },
   "image": {

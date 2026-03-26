@@ -11,13 +11,17 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useTheme } from "../../hook/useTheme";
 import { useActionGuard } from "../../hook/useActionGuard";
 import { useSafeNavigation } from "../../hook/useSafeNavigation";
-import { DEFAULT_AVATAR } from '../../constants/images';
+import { DEFAULT_AVATAR } from "../../constants/images";
+
+const ACCENT = "#ffb900";
+const AVATAR = 58;
+const AVATAR_RADIUS = 12;
 
 export default function ComplaintsPage() {
     const router = useSafeNavigation();
     const { t } = useLanguage();
     const { showSuccess, showError, showConfirm } = useAlert();
-    const { colors } = useTheme();
+    const { colors, isDark } = useTheme();
     const guard = useActionGuard();
 
     const { data: complaints, isLoading, refetch, isFetching } = useGetMyComplaintsQuery();
@@ -56,15 +60,16 @@ export default function ComplaintsPage() {
         showConfirm(
             t("profile.deleteConfirmTitle"),
             t("profile.deleteConfirmMessage"),
-            () => guard(async () => {
-                try {
-                    await deleteComplaint(complaintId).unwrap();
-                    showSuccess(t("profile.complanintDeleteSuccess"));
-                    refetch();
-                } catch (error: any) {
-                    showError(error?.data?.message || t("profile.complaintDeleteError"));
-                }
-            })
+            () =>
+                guard(async () => {
+                    try {
+                        await deleteComplaint(complaintId).unwrap();
+                        showSuccess(t("profile.complanintDeleteSuccess"));
+                        refetch();
+                    } catch (error: any) {
+                        showError(error?.data?.message || t("profile.complaintDeleteError"));
+                    }
+                }),
         );
     };
 
@@ -74,39 +79,98 @@ export default function ComplaintsPage() {
         const userTypeName = getUserTypeName(item.targetUserType);
 
         return (
-            <View className="mb-3 rounded-xl p-4" style={{ backgroundColor: colors.cardBg2 }}>
+            <View
+                className="mb-3 overflow-hidden rounded-xl p-4"
+                style={{
+                    backgroundColor: colors.cardBg2,
+                    borderWidth: 1,
+                    borderColor: colors.borderColor,
+                    borderLeftWidth: 3,
+                    borderLeftColor: ACCENT,
+                }}
+            >
                 <View className="flex-row items-start">
-                    <View className="relative mr-3">
+                    <View className="mr-3">
                         <Image
                             source={imageUrl ? { uri: imageUrl } : DEFAULT_AVATAR}
-                            style={{ width: 40, height: 40, borderRadius: 20 }}
+                            style={{ width: AVATAR, height: AVATAR, borderRadius: AVATAR_RADIUS }}
                             resizeMode="cover"
                         />
                     </View>
-                    <View className="flex-1">
-                        <View className="flex-row items-center">
-                            <Text className="text-sm font-semibold" style={{ color: colors.sectionHeaderText }}>{displayName}</Text>
-                            {userTypeName ? (
-                                <View
-                                    className="ml-2 rounded-full px-2 py-0.5"
-                                    style={{ backgroundColor: colors.cardBg3 }}
+                    <View className="min-w-0 flex-1 pr-2">
+                        <Text
+                            style={{
+                                color: colors.sectionHeaderText,
+                                fontFamily: "CenturyGothic-Bold",
+                                fontSize: 16,
+                            }}
+                            numberOfLines={2}
+                        >
+                            {displayName}
+                        </Text>
+                        {userTypeName ? (
+                            <View
+                                className="mt-1.5 self-start rounded-full px-2.5 py-1"
+                                style={{
+                                    backgroundColor: isDark ? "rgba(255, 185, 0, 0.14)" : "rgba(255, 185, 0, 0.12)",
+                                    borderWidth: 1,
+                                    borderColor: isDark ? "rgba(255, 185, 0, 0.35)" : "rgba(251, 191, 36, 0.45)",
+                                }}
+                            >
+                                <Text
+                                    style={{
+                                        color: colors.sectionHeaderText,
+                                        fontFamily: "CenturyGothic-Bold",
+                                        fontSize: 12,
+                                    }}
                                 >
-                                    <Text className="text-xs text-gray-300">{userTypeName}</Text>
-                                </View>
-                            ) : null}
-                        </View>
-                        <Text className="mt-0.5 text-xs text-gray-500">{formatDateTime(item.createdAt)}</Text>
+                                    {userTypeName}
+                                </Text>
+                            </View>
+                        ) : null}
+                        <Text
+                            style={{
+                                marginTop: 6,
+                                color: colors.textSecondary,
+                                fontFamily: "CenturyGothic",
+                                fontSize: 13,
+                            }}
+                        >
+                            {formatDateTime(item.createdAt)}
+                        </Text>
                     </View>
                     <TouchableOpacity
                         onPress={() => handleDelete(item.id)}
                         disabled={isDeleting}
-                        className="p-2"
+                        style={{
+                            padding: 8,
+                            borderRadius: 10,
+                            backgroundColor: colors.cardBg3,
+                            borderWidth: 1,
+                            borderColor: colors.borderColor2,
+                        }}
                     >
-                        <Icon source="delete-outline" size={20} color="#ef4444" />
+                        <Icon source="delete-outline" size={22} color="#ef4444" />
                     </TouchableOpacity>
                 </View>
-                <View className="mt-3 rounded-lg p-3" style={{ backgroundColor: colors.cardBg3 }}>
-                    <Text className="text-sm text-gray-300">{item.complaintReason}</Text>
+                <View
+                    className="mt-3 rounded-xl px-3.5 py-3"
+                    style={{
+                        backgroundColor: colors.cardBg3,
+                        borderWidth: 1,
+                        borderColor: colors.borderColor,
+                    }}
+                >
+                    <Text
+                        style={{
+                            color: colors.sectionHeaderText,
+                            fontFamily: "CenturyGothic",
+                            fontSize: 15,
+                            lineHeight: 22,
+                        }}
+                    >
+                        {item.complaintReason}
+                    </Text>
                 </View>
             </View>
         );
@@ -115,20 +179,40 @@ export default function ComplaintsPage() {
     return (
         <SafeAreaView style={{ flex: 1, backgroundColor: colors.screenBg }} edges={["top"]}>
             <View
-                className="flex-row items-center px-4 py-3"
+                className="flex-row items-center justify-between px-3 py-2.5"
                 style={{ borderBottomWidth: 1, borderBottomColor: colors.borderColor }}
             >
-                <TouchableOpacity onPress={() => router.back()} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                    <Icon source="chevron-left" size={28} color={colors.sectionHeaderText} />
-                </TouchableOpacity>
-                <Text className="text-lg font-bold ml-2" style={{ color: colors.sectionHeaderText }}>
-                    {t("profile.myComplaints")}
-                </Text>
+                <View className="flex-row items-center flex-1">
+                    <TouchableOpacity
+                        onPress={() => router.back()}
+                        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                        style={{
+                            padding: 8,
+                            borderRadius: 12,
+                            backgroundColor: colors.cardBg3,
+                            borderWidth: 1,
+                            borderColor: colors.borderColor2,
+                        }}
+                    >
+                        <Icon source="chevron-left" size={24} color={colors.sectionHeaderText} />
+                    </TouchableOpacity>
+                    <View className="ml-2.5 flex-1">
+                        <Text
+                            style={{
+                                color: colors.sectionHeaderText,
+                                fontFamily: "CenturyGothic-Bold",
+                                fontSize: 17,
+                            }}
+                        >
+                            {t("profile.myComplaints")}
+                        </Text>
+                    </View>
+                </View>
             </View>
 
             {isLoading ? (
                 <View className="flex-1 items-center justify-center">
-                    <ActivityIndicator size="large" color="#ffb900" />
+                    <ActivityIndicator size="large" color={ACCENT} />
                 </View>
             ) : (
                 <FlatList
@@ -141,15 +225,15 @@ export default function ComplaintsPage() {
                         <RefreshControl
                             refreshing={isFetching && !isLoading}
                             onRefresh={refetch}
-                            tintColor="#ffb900"
+                            tintColor={ACCENT}
                         />
                     }
                     ListEmptyComponent={
-                        <View className="flex-1 items-center justify-center px-4 pt-12">
+                        <View className="flex-1 items-center justify-center px-5 pt-14">
                             <LottieViewComponent
                                 animationSource={require("../../../assets/animations/complaint.json")}
                                 message={t("profile.complaintEmpty")}
-                                animationSize={120}
+                                animationSize={132}
                             />
                         </View>
                     }

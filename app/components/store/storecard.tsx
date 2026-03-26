@@ -30,12 +30,13 @@ type Props = {
 const StoreCard: React.FC<Props> = ({ store, isList, expanded, cardWidthStore, isViewerFromFreeBr = false, typeLabel, typeLabelColor = 'bg-blue-500', onPressUpdate, onPressRatings, showImageAnimation = true }) => {
     const { colors } = useTheme();
     const carouselWidth = Math.max(0, cardWidthStore - 20);
-    const { isFavorite, favoriteCount, isLoading, toggleFavorite } = useFavoriteToggle({
+    const { isFavorite, favoriteCount, isLoading, favoriteDisabled, toggleFavorite } = useFavoriteToggle({
         targetId: store.id,
         targetType: FavoriteTargetType.Store,
         initialIsFavorite: store.isFavorited ?? false,
         initialFavoriteCount: store.favoriteCount || 0,
         skipQuery: true, // StoreCard uses isFavorited from props
+        counterpartyUserId: store.barberStoreOwnerId ?? null,
     });
 
     const handlePressCard = useCallback(() => {
@@ -103,6 +104,7 @@ const StoreCard: React.FC<Props> = ({ store, isList, expanded, cardWidthStore, i
                                     isFavorite={isFavorite}
                                     favoriteCount={favoriteCount}
                                     isLoading={isLoading}
+                                    favoriteDisabled={favoriteDisabled}
                                     onPress={toggleFavorite}
                                     variant="icon"
                                     className="pb-2"
@@ -117,6 +119,7 @@ const StoreCard: React.FC<Props> = ({ store, isList, expanded, cardWidthStore, i
                                     isFavorite={isFavorite}
                                     favoriteCount={favoriteCount}
                                     isLoading={isLoading}
+                                    favoriteDisabled={favoriteDisabled}
                                     onPress={toggleFavorite}
                                     variant="button"
                                     className="pb-1"
@@ -167,6 +170,7 @@ export const StoreCardInner = React.memo(
             prev.store.rating === next.store.rating &&
             prev.store.reviewCount === next.store.reviewCount &&
             prev.store.favoriteCount === next.store.favoriteCount &&
+            (prev.store.isFavorited ?? false) === (next.store.isFavorited ?? false) &&
             prev.store.imageList === next.store.imageList &&
             prev.store.serviceOfferings === next.store.serviceOfferings &&
             prev.store.pricingType === next.store.pricingType &&

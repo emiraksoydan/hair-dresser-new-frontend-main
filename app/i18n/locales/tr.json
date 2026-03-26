@@ -110,6 +110,8 @@
     "expiredInfo": "Deneme süreniz sona ermiştir. Uygulamayı kullanmaya devam etmek için lütfen abone olunuz.",
     "bannedInfo": "Hesabınız askıya alınmıştır. Detaylı bilgi için destek ile iletişime geçin.",
     "activeDesc": "Aboneliğiniz aktif durumda.",
+    "customerPlansTitle": "Müşteri hesabı",
+    "customerPlansInfo": "Ücretli abonelik planları yalnızca serbest berber ve dükkan hesapları içindir. Müşteri olarak uygulamayı ücretsiz kullanmaya devam edebilirsiniz.",
     "freeBarberPlanName": "Serbest Berber",
     "freeBarberPlanDesc": "Bağımsız çalışan berberlere özel",
     "freeBarberPrice": "149",
@@ -220,7 +222,9 @@
       "address": "Adres",
       "chair": "Koltuk",
       "myServices": "İşlemlerim",
-      "services": "Hizmetler"
+      "services": "Hizmetler",
+      "scheduleDate": "Tarih",
+      "scheduleTime": "Saat"
     }
   },
   "time": {
@@ -717,6 +721,7 @@
     "commentPlaceholder": "Yorumunuzu yazın...",
     "yourBadge": "Sizin",
     "title": "Değerlendirme",
+    "starSectionTitle": "Puanınız",
     "rateFor": "için değerlendirme yapın",
     "commentOptional": "Yorum (Opsiyonel)",
     "submit": "Değerlendirmeyi Gönder"
@@ -765,6 +770,7 @@
     "removedSuccess": "Favorilerden çıkarıldı.",
     "notFound": "Favori bulunamadı.",
     "cannotFavoriteYourself": "Kendi kendinizi favorilere ekleyemezsiniz.",
+    "cannotFavoriteBlocked": "Engellediğiniz veya sizi engelleyen kullanıcılar favorilenemez.",
     "targetUserNotFound": "Hedef kullanıcı bulunamadı."
   },
   "image": {
@@ -906,7 +912,8 @@
     "myPanel": "Panelim",
     "myStores": "İşletmelerim",
     "nearbyStores": "Çevremdeki Dükkanlar",
-    "nearbyFreeBarbers": "Çevremdeki Serbest Berberler"
+    "nearbyFreeBarbers": "Çevremdeki Serbest Berberler",
+    "favoritesReceived": "Sizi favorilerine ekleyen kişi sayısı: {{count}}"
   },
   "moderation": {
     "inappropriateText": "Mesajınız uygunsuz içerik barındırmaktadır. Lütfen küfür, hakaret veya uygunsuz ifadeler kullanmayınız.",

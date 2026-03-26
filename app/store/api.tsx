@@ -32,6 +32,50 @@ const CACHE_DURATIONS = {
     REAL_TIME: 5,     // 5 seconds - Nearby lists
 } as const;
 
+/**
+ * isFavorite sorgusu yoksa (kartlar skipQuery ile) bile liste/detay önbelleğinden
+ * mevcut favori durumunu okur — optimistic toggle yönünü doğru hesaplamak için.
+ */
+function getCachedFavoriteStateForTarget(state: unknown, targetId: string): boolean | undefined {
+    const apiState = (state as { api?: { queries?: Record<string, any> } })?.api;
+    if (!apiState?.queries) return undefined;
+
+    for (const queryKey of Object.keys(apiState.queries)) {
+        const qs = apiState.queries[queryKey];
+        if (qs?.endpointName === 'isFavorite' && qs?.originalArgs === targetId && qs.data !== undefined) {
+            return qs.data as boolean;
+        }
+    }
+
+    const listEndpoints = new Set([
+        'getNearbyFreeBarber',
+        'getNearbyStores',
+        'getMineStores',
+    ]);
+
+    for (const queryKey of Object.keys(apiState.queries)) {
+        const qs = apiState.queries[queryKey];
+        if (!qs?.data || !listEndpoints.has(qs.endpointName)) continue;
+        const data = qs.data;
+        if (Array.isArray(data)) {
+            const item = data.find((x: { id?: string }) => x?.id === targetId);
+            if (item && typeof (item as { isFavorited?: boolean }).isFavorited === 'boolean') {
+                return (item as { isFavorited: boolean }).isFavorited;
+            }
+        }
+    }
+
+    const detailEndpoints = new Set(['getFreeBarberForUsers', 'getStoreForUsers', 'getStoreById', 'getFreeBarberMinePanelDetail']);
+    for (const queryKey of Object.keys(apiState.queries)) {
+        const qs = apiState.queries[queryKey];
+        if (!qs?.data || !detailEndpoints.has(qs.endpointName)) continue;
+        const d = qs.data as { id?: string; isFavorited?: boolean };
+        if (d?.id === targetId && typeof d.isFavorited === 'boolean') return d.isFavorited;
+    }
+
+    return undefined;
+}
+
 export const api = createApi({
     reducerPath: 'api',
     baseQuery: baseQueryWithReauth,
@@ -665,6 +709,9 @@ export const api = createApi({
                 const patchResults: any[] = [];
 
                 // Optimistic update: Anında UI'ı güncelle
+                /** RTK void query'lerde originalArgs undefined — updateQueryData ikinci argümanı undefined olmalı */
+                const voidFavoriteEndpoints = new Set(['getFreeBarberMinePanel', 'getMineStores']);
+
                 const optimisticUpdateCache = (endpointName: string, optimisticToggle: boolean) => {
                     try {
                         const apiState = (state as any).api;
@@ -687,24 +734,30 @@ export const api = createApi({
                                         }
                                     }
 
-                                    if (queryArgs) {
-                                        const patchResult = dispatch(
-                                            api.util.updateQueryData(endpointName as any, queryArgs, (draft: any) => {
-                                                if (Array.isArray(draft)) {
-                                                    const item = draft.find((s: any) => s.id === targetId);
-                                                    if (item) {
-                                                        // Optimistic: favoriteCount'u tahmin et
-                                                        item.favoriteCount = (item.favoriteCount || 0) + (optimisticToggle ? 1 : -1);
-                                                        if (item.favoriteCount < 0) item.favoriteCount = 0;
-                                                    }
-                                                } else if (draft && draft.id === targetId) {
-                                                    draft.favoriteCount = (draft.favoriteCount || 0) + (optimisticToggle ? 1 : -1);
-                                                    if (draft.favoriteCount < 0) draft.favoriteCount = 0;
+                                    const useVoidArgs = voidFavoriteEndpoints.has(endpointName);
+                                    const canPatch =
+                                        useVoidArgs || (queryArgs !== undefined && queryArgs !== null);
+                                    if (!canPatch) return;
+
+                                    const argsForUpdate = useVoidArgs ? undefined : queryArgs;
+
+                                    const patchResult = dispatch(
+                                        api.util.updateQueryData(endpointName as any, argsForUpdate, (draft: any) => {
+                                            if (Array.isArray(draft)) {
+                                                const item = draft.find((s: any) => s.id === targetId);
+                                                if (item) {
+                                                    item.favoriteCount = (item.favoriteCount || 0) + (optimisticToggle ? 1 : -1);
+                                                    if (item.favoriteCount < 0) item.favoriteCount = 0;
+                                                    item.isFavorited = optimisticToggle;
                                                 }
-                                            })
-                                        );
-                                        patchResults.push(patchResult);
-                                    }
+                                            } else if (draft && draft.id === targetId) {
+                                                draft.favoriteCount = (draft.favoriteCount || 0) + (optimisticToggle ? 1 : -1);
+                                                if (draft.favoriteCount < 0) draft.favoriteCount = 0;
+                                                draft.isFavorited = optimisticToggle;
+                                            }
+                                        })
+                                    );
+                                    patchResults.push(patchResult);
                                 } catch (e) {
                                     // Hata durumunda sessizce devam et
                                 }
@@ -715,89 +768,75 @@ export const api = createApi({
                     }
                 };
 
-                // İlk önce optimistic update yap (kullanıcı anında feedback alır)
-                const currentIsFavorite = await (async () => {
+                const currentIsFavorite = getCachedFavoriteStateForTarget(state, targetId);
+                const canOptimisticFavorite = currentIsFavorite !== undefined;
+                const optimisticToggle = canOptimisticFavorite ? !currentIsFavorite : false;
+
+                if (canOptimisticFavorite) {
                     try {
-                        const apiState = (state as any).api;
-                        if (apiState?.queries) {
-                            for (const queryKey of Object.keys(apiState.queries)) {
-                                const queryState = apiState.queries[queryKey];
-                                if (queryState?.endpointName === 'isFavorite' && queryState?.data !== undefined) {
-                                    const args = queryState.originalArgs;
-                                    if (args === targetId) {
-                                        return queryState.data as boolean;
-                                    }
-                                }
-                            }
-                        }
+                        dispatch(
+                            api.util.updateQueryData('isFavorite', targetId, () => optimisticToggle)
+                        );
                     } catch (e) {
-                        // Hata durumunda false döndür
+                        // ignore
                     }
-                    return false;
-                })();
 
-                const optimisticToggle = !currentIsFavorite;
-
-                // isFavorite query'sini optimistic olarak güncelle (anında UI feedback)
-                try {
-                    dispatch(
-                        api.util.updateQueryData('isFavorite', targetId, () => optimisticToggle)
-                    );
-                } catch (e) {
-                    // Hata durumunda sessizce devam et
+                    optimisticUpdateCache('getNearbyStores', optimisticToggle);
+                    optimisticUpdateCache('getMineStores', optimisticToggle);
+                    optimisticUpdateCache('getNearbyFreeBarber', optimisticToggle);
+                    optimisticUpdateCache('getFreeBarberMinePanel', optimisticToggle);
+                    optimisticUpdateCache('getStoreForUsers', optimisticToggle);
+                    optimisticUpdateCache('getFreeBarberForUsers', optimisticToggle);
                 }
-                // Not: Favoriler listesi invalidateTags ile otomatik refetch yapılacak ('Favorite' tag'i)
 
-                // Tüm ilgili cache'leri optimistic olarak güncelle
-                optimisticUpdateCache('getNearbyStores', optimisticToggle);
-                optimisticUpdateCache('getMineStores', optimisticToggle);
-                optimisticUpdateCache('getNearbyFreeBarber', optimisticToggle);
-                optimisticUpdateCache('getFreeBarberMinePanel', optimisticToggle);
-                optimisticUpdateCache('getStoreForUsers', optimisticToggle);
-                optimisticUpdateCache('getFreeBarberForUsers', optimisticToggle);
-
-                // Appointment listesi için isFavorite flag'ini güncelle
+                // Randevu listesi cache'i: aynı hedefle ilgili tüm satırlarda favori bayrakları (refetch şart değil)
                 const updateAppointmentFavoriteFlag = (isFavorite: boolean) => {
                     try {
                         const apiState = (state as any).api;
-                        if (apiState?.queries) {
-                            Object.keys(apiState.queries).forEach((queryKey) => {
-                                const queryState = apiState.queries[queryKey];
-                                if (queryState?.endpointName === 'getAllAppointmentByFilter' && queryState?.data && Array.isArray(queryState.data)) {
-                                    const appointment = queryState.data.find((apt: any) =>
-                                        apt.customerUserId === targetId ||
-                                        apt.barberStoreId === targetId ||
-                                        apt.freeBarberId === targetId
-                                    );
+                        if (!apiState?.queries) return;
 
-                                    if (appointment && queryState.originalArgs !== undefined) {
-                                        dispatch(
-                                            api.util.updateQueryData('getAllAppointmentByFilter', queryState.originalArgs, (draft) => {
-                                                if (!draft || !Array.isArray(draft)) return;
-                                                const draftAppointment = draft.find((apt: any) =>
-                                                    apt.customerUserId === targetId ||
-                                                    apt.barberStoreId === targetId ||
-                                                    apt.freeBarberId === targetId
-                                                );
-                                                if (draftAppointment) {
-                                                    if (draftAppointment.customerUserId === targetId) {
-                                                        draftAppointment.isCustomerFavorite = isFavorite;
-                                                    }
-                                                    if (draftAppointment.barberStoreId === targetId) {
-                                                        draftAppointment.isStoreFavorite = isFavorite;
-                                                    }
-                                                    if (draftAppointment.freeBarberId === targetId) {
-                                                        draftAppointment.isFreeBarberFavorite = isFavorite;
-                                                    }
-                                                }
-                                            })
-                                        );
+                        Object.keys(apiState.queries).forEach((queryKey) => {
+                            const queryState = apiState.queries[queryKey];
+                            if (
+                                queryState?.endpointName !== 'getAllAppointmentByFilter' ||
+                                !queryState?.data ||
+                                !Array.isArray(queryState.data) ||
+                                queryState.originalArgs === undefined
+                            ) {
+                                return;
+                            }
+
+                            const hasMatch = queryState.data.some(
+                                (apt: any) =>
+                                    apt.customerUserId === targetId ||
+                                    apt.barberStoreId === targetId ||
+                                    apt.freeBarberId === targetId
+                            );
+                            if (!hasMatch) return;
+
+                            dispatch(
+                                api.util.updateQueryData(
+                                    'getAllAppointmentByFilter',
+                                    queryState.originalArgs,
+                                    (draft) => {
+                                        if (!draft || !Array.isArray(draft)) return;
+                                        draft.forEach((apt: any) => {
+                                            if (apt.customerUserId === targetId) {
+                                                apt.isCustomerFavorite = isFavorite;
+                                            }
+                                            if (apt.barberStoreId === targetId) {
+                                                apt.isStoreFavorite = isFavorite;
+                                            }
+                                            if (apt.freeBarberId === targetId) {
+                                                apt.isFreeBarberFavorite = isFavorite;
+                                            }
+                                        });
                                     }
-                                }
-                            });
-                        }
+                                )
+                            );
+                        });
                     } catch (e) {
-                        // Hata durumunda sessizce devam et
+                        // ignore
                     }
                 };
 
@@ -808,10 +847,38 @@ export const api = createApi({
 
                     if (responseData) {
                         const isFavorite = responseData.isFavorite ?? false;
-                        // Appointment favorite flag'lerini güncelle
+                        const fc = responseData.favoriteCount;
                         updateAppointmentFavoriteFlag(isFavorite);
+
+                        if (typeof fc === 'number') {
+                            try {
+                                dispatch(
+                                    api.util.updateQueryData('getFreeBarberMinePanel', undefined, (draft: any) => {
+                                        if (draft?.id === targetId) {
+                                            draft.favoriteCount = fc;
+                                            draft.isFavorited = isFavorite;
+                                        }
+                                    })
+                                );
+                            } catch {
+                                // ignore
+                            }
+                            try {
+                                dispatch(
+                                    api.util.updateQueryData('getMineStores', undefined, (draft: any) => {
+                                        if (!Array.isArray(draft)) return;
+                                        const item = draft.find((s: any) => s.id === targetId);
+                                        if (item) {
+                                            item.favoriteCount = fc;
+                                            if ('isFavorited' in item) item.isFavorited = isFavorite;
+                                        }
+                                    })
+                                );
+                            } catch {
+                                // ignore
+                            }
+                        }
                     }
-                    // Not: invalidatesTags zaten cache'i temizleyecek ve refetch yapacak, bu yüzden updateCacheWithFavoriteCount gereksiz
                 } catch (error) {
                     // Hata durumunda optimistic update'i geri al
                     patchResults.forEach(patchResult => {
@@ -822,6 +889,8 @@ export const api = createApi({
             },
             invalidatesTags: (result, error, arg) => [
                 'Favorite',
+                'MineFreeBarberPanel',
+                'MineStores',
                 { type: 'IsFavorite', id: arg.targetId },
                 { type: 'StoreForUsers', id: arg.targetId },
                 { type: 'FreeBarberForUsers', id: arg.targetId },
@@ -1186,6 +1255,12 @@ export const api = createApi({
             query: (otherUserId) => `Blocked/status/${otherUserId}`,
             keepUnusedDataFor: CACHE_DURATIONS.REAL_TIME,
         }),
+        getAllBlockedUserIds: builder.query<string[], void>({
+            query: () => 'Blocked/all-blocked-ids',
+            providesTags: ['Blocked'],
+            keepUnusedDataFor: CACHE_DURATIONS.REAL_TIME,
+            transformResponse: (response: unknown) => transformArrayResponse<string>(response).map(String),
+        }),
 
         // --- SAVED FILTERS ---
         getSavedFilters: builder.query<ApiResponse<SavedFilterGetDto[]>, void>({
@@ -1359,6 +1434,7 @@ export const {
     useUnblockUserMutation,
     useGetMyBlockedUsersQuery,
     useGetBlockStatusQuery,
+    useGetAllBlockedUserIdsQuery,
     useGetSubscriptionStatusQuery,
     useSendPhoneChangeOtpMutation,
     useUpdatePhoneMutation,

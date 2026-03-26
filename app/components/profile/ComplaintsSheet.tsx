@@ -10,16 +10,21 @@ import { useAlert } from "../../hook/useAlert";
 import LottieView from "lottie-react-native";
 import { useTheme } from "../../hook/useTheme";
 import { useActionGuard } from "../../hook/useActionGuard";
-import { DEFAULT_AVATAR } from '../../constants/images';
+import { DEFAULT_AVATAR } from "../../constants/images";
+
+const ACCENT = "#ffb900";
 
 type ComplaintsSheetProps = {
   onClose: () => void;
 };
 
+const AVATAR = 56;
+const AVATAR_RADIUS = 12;
+
 export const ComplaintsSheet: React.FC<ComplaintsSheetProps> = ({ onClose }) => {
   const { t } = useLanguage();
   const { showSuccess, showError, showConfirm } = useAlert();
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
   const guard = useActionGuard();
 
   const { data: complaints, isLoading, refetch } = useGetMyComplaintsQuery();
@@ -55,10 +60,8 @@ export const ComplaintsSheet: React.FC<ComplaintsSheetProps> = ({ onClose }) => 
   };
 
   const handleDelete = (complaintId: string) => {
-    showConfirm(
-      t("profile.deleteConfirmTitle"),
-      t("profile.deleteConfirmMessage"),
-      () => guard(async () => {
+    showConfirm(t("profile.deleteConfirmTitle"), t("profile.deleteConfirmMessage"), () =>
+      guard(async () => {
         try {
           await deleteComplaint(complaintId).unwrap();
           showSuccess(t("profile.complanintDeleteSuccess"));
@@ -66,7 +69,7 @@ export const ComplaintsSheet: React.FC<ComplaintsSheetProps> = ({ onClose }) => 
         } catch (error: any) {
           showError(error?.data?.message || t("profile.complaintDeleteError"));
         }
-      })
+      }),
     );
   };
 
@@ -76,44 +79,101 @@ export const ComplaintsSheet: React.FC<ComplaintsSheetProps> = ({ onClose }) => 
     const userTypeName = getUserTypeName(item.targetUserType);
 
     return (
-      <View style={{ backgroundColor: colors.cardBg }} className="mb-3 rounded-xl p-4">
-        {/* Üst kısım: Kullanıcı bilgileri */}
+      <View
+        className="mb-3 overflow-hidden rounded-xl p-4"
+        style={{
+          backgroundColor: colors.cardBg2,
+          borderWidth: 1,
+          borderColor: colors.borderColor,
+          borderLeftWidth: 3,
+          borderLeftColor: ACCENT,
+        }}
+      >
         <View className="flex-row items-start">
-          {/* Profil fotoğrafı */}
-          <View className="relative mr-3">
+          <View className="mr-3">
             <Image
               source={imageUrl ? { uri: imageUrl } : DEFAULT_AVATAR}
-              style={{ width: 40, height: 40, borderRadius: 20 }}
+              style={{ width: AVATAR, height: AVATAR, borderRadius: AVATAR_RADIUS }}
               resizeMode="cover"
             />
           </View>
 
-          {/* Kullanıcı bilgileri */}
-          <View className="flex-1">
-            <View className="flex-row items-center">
-              <Text style={{ color: colors.sectionHeaderText }} className="text-sm font-semibold">{displayName}</Text>
-              {userTypeName ? (
-                <View style={{ backgroundColor: colors.cardBg2 }} className="ml-2 rounded-full px-2 py-0.5">
-                  <Text style={{ color: colors.sectionHeaderText }} className="text-xs">{userTypeName}</Text>
-                </View>
-              ) : null}
-            </View>
-            <Text className="mt-0.5 text-xs text-gray-500">{formatDateTime(item.createdAt)}</Text>
+          <View className="min-w-0 flex-1 pr-2">
+            <Text
+              style={{
+                color: colors.sectionHeaderText,
+                fontFamily: "CenturyGothic-Bold",
+                fontSize: 16,
+              }}
+              numberOfLines={2}
+            >
+              {displayName}
+            </Text>
+            {userTypeName ? (
+              <View
+                className="mt-1.5 self-start rounded-full px-2.5 py-1"
+                style={{
+                  backgroundColor: isDark ? "rgba(255, 185, 0, 0.14)" : "rgba(255, 185, 0, 0.12)",
+                  borderWidth: 1,
+                  borderColor: isDark ? "rgba(255, 185, 0, 0.35)" : "rgba(251, 191, 36, 0.45)",
+                }}
+              >
+                <Text
+                  style={{
+                    color: colors.sectionHeaderText,
+                    fontFamily: "CenturyGothic-Bold",
+                    fontSize: 12,
+                  }}
+                >
+                  {userTypeName}
+                </Text>
+              </View>
+            ) : null}
+            <Text
+              style={{
+                marginTop: 6,
+                color: colors.textSecondary,
+                fontFamily: "CenturyGothic",
+                fontSize: 13,
+              }}
+            >
+              {formatDateTime(item.createdAt)}
+            </Text>
           </View>
 
-          {/* Sil butonu */}
           <TouchableOpacity
             onPress={() => handleDelete(item.id)}
             disabled={isDeleting}
-            className="p-2"
+            style={{
+              padding: 8,
+              borderRadius: 10,
+              backgroundColor: colors.cardBg3,
+              borderWidth: 1,
+              borderColor: colors.borderColor2,
+            }}
           >
-            <Icon source="delete-outline" size={20} color="#ef4444" />
+            <Icon source="delete-outline" size={22} color="#ef4444" />
           </TouchableOpacity>
         </View>
 
-        {/* Şikayet mesajı */}
-        <View style={{ backgroundColor: colors.cardBg2 }} className="mt-3 rounded-lg p-3">
-          <Text style={{ color: colors.sectionHeaderText }} className="text-sm">{item.complaintReason}</Text>
+        <View
+          className="mt-3 rounded-xl px-3.5 py-3"
+          style={{
+            backgroundColor: colors.cardBg3,
+            borderWidth: 1,
+            borderColor: colors.borderColor,
+          }}
+        >
+          <Text
+            style={{
+              color: colors.sectionHeaderText,
+              fontFamily: "CenturyGothic",
+              fontSize: 15,
+              lineHeight: 22,
+            }}
+          >
+            {item.complaintReason}
+          </Text>
         </View>
       </View>
     );
@@ -122,29 +182,66 @@ export const ComplaintsSheet: React.FC<ComplaintsSheetProps> = ({ onClose }) => 
   if (isLoading) {
     return (
       <BottomSheetView style={{ flex: 1, backgroundColor: colors.sheetBg }} className="items-center justify-center p-4">
-        <ActivityIndicator size="large" color="#f05e23" />
+        <ActivityIndicator size="large" color={ACCENT} />
       </BottomSheetView>
     );
   }
 
   return (
     <BottomSheetView style={{ flex: 1, backgroundColor: colors.sheetBg }}>
-      {/* Header */}
-      <View style={{ borderBottomColor: colors.borderColor }} className="border-b px-4 pb-3">
-        <Text style={{ color: colors.sectionHeaderText }} className="text-center text-lg font-bold">
+      <View
+        className="flex-row items-center border-b px-2 pb-2.5 pt-1"
+        style={{ borderBottomColor: colors.borderColor }}
+      >
+        <View style={{ width: 46, alignItems: "flex-start" }}>
+          <TouchableOpacity
+            onPress={onClose}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+            style={{
+              padding: 8,
+              borderRadius: 12,
+              backgroundColor: colors.cardBg3,
+              borderWidth: 1,
+              borderColor: colors.borderColor2,
+            }}
+          >
+            <Icon source="close" size={22} color={colors.sectionHeaderText} />
+          </TouchableOpacity>
+        </View>
+        <Text
+          style={{
+            flex: 1,
+            textAlign: "center",
+            color: colors.sectionHeaderText,
+            fontFamily: "CenturyGothic-Bold",
+            fontSize: 16,
+          }}
+          numberOfLines={1}
+        >
           {t("profile.myComplaints")}
         </Text>
+        <View style={{ width: 46 }} />
       </View>
 
       {safeComplaints.length === 0 ? (
-        <View className="flex-1 items-center justify-center px-4">
+        <View className="flex-1 items-center justify-center px-5 py-8">
           <LottieView
             source={require("../../../assets/animations/empty.json")}
             autoPlay
             loop
-            style={{ width: 120, height: 120 }}
+            style={{ width: 132, height: 132 }}
           />
-          <Text className="mt-4 text-center text-gray-400">
+          <Text
+            style={{
+              marginTop: 16,
+              textAlign: "center",
+              color: colors.textSecondary,
+              fontFamily: "CenturyGothic",
+              fontSize: 15,
+              lineHeight: 22,
+              paddingHorizontal: 12,
+            }}
+          >
             {t("profile.complaintEmpty")}
           </Text>
         </View>

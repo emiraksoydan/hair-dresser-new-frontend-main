@@ -49,46 +49,36 @@ type StatusKind =
   | "unanswered"
   | null;
 
-// Status renkleri ve ikonları
-const STATUS_CONFIG: Record<
-  NonNullable<StatusKind>,
-  { bg: string; border: string; text: string; icon: string; color: string }
-> = {
-  approved: {
-    bg: "bg-green-900/20",
-    border: "border-green-800/30",
-    text: "text-green-400",
-    icon: "check-circle",
-    color: "#10b981",
-  },
-  rejected: {
-    bg: "bg-red-900/20",
-    border: "border-red-800/30",
-    text: "text-red-400",
-    icon: "close-circle",
-    color: "#ef4444",
-  },
-  cancelled: {
-    bg: "bg-orange-900/20",
-    border: "border-orange-800/30",
-    text: "text-orange-400",
-    icon: "cancel",
-    color: "#f97316",
-  },
-  completed: {
-    bg: "bg-blue-900/20",
-    border: "border-blue-800/30",
-    text: "text-blue-400",
-    icon: "check-all",
-    color: "#3b82f6",
-  },
-  unanswered: {
-    bg: "bg-yellow-900/20",
-    border: "border-yellow-800/30",
-    text: "text-yellow-400",
-    icon: "clock-alert",
-    color: "#fbbf24",
-  },
+const STATUS_ICONS: Record<NonNullable<StatusKind>, string> = {
+  approved: "check-circle",
+  rejected: "close-circle",
+  cancelled: "cancel",
+  completed: "check-all",
+  unanswered: "clock-alert",
+};
+
+/** Durum şeridi — native'de tailwind /xx opacity sınıfları zayıf kalabiliyor; dolgun arka plan + net kenarlık */
+const getStatusBannerLook = (kind: NonNullable<StatusKind>, isDark: boolean) => {
+  const opacity = isDark ? 0.28 : 0.18;
+  const borderOp = isDark ? 0.65 : 0.5;
+  const defs: Record<
+    NonNullable<StatusKind>,
+    { rgb: string; icon: string; label: string }
+  > = {
+    approved: { rgb: "16, 185, 129", icon: "#34d399", label: isDark ? "#a7f3d0" : "#065f46" },
+    rejected: { rgb: "239, 68, 68", icon: "#f87171", label: isDark ? "#fecaca" : "#991b1b" },
+    cancelled: { rgb: "249, 115, 22", icon: "#fb923c", label: isDark ? "#fed7aa" : "#9a3412" },
+    completed: { rgb: "59, 130, 246", icon: "#60a5fa", label: isDark ? "#bfdbfe" : "#1e40af" },
+    unanswered: { rgb: "234, 179, 8", icon: "#facc15", label: isDark ? "#fef08a" : "#854d0e" },
+  };
+  const d = defs[kind];
+  return {
+    backgroundColor: `rgba(${d.rgb}, ${opacity})`,
+    borderColor: `rgba(${d.rgb}, ${borderOp})`,
+    iconColor: d.icon,
+    textColor: d.label,
+    iconName: STATUS_ICONS[kind],
+  };
 };
 
 // Decision değerini normalize et (backend'den number gelir)
@@ -518,11 +508,17 @@ export const NotificationItemOptimized = React.memo<NotificationItemProps>(
       <TouchableOpacity
         onPress={handlePress}
         disabled={isAwaitingDecision}
-        className="p-4 mb-3 rounded-xl"
+        className="p-4 mb-3"
         style={{
-          backgroundColor: unread ? (isDark ? '#1c1d20' : '#ffffff') : colors.screenBg,
+          borderRadius: 16,
+          backgroundColor: unread ? (isDark ? '#1e2128' : '#ffffff') : colors.screenBg,
           borderWidth: 1,
-          borderColor: unread ? (isDark ? '#2a2c30' : '#e2e8f0') : (isDark ? '#1f2023' : '#f3f4f6'),
+          borderColor: unread ? (isDark ? '#3d4350' : '#dbeafe') : (isDark ? '#2a2e38' : '#e8ecf1'),
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: unread ? 6 : 2 },
+          shadowOpacity: isDark ? 0.35 : unread ? 0.12 : 0.05,
+          shadowRadius: unread ? 12 : 6,
+          elevation: unread ? 6 : 2,
         }}
         activeOpacity={0.7}
       >
@@ -646,26 +642,38 @@ export const NotificationItemOptimized = React.memo<NotificationItemProps>(
         )}
 
         {/* Status Display */}
-        {showStatus && statusKind && (
-          <View className="mt-3 pt-3 border-t" style={{ borderTopColor: colors.borderColor }}>
-            <View
-              className={`p-3 rounded-lg border ${STATUS_CONFIG[statusKind].bg} ${STATUS_CONFIG[statusKind].border}`}
-            >
-              <View className="flex-row items-center justify-center">
-                <Icon
-                  source={STATUS_CONFIG[statusKind].icon}
-                  size={20}
-                  color={STATUS_CONFIG[statusKind].color}
-                />
-                <Text
-                  className={`text-xs text-center font-semibold ml-2 ${STATUS_CONFIG[statusKind].text}`}
-                >
-                  {t(`status.${statusKind}`)}
-                </Text>
+        {showStatus && statusKind && (() => {
+          const st = getStatusBannerLook(statusKind, isDark);
+          return (
+            <View className="mt-3 pt-3 border-t" style={{ borderTopColor: colors.borderColor }}>
+              <View
+                style={{
+                  paddingVertical: 14,
+                  paddingHorizontal: 16,
+                  borderRadius: 14,
+                  backgroundColor: st.backgroundColor,
+                  borderWidth: 1.5,
+                  borderColor: st.borderColor,
+                }}
+              >
+                <View className="flex-row items-center justify-center">
+                  <Icon source={st.iconName} size={22} color={st.iconColor} />
+                  <Text
+                    style={{
+                      fontSize: 13,
+                      textAlign: "center",
+                      fontFamily: "CenturyGothic-Bold",
+                      marginLeft: 10,
+                      color: st.textColor,
+                    }}
+                  >
+                    {t(`status.${statusKind}`)}
+                  </Text>
+                </View>
               </View>
             </View>
-          </View>
-        )}
+          );
+        })()}
 
         {/* Action Buttons */}
         {canShowButtons && (

@@ -110,6 +110,8 @@
     "expiredInfo": "انتهت فترة تجربتك. يرجى الاشتراك لمواصلة استخدام التطبيق.",
     "bannedInfo": "تم تعليق حسابك. يرجى التواصل مع الدعم لمزيد من المعلومات.",
     "activeDesc": "اشتراكك نشط.",
+    "customerPlansTitle": "حساب عميل",
+    "customerPlansInfo": "خطط الاشتراك المدفوعة مخصصة لحسابات الحلاق المستقل والصالون فقط. كعميل يمكنك مواصلة استخدام التطبيق دون اشتراك.",
     "freeBarberPlanName": "حلاق مستقل",
     "freeBarberPlanDesc": "للحلاقين العاملين باستقلالية",
     "freeBarberPrice": "149",
@@ -220,7 +222,9 @@
       "address": "العنوان",
       "chair": "الكرسي",
       "myServices": "خدماتي",
-      "services": "الخدمات"
+      "services": "الخدمات",
+      "scheduleDate": "التاريخ",
+      "scheduleTime": "الوقت"
     }
   },
   "time": {
@@ -716,6 +720,7 @@
     "commentPlaceholder": "اكتب تعليقك...",
     "yourBadge": "لك",
     "title": "التقييم",
+    "starSectionTitle": "تقييمك",
     "rateFor": "قيّم",
     "commentOptional": "التعليق (اختياري)",
     "submit": "إرسال التقييم",
@@ -765,6 +770,7 @@
     "removedSuccess": "تمت الإزالة من المفضلة.",
     "notFound": "لم يتم العثور على المفضلة.",
     "cannotFavoriteYourself": "لا يمكنك إضافة نفسك إلى المفضلة.",
+    "cannotFavoriteBlocked": "لا يمكنك تفضيل المستخدمين الذين حظرتهم أو الذين حظروك.",
     "targetUserNotFound": "لم يتم العثور على المستخدم المستهدف."
   },
   "image": {
@@ -906,7 +912,8 @@
     "myPanel": "لوحتي",
     "myStores": "متاجري",
     "nearbyStores": "المتاجر القريبة",
-    "nearbyFreeBarbers": "الحلاقون المستقلون القريبون"
+    "nearbyFreeBarbers": "الحلاقون المستقلون القريبون",
+    "favoritesReceived": "عدد الأشخاص الذين أضافوك إلى المفضلة: {{count}}"
   },
   "moderation": {
     "inappropriateText": "رسالتك تحتوي على محتوى غير لائق. يرجى عدم استخدام الألفاظ النابية أو الإهانات.",

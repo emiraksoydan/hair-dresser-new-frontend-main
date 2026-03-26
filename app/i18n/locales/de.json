@@ -110,6 +110,8 @@
     "expiredInfo": "Ihr Testzeitraum ist abgelaufen. Bitte abonnieren Sie, um die App weiter zu nutzen.",
     "bannedInfo": "Ihr Konto wurde gesperrt. Bitte kontaktieren Sie den Support.",
     "activeDesc": "Ihr Abonnement ist aktiv.",
+    "customerPlansTitle": "Kundenkonto",
+    "customerPlansInfo": "Kostenpflichtige Pläne gelten nur für Freiberufler- und Salon-Konten. Als Kunde können Sie die App ohne Abonnement nutzen.",
     "freeBarberPlanName": "Freier Friseur",
     "freeBarberPlanDesc": "Für unabhängige Friseure",
     "freeBarberPrice": "149",
@@ -220,7 +222,9 @@
       "address": "Adresse",
       "chair": "Stuhl",
       "myServices": "Meine Dienstleistungen",
-      "services": "Dienstleistungen"
+      "services": "Dienstleistungen",
+      "scheduleDate": "Datum",
+      "scheduleTime": "Uhrzeit"
     }
   },
   "time": {
@@ -716,6 +720,7 @@
     "commentPlaceholder": "Schreibe deinen Kommentar...",
     "yourBadge": "Deins",
     "title": "Bewertung",
+    "starSectionTitle": "Deine Punktzahl",
     "rateFor": "bewerten",
     "commentOptional": "Kommentar (Optional)",
     "submit": "Bewertung absenden",
@@ -765,6 +770,7 @@
     "removedSuccess": "Aus Favoriten entfernt.",
     "notFound": "Favorit nicht gefunden.",
     "cannotFavoriteYourself": "Du kannst dich nicht selbst zu Favoriten hinzufügen.",
+    "cannotFavoriteBlocked": "Blockierte Nutzer oder Nutzer, die dich blockiert haben, können nicht favorisiert werden.",
     "targetUserNotFound": "Zielbenutzer nicht gefunden."
   },
   "image": {
@@ -906,7 +912,8 @@
     "myPanel": "Mein Panel",
     "myStores": "Meine Geschäfte",
     "nearbyStores": "Geschäfte in der Nähe",
-    "nearbyFreeBarbers": "Freie Friseure in der Nähe"
+    "nearbyFreeBarbers": "Freie Friseure in der Nähe",
+    "favoritesReceived": "Personen, die Sie favorisiert haben: {{count}}"
   },
   "moderation": {
     "inappropriateText": "Ihre Nachricht enthält unangemessene Inhalte. Bitte verwenden Sie keine Schimpfwörter, Beleidigungen oder anstößige Ausdrücke.",

@@ -289,7 +289,21 @@ const Index = () => {
       });
 
       if ("error" in result) {
-        throw new Error("Login failed");
+        const errPayload = result.error as { data?: unknown; status?: unknown };
+        const raw = errPayload?.data;
+        const msg =
+          typeof raw === "string"
+            ? raw
+            : raw && typeof raw === "object" && "message" in raw
+              ? String((raw as { message?: string }).message ?? "")
+              : "";
+        dispatch(
+          showSnack({
+            message: msg || t("common.error"),
+            isError: true,
+          }),
+        );
+        return;
       }
 
       const response = result.data;
@@ -317,7 +331,7 @@ const Index = () => {
         // Kullanıcı türüne göre doğru sayfaya yönlendir
         const userTypeFromToken = getUserTypeFromToken(response.data.token);
         const targetPath = pathByUserType(userTypeFromToken);
-        route.replace(targetPath);
+        route.replaceImmediate(targetPath);
       } else {
         dispatch(
           showSnack({
@@ -327,9 +341,14 @@ const Index = () => {
         );
       }
     } catch (err: any) {
+      const raw = err?.data;
+      const msg =
+        typeof raw === "string"
+          ? raw
+          : raw?.message ?? err?.message ?? t("common.error");
       dispatch(
         showSnack({
-          message: err?.data?.message ?? t("common.error"),
+          message: msg,
           isError: true,
         }),
       );

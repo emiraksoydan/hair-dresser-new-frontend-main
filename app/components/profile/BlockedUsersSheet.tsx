@@ -1,7 +1,8 @@
 import React from "react";
-import { View, ActivityIndicator, Switch, Image } from "react-native";
+import { View, ActivityIndicator, Switch, Image, TouchableOpacity } from "react-native";
 import { Text } from "../common/Text";
 import { BottomSheetView, BottomSheetFlatList } from "@gorhom/bottom-sheet";
+import { Icon } from "react-native-paper";
 import { useGetMyBlockedUsersQuery, useUnblockUserMutation } from "../../store/api";
 import { BlockedGetDto, UserType } from "../../types";
 import { useLanguage } from "../../hook/useLanguage";
@@ -9,16 +10,21 @@ import { useAlert } from "../../hook/useAlert";
 import LottieView from "lottie-react-native";
 import { useTheme } from "../../hook/useTheme";
 import { useActionGuard } from "../../hook/useActionGuard";
-import { DEFAULT_AVATAR } from '../../constants/images';
+import { DEFAULT_AVATAR } from "../../constants/images";
+
+const ACCENT = "#ffb900";
 
 type BlockedUsersSheetProps = {
   onClose: () => void;
 };
 
+const AVATAR = 56;
+const AVATAR_RADIUS = 12;
+
 export const BlockedUsersSheet: React.FC<BlockedUsersSheetProps> = ({ onClose }) => {
   const { t } = useLanguage();
   const { showSuccess, showError } = useAlert();
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
   const guard = useActionGuard();
 
   const { data: blockedUsers, isLoading, refetch } = useGetMyBlockedUsersQuery();
@@ -51,15 +57,16 @@ export const BlockedUsersSheet: React.FC<BlockedUsersSheetProps> = ({ onClose })
     }
   };
 
-  const handleUnblock = (blockedToUserId: string) => guard(async () => {
-    try {
-      await unblockUser({ blockedToUserId }).unwrap();
-      showSuccess(t("profile.unblockSuccess"));
-      refetch();
-    } catch (error: any) {
-      showError(error?.data?.message || t("profile.unblockError"));
-    }
-  });
+  const handleUnblock = (blockedToUserId: string) =>
+    guard(async () => {
+      try {
+        await unblockUser({ blockedToUserId }).unwrap();
+        showSuccess(t("profile.unblockSuccess"));
+        refetch();
+      } catch (error: any) {
+        showError(error?.data?.message || t("profile.unblockError"));
+      }
+    });
 
   const renderBlockedItem = ({ item }: { item: BlockedGetDto }) => {
     const displayName = item.targetUserName || "Bilinmeyen Kullanıcı";
@@ -67,26 +74,64 @@ export const BlockedUsersSheet: React.FC<BlockedUsersSheetProps> = ({ onClose })
     const userTypeName = getUserTypeName(item.targetUserType);
 
     return (
-      <View style={{ backgroundColor: colors.cardBg }} className="mb-3 flex-row items-center rounded-xl p-4">
-        <View className="relative mr-3">
+      <View
+        className="mb-3 flex-row items-center overflow-hidden rounded-xl p-4"
+        style={{
+          backgroundColor: colors.cardBg2,
+          borderWidth: 1,
+          borderColor: colors.borderColor,
+          borderLeftWidth: 3,
+          borderLeftColor: ACCENT,
+        }}
+      >
+        <View className="mr-3">
           <Image
             source={imageUrl ? { uri: imageUrl } : DEFAULT_AVATAR}
-            style={{ width: 48, height: 48, borderRadius: 24 }}
+            style={{ width: AVATAR, height: AVATAR, borderRadius: AVATAR_RADIUS }}
             resizeMode="cover"
           />
-          <Text style={{ color: colors.sectionHeaderText }} className="text-base font-semibold">{displayName}</Text>
-          {userTypeName ? (
-            <Text className="text-xs text-gray-400">{userTypeName}</Text>
-          ) : null}
-          <Text className="mt-1 text-xs text-gray-500">{formatDateTime(item.createdAt)}</Text>
         </View>
-
-        {/* Engeli kaldır switch */}
+        <View className="min-w-0 flex-1 pr-2">
+          <Text
+            style={{
+              color: colors.sectionHeaderText,
+              fontFamily: "CenturyGothic-Bold",
+              fontSize: 16,
+            }}
+            numberOfLines={1}
+          >
+            {displayName}
+          </Text>
+          {userTypeName ? (
+            <Text
+              style={{
+                marginTop: 4,
+                color: colors.textSecondary,
+                fontFamily: "CenturyGothic",
+                fontSize: 14,
+              }}
+              numberOfLines={1}
+            >
+              {userTypeName}
+            </Text>
+          ) : null}
+          <Text
+            style={{
+              marginTop: 6,
+              color: colors.textSecondary,
+              fontFamily: "CenturyGothic",
+              fontSize: 13,
+            }}
+          >
+            {formatDateTime(item.createdAt)}
+          </Text>
+        </View>
         <Switch
           value={true}
           onValueChange={() => handleUnblock(item.blockedToUserId)}
-          trackColor={{ false: "#767577", true: "#f05e23" }}
-          thumbColor="#fff"
+          trackColor={{ false: isDark ? "#3a3a3c" : "#d1d5db", true: ACCENT }}
+          thumbColor="#ffffff"
+          ios_backgroundColor={isDark ? "#3a3a3c" : "#e5e7eb"}
           disabled={isUnblocking}
         />
       </View>
@@ -96,29 +141,66 @@ export const BlockedUsersSheet: React.FC<BlockedUsersSheetProps> = ({ onClose })
   if (isLoading) {
     return (
       <BottomSheetView style={{ flex: 1, backgroundColor: colors.sheetBg }} className="items-center justify-center p-4">
-        <ActivityIndicator size="large" color="#f05e23" />
+        <ActivityIndicator size="large" color={ACCENT} />
       </BottomSheetView>
     );
   }
 
   return (
     <BottomSheetView style={{ flex: 1, backgroundColor: colors.sheetBg }}>
-      {/* Header */}
-      <View style={{ borderBottomColor: colors.borderColor }} className="border-b px-4 pb-3">
-        <Text style={{ color: colors.sectionHeaderText }} className="text-center text-lg font-bold">
+      <View
+        className="flex-row items-center border-b px-2 pb-2.5 pt-1"
+        style={{ borderBottomColor: colors.borderColor }}
+      >
+        <View style={{ width: 46, alignItems: "flex-start" }}>
+          <TouchableOpacity
+            onPress={onClose}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+            style={{
+              padding: 8,
+              borderRadius: 12,
+              backgroundColor: colors.cardBg3,
+              borderWidth: 1,
+              borderColor: colors.borderColor2,
+            }}
+          >
+            <Icon source="close" size={22} color={colors.sectionHeaderText} />
+          </TouchableOpacity>
+        </View>
+        <Text
+          style={{
+            flex: 1,
+            textAlign: "center",
+            color: colors.sectionHeaderText,
+            fontFamily: "CenturyGothic-Bold",
+            fontSize: 16,
+          }}
+          numberOfLines={1}
+        >
           {t("profile.blockedUsers")}
         </Text>
+        <View style={{ width: 46 }} />
       </View>
 
       {safeBlockedUsers.length === 0 ? (
-        <View className="flex-1 items-center justify-center px-4">
+        <View className="flex-1 items-center justify-center px-5 py-8">
           <LottieView
             source={require("../../../assets/animations/empty.json")}
             autoPlay
             loop
-            style={{ width: 120, height: 120 }}
+            style={{ width: 132, height: 132 }}
           />
-          <Text className="mt-4 text-center text-gray-400">
+          <Text
+            style={{
+              marginTop: 16,
+              textAlign: "center",
+              color: colors.textSecondary,
+              fontFamily: "CenturyGothic",
+              fontSize: 15,
+              lineHeight: 22,
+              paddingHorizontal: 12,
+            }}
+          >
             {t("profile.blockedEmpty")}
           </Text>
         </View>

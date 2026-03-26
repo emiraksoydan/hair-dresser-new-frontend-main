@@ -31,6 +31,8 @@ export type UserFavoriteDto = {
   rating: number; // Ortalama rating
   favoriteCount: number; // Favori sayısı
   reviewCount: number; // Yorum sayısı
+  /** Liste yenilendiğinde memo ile senkron için (opsiyonel) */
+  isFavorited?: boolean;
 };
 
 export type ManuelBarberFavoriteDto = {

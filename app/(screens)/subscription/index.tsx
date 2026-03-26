@@ -167,7 +167,20 @@ export default function SubscriptionPage() {
     const [paytrMerchantOid, setPaytrMerchantOid] = useState<string | null>(null);
 
     const sub = subscriptionData?.data;
-    const userType = userData?.data?.userType;
+    const rawUt = userData?.data?.userType;
+    const accountUserType =
+        typeof rawUt === 'number'
+            ? rawUt
+            : rawUt === 'BarberStore'
+              ? UserType.BarberStore
+              : rawUt === 'FreeBarber'
+                ? UserType.FreeBarber
+                : rawUt === 'Customer'
+                  ? UserType.Customer
+                  : undefined;
+    const showFreeBarberPlan = accountUserType === UserType.FreeBarber;
+    const showBarberStorePlan = accountUserType === UserType.BarberStore;
+    const showCustomerSubscriptionNote = accountUserType === UserType.Customer;
 
     const statusColor =
         sub?.status === 'Banned' ? '#ef4444' :
@@ -419,44 +432,70 @@ export default function SubscriptionPage() {
                     </View>
                 )}
 
-                {/* Plan Başlığı */}
-                <Text style={{ color: colors.sectionHeaderText, fontSize: 15, fontFamily: 'CenturyGothic-Bold', marginBottom: 12 }}>
-                    {t('subscription.choosePlan')}
-                </Text>
+                {showCustomerSubscriptionNote && (
+                    <View
+                        style={{
+                            backgroundColor: colors.cardBg,
+                            borderRadius: 14,
+                            padding: 16,
+                            borderWidth: 1,
+                            borderColor: colors.borderColor,
+                            marginBottom: 20,
+                        }}
+                    >
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+                            <Icon source="information-outline" size={22} color={colors.primary} />
+                            <Text style={{ color: colors.sectionHeaderText, fontSize: 15, fontFamily: 'CenturyGothic-Bold', flex: 1 }}>
+                                {t('subscription.customerPlansTitle')}
+                            </Text>
+                        </View>
+                        <Text style={{ color: colors.textSecondary, fontSize: 13, fontFamily: 'CenturyGothic', lineHeight: 20 }}>
+                            {t('subscription.customerPlansInfo')}
+                        </Text>
+                    </View>
+                )}
 
-                {/* Free Barber Plan */}
-                <PlanCard
-                    planName={t('subscription.freeBarberPlanName')}
-                    planDesc={t('subscription.freeBarberPlanDesc')}
-                    price={t('subscription.freeBarberPrice')}
-                    features={freeBarberFeatures}
-                    isCurrent={userType === UserType.FreeBarber}
-                    accentColor="#3b82f6"
-                    icon="account-outline"
-                    onBuy={() => handleBuy('FreeBarber')}
-                    isBuying={isCreatingToken}
-                    ctaLabel={sub?.status === 'Expired' ? t('subscription.reactivateNow') : t('subscription.buyNow')}
-                    status={sub?.status}
-                    t={t}
-                    colors={colors}
-                />
+                {(showFreeBarberPlan || showBarberStorePlan) && (
+                    <Text style={{ color: colors.sectionHeaderText, fontSize: 15, fontFamily: 'CenturyGothic-Bold', marginBottom: 12 }}>
+                        {t('subscription.choosePlan')}
+                    </Text>
+                )}
 
-                {/* Barber Store Plan */}
-                <PlanCard
-                    planName={t('subscription.barberStorePlanName')}
-                    planDesc={t('subscription.barberStorePlanDesc')}
-                    price={t('subscription.barberStorePrice')}
-                    features={barberStoreFeatures}
-                    isCurrent={userType === UserType.BarberStore}
-                    accentColor="#fea60e"
-                    icon="store-outline"
-                    onBuy={() => handleBuy('BarberStore')}
-                    isBuying={isCreatingToken}
-                    ctaLabel={sub?.status === 'Expired' ? t('subscription.reactivateNow') : t('subscription.buyNow')}
-                    status={sub?.status}
-                    t={t}
-                    colors={colors}
-                />
+                {showFreeBarberPlan && (
+                    <PlanCard
+                        planName={t('subscription.freeBarberPlanName')}
+                        planDesc={t('subscription.freeBarberPlanDesc')}
+                        price={t('subscription.freeBarberPrice')}
+                        features={freeBarberFeatures}
+                        isCurrent
+                        accentColor="#3b82f6"
+                        icon="account-outline"
+                        onBuy={() => handleBuy('FreeBarber')}
+                        isBuying={isCreatingToken}
+                        ctaLabel={sub?.status === 'Expired' ? t('subscription.reactivateNow') : t('subscription.buyNow')}
+                        status={sub?.status}
+                        t={t}
+                        colors={colors}
+                    />
+                )}
+
+                {showBarberStorePlan && (
+                    <PlanCard
+                        planName={t('subscription.barberStorePlanName')}
+                        planDesc={t('subscription.barberStorePlanDesc')}
+                        price={t('subscription.barberStorePrice')}
+                        features={barberStoreFeatures}
+                        isCurrent
+                        accentColor="#fea60e"
+                        icon="store-outline"
+                        onBuy={() => handleBuy('BarberStore')}
+                        isBuying={isCreatingToken}
+                        ctaLabel={sub?.status === 'Expired' ? t('subscription.reactivateNow') : t('subscription.buyNow')}
+                        status={sub?.status}
+                        t={t}
+                        colors={colors}
+                    />
+                )}
 
                 {/* PayTR Güvenlik Notu */}
                 <View

@@ -35,6 +35,9 @@ export const useNotificationSound = (badgeCount: number) => {
     const isPlayingRef = useRef<boolean>(false); // Şu anda bir ses çalıyor mu kontrolü
     const isInitializedRef = useRef<boolean>(false); // İlk değer alındı mı?
     const previousAuthStateRef = useRef<boolean>(isAuthenticated); // Track auth state changes
+    // Badge refetch / okundu sonrası kısa süre 0 görünüp eski değere dönmesi sesi tetiklemesin
+    const lastNonZeroBeforeZeroRef = useRef<number>(0);
+    const zeroedAtMsRef = useRef<number | null>(null);
 
     // Set audio mode for notifications - iOS sessiz modda bile çalsın
     useEffect(() => {
@@ -84,6 +87,8 @@ export const useNotificationSound = (badgeCount: number) => {
                 hasPlayedOnMountRef.current = false;
                 isInitializedRef.current = false;
                 lastSoundPlayTimeRef.current = 0;
+                lastNonZeroBeforeZeroRef.current = 0;
+                zeroedAtMsRef.current = null;
 
                 // Stop any playing sound
                 if (soundRef.current) {
@@ -110,6 +115,10 @@ export const useNotificationSound = (badgeCount: number) => {
 
         // ÖNEMLİ: Okunmayan bildirim yoksa ses çalmamalı
         if (badgeCount === 0) {
+            if (previousCount > 0) {
+                lastNonZeroBeforeZeroRef.current = previousCount;
+                zeroedAtMsRef.current = Date.now();
+            }
             // First value received - just store it
             if (!isInitializedRef.current) {
                 isInitializedRef.current = true;
@@ -138,6 +147,20 @@ export const useNotificationSound = (badgeCount: number) => {
         // 1. Badge count increased (new notification)
         // 2. App just opened with notifications (first time only) - handled above
         if (badgeCount > previousCount) {
+            const nowMs = Date.now();
+            const likelyStaleRefetch =
+                previousCount === 0 &&
+                lastNonZeroBeforeZeroRef.current > 0 &&
+                zeroedAtMsRef.current != null &&
+                nowMs - zeroedAtMsRef.current < 4000 &&
+                badgeCount === lastNonZeroBeforeZeroRef.current;
+            if (likelyStaleRefetch) {
+                zeroedAtMsRef.current = null;
+                lastNonZeroBeforeZeroRef.current = 0;
+                previousBadgeCountRef.current = badgeCount;
+                return;
+            }
+
             // New notification received - sadece cooldown süresi geçtiyse VE şu anda çalan bir ses yoksa ses çal
             const now = Date.now();
             const timeSinceLastSound = now - lastSoundPlayTimeRef.current;

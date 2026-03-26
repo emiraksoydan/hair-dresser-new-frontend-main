@@ -4,6 +4,7 @@ import { View } from 'react-native';
 import { Text } from '../common/Text';
 import { BarberStoreMineDto, FavoriteTargetType } from '../../types';
 import { useFavoriteToggle } from '../../hook/useFavoriteToggle';
+import { useGetMeQuery } from '../../store/api';
 import { CardImage } from '../common/CardImage';
 import { CardHeader } from '../common/CardHeader';
 import { FavoriteButton } from '../common/FavoriteButton';
@@ -26,13 +27,15 @@ type Props = {
 const StoreMineCard: React.FC<Props> = ({ store, isList, expanded, cardWidthStore, onPressUpdate, onPressRatings, showImageAnimation = true }) => {
     const carouselWidth = Math.max(0, cardWidthStore - 20);
     const { colors } = useTheme();
+    const { data: me } = useGetMeQuery();
+    const ownerUserId = me?.data?.id ?? null;
 
-    const { isFavorite, favoriteCount, isLoading, toggleFavorite } = useFavoriteToggle({
+    const { isFavorite, favoriteCount, isLoading, favoriteDisabled, toggleFavorite } = useFavoriteToggle({
         targetId: store.id,
         targetType: FavoriteTargetType.Store,
-        initialIsFavorite: false,
         initialFavoriteCount: store.favoriteCount || 0,
-        skipQuery: false, // StoreMineCard uses query
+        skipQuery: false,
+        counterpartyUserId: ownerUserId,
     });
 
     const handlePressCard = useCallback(() => {
@@ -99,6 +102,7 @@ const StoreMineCard: React.FC<Props> = ({ store, isList, expanded, cardWidthStor
                                     isFavorite={isFavorite}
                                     favoriteCount={favoriteCount}
                                     isLoading={isLoading}
+                                    favoriteDisabled={favoriteDisabled}
                                     onPress={toggleFavorite}
                                     variant="icon"
                                     className="pb-2"
@@ -113,6 +117,7 @@ const StoreMineCard: React.FC<Props> = ({ store, isList, expanded, cardWidthStor
                                     isFavorite={isFavorite}
                                     favoriteCount={favoriteCount}
                                     isLoading={isLoading}
+                                    favoriteDisabled={favoriteDisabled}
                                     onPress={toggleFavorite}
                                     variant="button"
                                     className="pb-1"
