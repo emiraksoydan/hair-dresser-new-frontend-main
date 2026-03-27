@@ -35,6 +35,7 @@ export const resetSignalRState = async () => {
       globalConnection.off('chat.threadCreated');
       globalConnection.off('chat.threadUpdated');
       globalConnection.off('chat.threadRemoved');
+      globalConnection.off('chat.messagesRead');
       globalConnection.off('chat.typing');
       globalConnection.off('appointment.updated');
       globalConnection.off('badge.updated');

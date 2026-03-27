@@ -69,13 +69,16 @@ const Index = () => {
     const [newPhoneInput, setNewPhoneInput] = useState('');
     const [otpCode, setOtpCode] = useState('');
     const [localShowImageAnimation, setLocalShowImageAnimation] = useState<boolean | null>(null);
+    const [localShowPriceAnimation, setLocalShowPriceAnimation] = useState<boolean | null>(null);
     const displayShowImageAnimation = localShowImageAnimation !== null ? localShowImageAnimation : (settingData?.data?.showImageAnimation ?? true);
+    const displayShowPriceAnimation = localShowPriceAnimation !== null ? localShowPriceAnimation : (settingData?.data?.showPriceAnimation ?? true);
 
     useEffect(() => {
         if (settingData?.data) {
             setLocalShowImageAnimation(settingData.data.showImageAnimation);
+            setLocalShowPriceAnimation(settingData.data.showPriceAnimation);
         }
-    }, [settingData?.data?.showImageAnimation]);
+    }, [settingData?.data?.showImageAnimation, settingData?.data?.showPriceAnimation]);
 
     // Memoize theme objects
 
@@ -578,10 +581,42 @@ const Index = () => {
                                 isUpdatingSettingRef.current = true;
                                 setLocalShowImageAnimation(value);
                                 try {
-                                    const settingResult = await updateSetting({ showImageAnimation: value }).unwrap();
+                                    const settingResult = await updateSetting({
+                                        showImageAnimation: value,
+                                        showPriceAnimation: displayShowPriceAnimation,
+                                    }).unwrap();
                                     dispatch(showSnack({ message: settingResult.message || t('settings.updateSuccess'), isError: false }));
                                 } catch (error: any) {
                                     setLocalShowImageAnimation(!value);
+                                    const errorMessage = error?.data?.message || getErrorMessage(error);
+                                    dispatch(showSnack({ message: errorMessage || t('profile.settingUpdateError'), isError: true }));
+                                } finally {
+                                    isUpdatingSettingRef.current = false;
+                                }
+                            }}
+                            color='#fea60e'
+                        />
+                    </View>
+                    <View style={{ height: 1, backgroundColor: colors.borderColor, marginVertical: 8 }} />
+                    <View className='flex-row items-center justify-between'>
+                        <View className='flex-1 mr-4'>
+                            <Text className='text-base font-century-gothic-bold' style={{ color: colors.sectionHeaderText }}>{t('profile.priceAnimation')}</Text>
+                            <Text className='text-sm' style={{ color: colors.textSecondary }}>{t('profile.priceAnimationDescription')}</Text>
+                        </View>
+                        <Switch
+                            value={displayShowPriceAnimation}
+                            onValueChange={async (value) => {
+                                if (isUpdatingSettingRef.current) return;
+                                isUpdatingSettingRef.current = true;
+                                setLocalShowPriceAnimation(value);
+                                try {
+                                    const settingResult = await updateSetting({
+                                        showImageAnimation: displayShowImageAnimation,
+                                        showPriceAnimation: value,
+                                    }).unwrap();
+                                    dispatch(showSnack({ message: settingResult.message || t('settings.updateSuccess'), isError: false }));
+                                } catch (error: any) {
+                                    setLocalShowPriceAnimation(!value);
                                     const errorMessage = error?.data?.message || getErrorMessage(error);
                                     dispatch(showSnack({ message: errorMessage || t('profile.settingUpdateError'), isError: true }));
                                 } finally {

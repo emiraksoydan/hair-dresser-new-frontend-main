@@ -34,6 +34,12 @@ export const MessageThreadList: React.FC<MessageThreadListProps> = ({ routePrefi
     const { data: threads, isLoading, refetch, isFetching, error, isError } = useGetChatThreadsQuery();
     const formatTime = useFormatTime();
     const { userType: currentUserType } = useAuth();
+    const mutedTextColor = isDark ? '#94a3b8' : '#64748b';
+    const tertiaryTextColor = isDark ? '#64748b' : '#94a3b8';
+    const unreadAccent = '#f05e23';
+    const cardShadowStyle = isDark
+        ? { shadowColor: '#000000', shadowOpacity: 0.3, shadowRadius: 8, shadowOffset: { width: 0, height: 4 }, elevation: 3 }
+        : { shadowColor: '#0f172a', shadowOpacity: 0.08, shadowRadius: 10, shadowOffset: { width: 0, height: 5 }, elevation: 2 };
 
     // Backend zaten filtreliyor - backend'den gelen thread'leri olduğu gibi kullan
     // Backend filtresi:
@@ -48,6 +54,8 @@ export const MessageThreadList: React.FC<MessageThreadListProps> = ({ routePrefi
             : item.status === AppointmentStatus.Pending
                 ? MESSAGES.APPOINTMENT_STATUS.PENDING
                 : null;
+        const threadBackground = hasUnread ? (isDark ? '#1f2937' : '#f8fafc') : colors.cardBg;
+        const threadBorder = hasUnread ? unreadAccent : colors.borderColor;
 
         const handlePress = () => {
             // Screens klasöründeki chat sayfasına yönlendir
@@ -111,7 +119,7 @@ export const MessageThreadList: React.FC<MessageThreadListProps> = ({ routePrefi
                         </Text>
                         <View className="flex-row items-center gap-1.5" style={{ minWidth: 0 }}>
                             {labelText ? (
-                                <Text className="text-gray-400 text-xs font-century-gothic-sans-medium" style={{ flexShrink: 0 }}>
+                                <Text className="text-xs font-century-gothic-sans-medium" style={{ flexShrink: 0, color: mutedTextColor }}>
                                     {labelText}
                                 </Text>
                             ) : null}
@@ -177,7 +185,7 @@ export const MessageThreadList: React.FC<MessageThreadListProps> = ({ routePrefi
                                 <Icon source="heart" size={11} color="#fbbf24" />
                             )}
                         </View>
-                        <Text className="text-gray-400 text-xs font-century-gothic-sans-medium" numberOfLines={1}>
+                        <Text className="text-xs font-century-gothic-sans-medium" numberOfLines={1} style={{ color: mutedTextColor }}>
                             {participants.map(p => {
                                 const label = getParticipantLabel(p);
                                 const barberLabel = getBarberTypeLabel(p);
@@ -193,13 +201,13 @@ export const MessageThreadList: React.FC<MessageThreadListProps> = ({ routePrefi
             <TouchableOpacity
                 onPress={handlePress}
                 className="rounded-xl pt-2 p-4 mb-3"
-                style={{ backgroundColor: colors.cardBg, borderWidth: 1, borderColor: colors.borderColor }}
+                style={{ backgroundColor: threadBackground, borderWidth: 1, borderColor: threadBorder, ...cardShadowStyle }}
             >
-                {statusText && statusColor && (
-                    <View className="flex-row items-center mb-2 justify-end">
+                {statusText && statusColor ? (
+                    <View className="flex-row items-center mb-2 justify-end gap-2">
                         <View
-                            className="px-2 py-1 rounded"
-                            style={{ backgroundColor: statusColor + COLORS.OPACITY.LIGHT }}
+                            className="px-2.5 py-1 rounded-full"
+                            style={{ backgroundColor: statusColor + COLORS.OPACITY.LIGHT, borderWidth: 1, borderColor: statusColor + COLORS.OPACITY.MEDIUM }}
                         >
                             <Text
                                 className="text-xs font-century-gothic-sans-medium"
@@ -209,7 +217,7 @@ export const MessageThreadList: React.FC<MessageThreadListProps> = ({ routePrefi
                             </Text>
                         </View>
                     </View>
-                )}
+                ) : null}
                 <View className="flex-row items-start" style={{ minWidth: 0 }}>
                     <View className="flex-1 pr-4" style={{ minWidth: 0, flexShrink: 1 }}>
                         {item.participants.length > 1 ? (
@@ -218,16 +226,26 @@ export const MessageThreadList: React.FC<MessageThreadListProps> = ({ routePrefi
                             renderSingleParticipant(item.participants[0])
                         ) : (
                             <View className="w-12 h-12 rounded-full items-center justify-center" style={{ backgroundColor: colors.cardBg2 }}>
-                                <Icon source={iconSource} size={24} color="white" />
+                                <Icon source={iconSource} size={24} color={isDark ? "white" : colors.sectionHeaderText} />
                             </View>
                         )}
 
                         {item.lastMessagePreview && (
-                            <View className="flex-row items-center gap-2 mt-2.5" style={{ marginLeft: item.participants.length > 0 ? 42 : 0, minWidth: 0, maxWidth: '100%' }}>
-                                <Icon source="message-text" size={12} color={hasUnread ? "#22c55e" : "#6b7280"} />
+                            <View
+                                className="flex-row items-center gap-2 mt-2.5 px-2.5 py-2 rounded-lg"
+                                style={{
+                                    marginLeft: item.participants.length > 0 ? 42 : 0,
+                                    minWidth: 0,
+                                    maxWidth: '100%',
+                                    backgroundColor: isDark ? '#111827' : '#f1f5f9',
+                                    borderWidth: 1,
+                                    borderColor: colors.borderColor,
+                                }}
+                            >
+                                <Icon source="message-text" size={12} color={hasUnread ? unreadAccent : mutedTextColor} />
                                 <Text
-                                    className={`text-sm mb-0 ${hasUnread ? 'font-century-gothic-sans-medium' : 'text-gray-400 font-century-gothic-sans-regular'}`}
-                                    style={hasUnread ? { color: colors.sectionHeaderText, flexShrink: 1, minWidth: 0, maxWidth: '100%' } : { flexShrink: 1, minWidth: 0, maxWidth: '100%' }}
+                                    className={`text-sm mb-0 ${hasUnread ? 'font-century-gothic-sans-medium' : 'font-century-gothic-sans-regular'}`}
+                                    style={hasUnread ? { color: colors.sectionHeaderText, flexShrink: 1, minWidth: 0, maxWidth: '100%' } : { color: mutedTextColor, flexShrink: 1, minWidth: 0, maxWidth: '100%' }}
                                     numberOfLines={2}
                                 >
                                     {item.lastMessagePreview}
@@ -238,20 +256,24 @@ export const MessageThreadList: React.FC<MessageThreadListProps> = ({ routePrefi
 
                     <View className="items-end ml-3" style={{ minWidth: 70 }}>
                         {item.lastMessageAt && (
-                            <Text className="text-gray-500 text-xs mb-1">
-                                {new Date(item.lastMessageAt).toLocaleString('tr-TR', {
-                                    day: '2-digit',
-                                    month: '2-digit',
-                                    year: 'numeric',
-                                    hour: '2-digit',
-                                    minute: '2-digit'
-                                })}
+                            <Text className="text-xs mb-1" style={{ color: tertiaryTextColor }}>
+                                {formatTime(item.lastMessageAt)}
                             </Text>
                         )}
+                        {hasUnread && (
+                            <View
+                                className="px-2 py-0.5 rounded-full mb-1"
+                                style={{ backgroundColor: unreadAccent + COLORS.OPACITY.LIGHT, borderWidth: 1, borderColor: unreadAccent + COLORS.OPACITY.MEDIUM }}
+                            >
+                                <Text className="text-[10px] font-century-gothic-sans-bold" style={{ color: unreadAccent }}>
+                                    {t('chat.newMessage')} ({item.unreadCount > 99 ? '99+' : item.unreadCount})
+                                </Text>
+                            </View>
+                        )}
                         <View className="relative items-center justify-center">
-                            <Icon source="message-text" size={18} color={hasUnread ? "#22c55e" : "#6b7280"} />
+                            <Icon source="message-text" size={18} color={hasUnread ? unreadAccent : mutedTextColor} />
                             {hasUnread && item.unreadCount > 0 && (
-                                <View className="absolute -top-1 -right-1 bg-red-500 rounded-full w-4 h-4 items-center justify-center">
+                                <View className="absolute -top-1 -right-1 rounded-full w-4 h-4 items-center justify-center" style={{ backgroundColor: unreadAccent }}>
                                     <Text className="text-white text-[8px] font-bold">
                                         {item.unreadCount > 9 ? '9+' : item.unreadCount}
                                     </Text>
@@ -262,7 +284,7 @@ export const MessageThreadList: React.FC<MessageThreadListProps> = ({ routePrefi
                 </View>
             </TouchableOpacity>
         );
-    }, [router, routePrefix, iconSource, formatTime]);
+    }, [router, routePrefix, iconSource, formatTime, currentUserType, t, isDark, colors, mutedTextColor, tertiaryTextColor, unreadAccent, cardShadowStyle]);
 
     // Loading durumu
     if (isLoading) {
@@ -280,7 +302,8 @@ export const MessageThreadList: React.FC<MessageThreadListProps> = ({ routePrefi
         return (
             <ScrollView
                 className="flex-1"
-                contentContainerStyle={{ flexGrow: 1 }}
+                style={{ backgroundColor: colors.screenBg }}
+                contentContainerStyle={{ flexGrow: 1, paddingHorizontal: 8 }}
                 refreshControl={
                     <RefreshControl
                         refreshing={isFetching && !isLoading}
@@ -314,7 +337,7 @@ export const MessageThreadList: React.FC<MessageThreadListProps> = ({ routePrefi
                 data={threads ?? []}
                 keyExtractor={(item) => item.threadId}
                 estimatedItemSize={100}
-                contentContainerStyle={{ padding: 16, gap: 12 }}
+                contentContainerStyle={{ padding: 16, paddingBottom: 28, gap: 12 }}
                 // Performance optimizations
                 recycleItems={true} // Item recycling için
                 drawDistance={250} // Render mesafesi

@@ -39,6 +39,8 @@ import { useBackendFilters } from "../../hook/useBackendFilters";
 import { useLanguage } from "../../hook/useLanguage";
 import { useTheme } from "../../hook/useTheme";
 import { useActionGuard } from "../../hook/useActionGuard";
+import { isOtherUsersFreeBarber, isOtherUsersStore } from "../../utils/compare-eligibility";
+import { PanelCollapsibleTop } from "../../components/panel/PanelCollapsibleTop";
 
 const { width: screenWidth } = Dimensions.get("window");
 
@@ -52,6 +54,25 @@ const Index = () => {
   // Current user for favorites filter
   const { data: currentUser } = useGetMeQuery();
   const currentUserId = currentUser?.data?.id;
+
+  const [compareStoreIds, setCompareStoreIds] = useState<string[]>([]);
+  const [compareFbIds, setCompareFbIds] = useState<string[]>([]);
+  const toggleCompareStore = useCallback((storeId: string) => {
+    setCompareFbIds([]);
+    setCompareStoreIds((prev) => {
+      if (prev.includes(storeId)) return prev.filter((x) => x !== storeId);
+      if (prev.length < 2) return [...prev, storeId];
+      return [prev[1], storeId];
+    });
+  }, []);
+  const toggleCompareFb = useCallback((fbId: string) => {
+    setCompareStoreIds([]);
+    setCompareFbIds((prev) => {
+      if (prev.includes(fbId)) return prev.filter((x) => x !== fbId);
+      if (prev.length < 2) return [...prev, fbId];
+      return [prev[1], fbId];
+    });
+  }, []);
 
   // Filtering
   const {
@@ -108,6 +129,8 @@ const Index = () => {
   });
 
   const { data: settingData } = useGetSettingQuery();
+
+  const [panelTopExpanded, setPanelTopExpanded] = useState(true);
 
   // UI State
   const [searchQuery, setSearchQuery] = useState("");
@@ -336,6 +359,14 @@ const Index = () => {
         onPressUpdate={goStoreDetail}
         onPressRatings={handlePressRatings}
         showImageAnimation={settingData?.data?.showImageAnimation ?? true}
+        panelCompare={
+          isOtherUsersStore(item, currentUserId)
+            ? {
+                selected: compareStoreIds.includes(item.id),
+                onPress: () => toggleCompareStore(item.id),
+              }
+            : undefined
+        }
       />
     ),
     [
@@ -345,6 +376,9 @@ const Index = () => {
       goStoreDetail,
       handlePressRatings,
       settingData,
+      currentUserId,
+      compareStoreIds,
+      toggleCompareStore,
     ],
   );
 
@@ -359,6 +393,14 @@ const Index = () => {
         onPressUpdate={goFreeBarberDetail}
         onPressRatings={handlePressRatings}
         showImageAnimation={settingData?.data?.showImageAnimation ?? true}
+        panelCompare={
+          isOtherUsersFreeBarber(item, currentUserId)
+            ? {
+                selected: compareFbIds.includes(item.id),
+                onPress: () => toggleCompareFb(item.id),
+              }
+            : undefined
+        }
       />
     ),
     [
@@ -368,6 +410,9 @@ const Index = () => {
       goFreeBarberDetail,
       handlePressRatings,
       settingData,
+      currentUserId,
+      compareFbIds,
+      toggleCompareFb,
     ],
   );
 
@@ -464,21 +509,27 @@ const Index = () => {
             : ""
         }
       >
-        <View style={{ marginTop: 8, backgroundColor: colors.cardBg, borderRadius: 12, borderWidth: 1.5, borderColor: colors.cardBg }}>
-          <SearchBar
-            transparent
-            searchQuery={searchQuery}
-            setSearchQuery={setSearchQuery}
-            isList={isList}
-            setIsList={setIsList}
-            onFilterPress={() => setFilterDrawerVisible(true)}
-          />
-          {savedFilters.length > 0 && (
-            <View style={{ paddingHorizontal: 10, paddingBottom: 8 }}>
-              <SavedFilterChips savedFilters={savedFilters} activeFilterId={activeSavedFilterId} onLoad={(json, id) => loadFromSaved(json, id)} />
-            </View>
-          )}
-        </View>
+        <PanelCollapsibleTop
+          expanded={panelTopExpanded}
+          onToggle={() => setPanelTopExpanded((v) => !v)}
+          collapsedHint={t("panel.topSectionCollapsedHint")}
+        >
+          <View style={{ backgroundColor: colors.cardBg, borderRadius: 12, borderWidth: 1.5, borderColor: colors.cardBg }}>
+            <SearchBar
+              transparent
+              searchQuery={searchQuery}
+              setSearchQuery={setSearchQuery}
+              isList={isList}
+              setIsList={setIsList}
+              onFilterPress={() => setFilterDrawerVisible(true)}
+            />
+            {savedFilters.length > 0 && (
+              <View style={{ paddingHorizontal: 10, paddingBottom: 8 }}>
+                <SavedFilterChips savedFilters={savedFilters} activeFilterId={activeSavedFilterId} onLoad={(json, id) => loadFromSaved(json, id)} />
+              </View>
+            )}
+          </View>
+        </PanelCollapsibleTop>
       </View>
 
       {isMapMode && (
@@ -701,6 +752,39 @@ const Index = () => {
           }}
         />
       </View>
+
+      {(compareStoreIds.length === 2 || compareFbIds.length === 2) && (
+        <View
+          className="absolute left-4 right-4 z-30 px-3 py-3 rounded-2xl"
+          style={{ bottom: 88, backgroundColor: isDark ? "#1a1a2e" : "#ffffff", borderWidth: 1, borderColor: "#ffb90055", elevation: 10 }}
+        >
+          <TouchableOpacity
+            onPress={() => {
+              if (compareStoreIds.length === 2) {
+                const [a, b] = compareStoreIds;
+                setCompareStoreIds([]);
+                router.push({
+                  pathname: "/(screens)/compare/public-stores",
+                  params: { left: a, right: b },
+                });
+              } else if (compareFbIds.length === 2) {
+                const [a, b] = compareFbIds;
+                setCompareFbIds([]);
+                router.push({
+                  pathname: "/(screens)/compare/public-freebarbers",
+                  params: { left: a, right: b },
+                });
+              }
+            }}
+            className="items-center py-2 rounded-xl"
+            style={{ backgroundColor: "#ffb900" }}
+          >
+            <Text className="font-century-gothic-bold text-base" style={{ color: "#1f2937" }}>
+              {t("compare.continue")}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       {/* Map toggle button */}
       <TouchableOpacity

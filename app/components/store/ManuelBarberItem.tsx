@@ -38,7 +38,7 @@ export const ManuelBarberItem = React.memo<ManuelBarberItemProps>(
     const nameError = (barberError as any)?.name?.message;
 
     return (
-      <View className="flex-row items-center gap-3 mb-3">
+      <View className="flex-row items-center gap-3 mb-2">
         {/* Avatar */}
         <TouchableOpacity activeOpacity={0.85} onPress={onAvatarPress}>
           {avatarUri ? (
@@ -54,20 +54,28 @@ export const ManuelBarberItem = React.memo<ManuelBarberItemProps>(
           name={`barbers.${index}.name`}
           render={({ field: { value, onChange, onBlur } }) => (
             <TextInput
-              label={t("form.barberNameRequired")}
+              label={t("form.barberName")}
               mode="outlined"
               dense
               value={value ?? ""}
               onChangeText={onChange}
               onBlur={onBlur}
-              textColor="white"
-              outlineColor="#444"
+              textColor={colors.sectionHeaderText}
+              outlineColor={nameError ? "#b00020" : colors.borderColor}
               error={!!nameError}
               theme={{
                 roundness: 10,
-                colors: { onSurfaceVariant: "gray", primary: "white" },
+                colors: {
+                  onSurfaceVariant: colors.textSecondary,
+                  primary: colors.tagline,
+                },
               }}
-              style={{ backgroundColor: colors.cardBg, borderWidth: 0, flex: 1, fontFamily: 'CenturyGothic' }}
+              style={{
+                backgroundColor: colors.cardBg,
+                borderWidth: 0,
+                flex: 1,
+                fontFamily: "CenturyGothic",
+              }}
             />
           )}
         />

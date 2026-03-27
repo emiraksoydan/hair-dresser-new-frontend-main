@@ -46,9 +46,17 @@ import { useLanguage } from "../../hook/useLanguage";
 import { UnifiedStateWrapper } from "../../components/common/UnifiedStateManager";
 import { useTheme } from "../../hook/useTheme";
 import { useActionGuard } from "../../hook/useActionGuard";
+import { useSafeNavigation } from "../../hook/useSafeNavigation";
+import { isOtherUsersFreeBarber } from "../../utils/compare-eligibility";
+import { PanelCollapsibleTop } from "../../components/panel/PanelCollapsibleTop";
+import { useBarberStorePanelEarningsPreview } from "../../hook/usePanelEarningsPreview";
+import { AnimatedMoneyText } from "../../components/common/AnimatedMoneyText";
+
+const PANEL_CURRENCY = "₺";
 
 const Index = () => {
   const { colors, isDark } = useTheme();
+  const router = useSafeNavigation();
   const dispatch = useAppDispatch();
   const { t } = useLanguage();
   const guard = useActionGuard();
@@ -56,6 +64,25 @@ const Index = () => {
   // Current user for filters
   const { data: currentUser } = useGetMeQuery();
   const currentUserId = currentUser?.data?.id;
+
+  const [compareStoreIds, setCompareStoreIds] = useState<string[]>([]);
+  const [compareFbIds, setCompareFbIds] = useState<string[]>([]);
+  const toggleCompareStore = useCallback((storeId: string) => {
+    setCompareFbIds([]);
+    setCompareStoreIds((prev) => {
+      if (prev.includes(storeId)) return prev.filter((x) => x !== storeId);
+      if (prev.length < 2) return [...prev, storeId];
+      return [prev[1], storeId];
+    });
+  }, []);
+  const toggleCompareFb = useCallback((id: string) => {
+    setCompareStoreIds([]);
+    setCompareFbIds((prev) => {
+      if (prev.includes(id)) return prev.filter((x) => x !== id);
+      if (prev.length < 2) return [...prev, id];
+      return [prev[1], id];
+    });
+  }, []);
 
   // Filtering
   const {
@@ -109,6 +136,18 @@ const Index = () => {
 
   // Ayarlar
   const { data: settingData } = useGetSettingQuery();
+  const priceAnim = settingData?.data?.showPriceAnimation ?? true;
+
+  const storeIds = useMemo(() => stores.map((s) => s.id), [stores]);
+  const panelEarningsPreview = useBarberStorePanelEarningsPreview(storeIds);
+  const panelTopCollapsedHint = useMemo(() => {
+    if (!panelEarningsPreview) return t("panel.topSectionCollapsedHint");
+    const d = panelEarningsPreview.dailyEarnings ?? 0;
+    const tot = panelEarningsPreview.totalEarnings ?? 0;
+    return `${t("profile.dailyEarnings")}: ${d.toLocaleString("tr-TR")} ${PANEL_CURRENCY} · ${t("profile.totalEarnings")}: ${tot.toLocaleString("tr-TR")} ${PANEL_CURRENCY}`;
+  }, [panelEarningsPreview, t]);
+
+  const [panelTopExpanded, setPanelTopExpanded] = useState(true);
 
   const [isMapMode, setIsMapMode] = useState(false);
   const [selectedMapItem, setSelectedMapItem] = useState<FreeBarGetDto | null>(
@@ -344,6 +383,14 @@ const Index = () => {
         onPressUpdate={handlePressUpdateStore}
         onPressRatings={handlePressRatings}
         showImageAnimation={settingData?.data?.showImageAnimation ?? true}
+        panelCompare={
+          filteredStores.length >= 2
+            ? {
+                selected: compareStoreIds.includes(item.id),
+                onPress: () => toggleCompareStore(item.id),
+              }
+            : undefined
+        }
       />
     ),
     [
@@ -353,6 +400,9 @@ const Index = () => {
       handlePressUpdateStore,
       handlePressRatings,
       settingData,
+      filteredStores.length,
+      compareStoreIds,
+      toggleCompareStore,
     ],
   );
 
@@ -373,6 +423,14 @@ const Index = () => {
         onCallFreeBarber={handleManualFetch}
         storeId={stores?.length === 1 ? stores[0].id : undefined}
         showImageAnimation={settingData?.data?.showImageAnimation ?? true}
+        panelCompare={
+          isOtherUsersFreeBarber(item, currentUserId)
+            ? {
+                selected: compareFbIds.includes(item.id),
+                onPress: () => toggleCompareFb(item.id),
+              }
+            : undefined
+        }
       />
     ),
     [
@@ -383,6 +441,9 @@ const Index = () => {
       handleManualFetch,
       stores,
       settingData,
+      currentUserId,
+      compareFbIds,
+      toggleCompareFb,
     ],
   );
 
@@ -540,21 +601,69 @@ const Index = () => {
             : ""
         }
       >
-        <View style={{ marginTop: 8, backgroundColor: colors.cardBg, borderRadius: 12, borderWidth: 1.5, borderColor: colors.cardBg }}>
-          <SearchBar
-            transparent
-            searchQuery={searchQuery}
-            setSearchQuery={setSearchQuery}
-            isList={isList}
-            setIsList={setIsList}
-            onFilterPress={() => setFilterDrawerVisible(true)}
-          />
-          {savedFilters.length > 0 && (
-            <View style={{ paddingHorizontal: 10, paddingBottom: 8 }}>
-              <SavedFilterChips savedFilters={savedFilters} activeFilterId={activeSavedFilterId} onLoad={(json, id) => loadFromSaved(json, id)} />
-            </View>
+        <PanelCollapsibleTop
+          expanded={panelTopExpanded}
+          onToggle={() => setPanelTopExpanded((v) => !v)}
+          collapsedHint={panelTopCollapsedHint}
+        >
+          <View style={{ backgroundColor: colors.cardBg, borderRadius: 12, borderWidth: 1.5, borderColor: colors.cardBg }}>
+            <SearchBar
+              transparent
+              searchQuery={searchQuery}
+              setSearchQuery={setSearchQuery}
+              isList={isList}
+              setIsList={setIsList}
+              onFilterPress={() => setFilterDrawerVisible(true)}
+            />
+            {savedFilters.length > 0 && (
+              <View style={{ paddingHorizontal: 10, paddingBottom: 8 }}>
+                <SavedFilterChips savedFilters={savedFilters} activeFilterId={activeSavedFilterId} onLoad={(json, id) => loadFromSaved(json, id)} />
+              </View>
+            )}
+          </View>
+          {stores.length > 0 && (
+            <TouchableOpacity
+              onPress={() => router.push("/(screens)/profile/shop-insights")}
+              activeOpacity={0.85}
+              className="mt-3 mb-1 rounded-2xl p-3"
+              style={{ backgroundColor: isDark ? "rgba(37,99,235,0.25)" : "rgba(37,99,235,0.12)", borderColor: "#3b82f6", borderWidth: 1 }}
+            >
+              <View className="flex-row items-center justify-between">
+                <View className="flex-1 pr-2">
+                  <Text style={{ color: colors.sectionHeaderText, fontFamily: "CenturyGothic-Bold", fontSize: 14 }}>
+                    {t("profile.storeEarningsTitle")}
+                  </Text>
+                  <Text style={{ color: colors.textSecondary, fontSize: 11, marginTop: 2 }}>
+                    {t("profile.storeEarningsSubtitle")}
+                  </Text>
+                  {panelEarningsPreview != null && (
+                    <View style={{ marginTop: 8, gap: 8 }}>
+                      <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                        <Text style={{ color: colors.textSecondary, fontSize: 11 }}>{t("profile.dailyEarnings")}</Text>
+                        <AnimatedMoneyText
+                          value={panelEarningsPreview.dailyEarnings ?? 0}
+                          suffix={PANEL_CURRENCY}
+                          style={{ color: "#0d9488", fontFamily: "CenturyGothic-Bold", fontSize: 14 }}
+                          enabled={priceAnim}
+                        />
+                      </View>
+                      <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                        <Text style={{ color: colors.textSecondary, fontSize: 10 }}>{t("profile.totalEarnings")}</Text>
+                        <AnimatedMoneyText
+                          value={panelEarningsPreview.totalEarnings ?? 0}
+                          suffix={PANEL_CURRENCY}
+                          style={{ color: "#3b82f6", fontFamily: "CenturyGothic-Bold", fontSize: 13 }}
+                          enabled={priceAnim}
+                        />
+                      </View>
+                    </View>
+                  )}
+                </View>
+                <IconButton icon="chart-line" iconColor="#ffb900" size={24} />
+              </View>
+            </TouchableOpacity>
           )}
-        </View>
+        </PanelCollapsibleTop>
       </View>
 
       {isMapMode && (
@@ -731,7 +840,11 @@ const Index = () => {
                     fetchedOnce={true}
                     onRetry={manualFetch}
                     customMessages={{
-                      empty: searchQuery || hasActiveFilters ? t("empty.noResultsFound") : t("empty.noNearbyFreeBarbers"),
+                      empty: !hasStores
+                        ? t("empty.addStoreToSeeNearbyFreeBarbers")
+                        : searchQuery || hasActiveFilters
+                          ? t("empty.noResultsFound")
+                          : t("empty.noNearbyFreeBarbers"),
                     }}
                   >
                     <View />
@@ -768,6 +881,39 @@ const Index = () => {
           }}
         />
       </View>
+
+      {(compareStoreIds.length === 2 || compareFbIds.length === 2) && (
+        <View
+          className="absolute left-4 right-4 z-30 px-3 py-3 rounded-2xl"
+          style={{ bottom: 88, backgroundColor: isDark ? "#1a1a2e" : "#ffffff", borderWidth: 1, borderColor: "#ffb90055", elevation: 10 }}
+        >
+          <TouchableOpacity
+            onPress={() => {
+              if (compareStoreIds.length === 2) {
+                const [a, b] = compareStoreIds;
+                setCompareStoreIds([]);
+                router.push({
+                  pathname: "/(screens)/compare/public-stores",
+                  params: { left: a, right: b },
+                });
+              } else if (compareFbIds.length === 2) {
+                const [a, b] = compareFbIds;
+                setCompareFbIds([]);
+                router.push({
+                  pathname: "/(screens)/compare/public-freebarbers",
+                  params: { left: a, right: b },
+                });
+              }
+            }}
+            className="items-center py-2 rounded-xl"
+            style={{ backgroundColor: "#ffb900" }}
+          >
+            <Text className="font-century-gothic-bold text-base" style={{ color: "#1f2937" }}>
+              {t("compare.continue")}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       <TouchableOpacity
         onPress={() => setIsMapMode(!isMapMode)}

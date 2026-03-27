@@ -1400,7 +1400,8 @@ const FormStoreUpdate = React.memo(({
           name: form.taxDocumentImage.name ?? "tax-document.jpg",
           type: form.taxDocumentImage.type ?? "image/jpeg",
         } as any);
-        formData.append("ownerType", String(ImageOwnerType.Store));
+        // Vergi levhası kullanıcıya bağlı resim (create ile aynı); Store+userId backend'de mağaza bulunamadı hatası verir
+        formData.append("ownerType", String(ImageOwnerType.User));
         formData.append("ownerId", userId);
 
         const uploadRes = await uploadImage({ data: formData });
@@ -2121,7 +2122,14 @@ const FormStoreUpdate = React.memo(({
                       </Button>
                     </View>
                     {barberFields.length > 0 && (
-                      <View className="rounded-xl mx-2 px-3 pt-4 pb-2" style={{ backgroundColor: colors.cardBg }}>
+                      <View
+                        className="rounded-xl mx-2 px-3 pt-3 pb-2"
+                        style={{
+                          backgroundColor: colors.cardBg,
+                          borderWidth: 1,
+                          borderColor: colors.borderColor,
+                        }}
+                      >
                         {barberFields.map((item, index) => (
                           <View
                             key={item._key}
@@ -2175,12 +2183,14 @@ const FormStoreUpdate = React.memo(({
                             </TouchableOpacity>
                           </View>
                         ))}
-                        <HelperText type="error" visible={!!barberErrorText} style={{ fontFamily: 'CenturyGothic' }}>
-                          {barberErrorText}
-                        </HelperText>
+                        {!!barberErrorText && (
+                          <HelperText type="error" visible style={{ fontFamily: 'CenturyGothic' }}>
+                            {barberErrorText}
+                          </HelperText>
+                        )}
                       </View>
                     )}
-                    <View className="mt-2 mx-0 px-2 flex-row items-center">
+                    <View className="mt-1 mx-0 px-2 flex-row items-center">
                       <Text className="text-xl flex-1" style={{ color: colors.sectionHeaderText }}>
                         {t("form.chairCount")} : {chairFields.length}
                       </Text>
@@ -2193,7 +2203,14 @@ const FormStoreUpdate = React.memo(({
                       </Button>
                     </View>
                     {chairFields.length > 0 && (
-                      <View className="rounded-xl mx-2 px-3 pt-4" style={{ backgroundColor: colors.cardBg }}>
+                      <View
+                        className="rounded-xl mx-2 px-3 pt-3"
+                        style={{
+                          backgroundColor: colors.cardBg,
+                          borderWidth: 1,
+                          borderColor: colors.borderColor,
+                        }}
+                      >
                         {chairFields.map((item, index) => {
                           const chair = chairs[index];
                           if (!chair) return null;
@@ -2208,7 +2225,7 @@ const FormStoreUpdate = React.memo(({
                           return (
                             <View
                               key={`chair-${item.id || index}-${barberName}`}
-                              className="flex-row items-center gap-3 mt-2  mb-3"
+                              className="flex-row items-center gap-3 mt-1 mb-2"
                             >
                               <Icon
                                 size={24}
@@ -2780,7 +2797,7 @@ const FormStoreUpdate = React.memo(({
                 <Button
                   className="flex-1"
                   disabled={updateLoading || isSubmitting}
-                  loading={updateLoading || isSubmitting}
+                  loading={updateLoading}
                   mode="contained"
                   onPress={handleSubmit((form) => guard(() => OnSubmit(form)))}
                   buttonColor="#10B981"

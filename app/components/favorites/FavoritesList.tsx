@@ -1,8 +1,9 @@
 import React, { useCallback, useMemo, useState } from 'react';
-import { View, FlatList, Dimensions, RefreshControl, ScrollView } from 'react-native';
+import { View, FlatList, Dimensions, RefreshControl, ScrollView, TouchableOpacity } from 'react-native';
 import { Text } from '../common/Text';
 import { LegendList } from '@legendapp/list';
 import { useGetMyFavoritesQuery, useGetMeQuery, useGetFreeBarberMinePanelQuery, useGetSettingQuery } from '../../store/api';
+import { shouldFilterStoresToOthersOnly, shouldFilterOwnFreeBarberFromCompare, isOtherUsersStore, isOtherUsersFreeBarber } from '../../utils/compare-eligibility';
 import { FavoriteGetDto, FavoriteTargetType, UserType } from '../../types';
 import { StoreCardInner } from '../store/storecard';
 import { FreeBarberCardInner } from '../freebarber/freebarbercard';
@@ -30,6 +31,8 @@ const FavoritesList: React.FC<FavoritesListProps> = ({ mode = 'store' }) => {
     const { colors } = useTheme();
     const { data: favorites, isLoading, refetch, isFetching, error, isError } = useGetMyFavoritesQuery();
     const { data: currentUser, isLoading: isUserLoading, isSuccess: isUserSuccess } = useGetMeQuery();
+    const compareUid = currentUser?.data?.id;
+    const compareUserType = currentUser?.data?.userType;
 
     // Kullanıcı tipi kontrolü - currentUser yüklenene kadar bekle
     const userType = currentUser?.data?.userType;
@@ -127,6 +130,18 @@ const FavoritesList: React.FC<FavoritesListProps> = ({ mode = 'store' }) => {
     const manuelBarberFavorites = useMemo(() => {
         return favorites?.filter(f => f.targetType === FavoriteTargetType.ManuelBarber && f.manuelBarber) || [];
     }, [favorites]);
+
+    const comparableStoreFavorites = useMemo(() => {
+        if (!shouldFilterStoresToOthersOnly(compareUserType)) return storeFavorites.length;
+        return storeFavorites.filter((f) => f.store && isOtherUsersStore(f.store, compareUid)).length;
+    }, [storeFavorites, compareUserType, compareUid]);
+
+    const comparableFreeBarberFavorites = useMemo(() => {
+        if (!shouldFilterOwnFreeBarberFromCompare(compareUserType)) return freeBarberFavorites.length;
+        return freeBarberFavorites.filter((f) => f.freeBarber && isOtherUsersFreeBarber(f.freeBarber, compareUid)).length;
+    }, [freeBarberFavorites, compareUserType, compareUid]);
+
+    const canCompareFavorites = comparableStoreFavorites >= 2 || comparableFreeBarberFavorites >= 2;
 
     const allFavorites = useMemo(() => {
         return [...storeFavorites, ...freeBarberFavorites, ...customerFavorites, ...manuelBarberFavorites];
@@ -268,6 +283,31 @@ const FavoritesList: React.FC<FavoritesListProps> = ({ mode = 'store' }) => {
 
     return (
         <View className="flex-1 " style={{ backgroundColor: colors.screenBg }}>
+            {canCompareFavorites && (
+                <TouchableOpacity
+                    onPress={() => router.push("/(screens)/compare/pick-pair")}
+                    activeOpacity={0.85}
+                    style={{
+                        marginHorizontal: 16,
+                        marginTop: 10,
+                        marginBottom: 4,
+                        flexDirection: "row",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: 8,
+                        paddingVertical: 12,
+                        borderRadius: 14,
+                        backgroundColor: colors.cardBg,
+                        borderWidth: 1,
+                        borderColor: "#ffb90055",
+                    }}
+                >
+                    <Icon source="compare-horizontal" size={22} color="#ffb900" />
+                    <Text style={{ fontFamily: "CenturyGothic-Bold", color: colors.sectionHeaderText, fontSize: 14 }}>
+                        {t("compare.fromFavorites")}
+                    </Text>
+                </TouchableOpacity>
+            )}
             <LegendList
                 data={allFavorites}
                 keyExtractor={(item) => item.id}

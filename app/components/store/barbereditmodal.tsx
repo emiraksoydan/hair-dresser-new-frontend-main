@@ -161,6 +161,10 @@ export const BarberEditModal: React.FC<Props> = ({
 
   const submit = (values: BarberFormValues) => guard(async () => {
     try {
+      if (!storeId || !storeId.trim()) {
+        dispatch(showSnack({ message: t("errors.storeNotFound") || "Dükkan bulunamadı", isError: true }));
+        return;
+      }
       const isCreate = !values.id;
       const barberId = values.id && values.id.trim() ? values.id : uuid();
       let result: { message: string; success: boolean } | undefined;
@@ -319,11 +323,12 @@ export const BarberEditModal: React.FC<Props> = ({
                     onBlur={onBlur}
                     textColor={colors.sectionHeaderText}
                     outlineColor={errors.name ? "#b00020" : colors.borderColor2}
+                    activeOutlineColor={errors.name ? "#b00020" : "#ffb900"}
                     theme={{
                       roundness: 10,
-                      colors: { onSurfaceVariant: "gray", primary: colors.sectionHeaderText },
+                      colors: { onSurfaceVariant: "gray", primary: "#ffb900" },
                     }}
-                    style={{ backgroundColor: colors.cardBg, borderWidth: 0 }}
+                    style={{ backgroundColor: colors.cardBg }}
                   />
                   <HelperText type="error" visible={!!errors.name}>
                     {errors.name?.message}

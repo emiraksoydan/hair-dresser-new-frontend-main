@@ -70,13 +70,16 @@ const Index = () => {
     const [newPhoneInput, setNewPhoneInput] = useState('');
     const [otpCode, setOtpCode] = useState('');
     const [localShowImageAnimation, setLocalShowImageAnimation] = useState<boolean | null>(null);
+    const [localShowPriceAnimation, setLocalShowPriceAnimation] = useState<boolean | null>(null);
     const displayShowImageAnimation = localShowImageAnimation !== null ? localShowImageAnimation : (settingData?.data?.showImageAnimation ?? true);
+    const displayShowPriceAnimation = localShowPriceAnimation !== null ? localShowPriceAnimation : (settingData?.data?.showPriceAnimation ?? true);
 
     useEffect(() => {
         if (settingData?.data) {
             setLocalShowImageAnimation(settingData.data.showImageAnimation);
+            setLocalShowPriceAnimation(settingData.data.showPriceAnimation);
         }
-    }, [settingData?.data?.showImageAnimation]);
+    }, [settingData?.data?.showImageAnimation, settingData?.data?.showPriceAnimation]);
 
     // Memoize theme objects
     const textInputTheme = useMemo(() => ({
@@ -503,6 +506,25 @@ const Index = () => {
                     </Button>
                 </View>
 
+                <Text className='text-lg mb-4 font-century-gothic-bold' style={{ color: colors.sectionHeaderText }}>{t('profile.informationSection')}</Text>
+                <View className='rounded-xl mb-6' style={{ backgroundColor: colors.cardBg }}>
+                    <TouchableOpacity
+                        onPress={() => router.push('/(screens)/profile/shop-insights')}
+                        activeOpacity={0.7}
+                        className='flex-row items-center justify-between p-4'
+                        style={{ borderBottomColor: colors.borderColor, borderBottomWidth: 1 }}
+                    >
+                        <View className='flex-row items-center flex-1'>
+                            <Icon source="finance" size={24} color="#0d9488" />
+                            <View className='ml-3 flex-1'>
+                                <Text className='text-base' style={{ color: colors.sectionHeaderText }}>{t('profile.panelEarningsTitle')}</Text>
+                                <Text className='text-xs mt-0.5' style={{ color: colors.textSecondary }}>{t('profile.panelEarningsSubtitle')}</Text>
+                            </View>
+                        </View>
+                        <Icon source="chevron-right" size={24} color="#6b7280" />
+                    </TouchableOpacity>
+                </View>
+
                 <Text className='text-lg mb-4 font-century-gothic-bold' style={{ color: colors.sectionHeaderText }}>{t('profile.userActions') || 'Kullanıcı İşlemleri'}</Text>
                 <View className='rounded-xl mb-6' style={{ backgroundColor: colors.cardBg }}>
                     <TouchableOpacity
@@ -562,11 +584,39 @@ const Index = () => {
                                 try {
                                     var result = await updateSetting({
                                         showImageAnimation: value,
+                                        showPriceAnimation: displayShowPriceAnimation,
                                     }).unwrap();
                                     // refetchSetting çağrısını kaldırdık - RTK Query otomatik güncelliyor
                                     dispatch(showSnack({ message: result.message ?? t('settings.updateSuccess'), isError: false }));
                                 } catch (error: any) {
                                     setLocalShowImageAnimation(!value);
+                                    dispatch(showSnack({ message: error?.data?.message || t('profile.settingUpdateError'), isError: true }));
+                                } finally {
+                                    isUpdatingSettingRef.current = false;
+                                }
+                            }}
+                            disabled={isUpdatingSetting || isLoadingSetting}
+                        />
+                    </View>
+                    <View className='flex-row items-center justify-between mt-4'>
+                        <View className='flex-1 mr-4'>
+                            <Text className='text-base font-medium mb-1' style={{ color: colors.sectionHeaderText }}>{t('profile.priceAnimation')}</Text>
+                            <Text className='text-sm' style={{ color: colors.textSecondary }}>{t('profile.priceAnimationDescription')}</Text>
+                        </View>
+                        <Switch
+                            value={displayShowPriceAnimation}
+                            onValueChange={async (value) => {
+                                if (isUpdatingSettingRef.current) return;
+                                isUpdatingSettingRef.current = true;
+                                setLocalShowPriceAnimation(value);
+                                try {
+                                    var result = await updateSetting({
+                                        showImageAnimation: displayShowImageAnimation,
+                                        showPriceAnimation: value,
+                                    }).unwrap();
+                                    dispatch(showSnack({ message: result.message ?? t('settings.updateSuccess'), isError: false }));
+                                } catch (error: any) {
+                                    setLocalShowPriceAnimation(!value);
                                     dispatch(showSnack({ message: error?.data?.message || t('profile.settingUpdateError'), isError: true }));
                                 } finally {
                                     isUpdatingSettingRef.current = false;

@@ -57,13 +57,13 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({
         if (barberType === BarberType.MaleHairdresser) {
           return {
             bgColor: 'bg-blue-500',
-            text: isList ? t('barberType.maleHairdresser') : t('barberType.maleHairdresserShort'),
+            text: t('barberType.maleHairdresser'),
             icon: 'face-man' as const,
           };
         } else if (barberType === BarberType.FemaleHairdresser) {
           return {
             bgColor: 'bg-pink-500',
-            text: isList ? t('barberType.femaleHairdresser') : t('barberType.femaleHairdresserShort'),
+            text: t('barberType.femaleHairdresser'),
             icon: 'face-woman' as const,
           };
         } else if (barberType === BarberType.BeautySalon) {
@@ -92,8 +92,16 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({
   const iconSize = compact ? 14 : isList ? 14 : 12;
   const chipPad = compact ? 'px-2.5 py-1' : 'px-2 py-0.5';
 
+  /** Sadece compact: dar alan; liste/panel kartlarında metin kısaltılmaz, satır kırılır */
+  const limitHeight = compact;
+
+  const widthClass = compact ? 'max-w-[48%]' : '';
+
   return (
-    <View className={`${config.bgColor} ${chipPad} rounded-xl flex-row items-center justify-center max-w-[48%] ${className}`}>
+    <View
+      className={`${config.bgColor} ${chipPad} rounded-xl flex-row items-center justify-center ${widthClass} ${className}`}
+      style={limitHeight ? { maxHeight: 30, overflow: 'hidden' } : undefined}
+    >
       {config.icon && (
         <Icon
           source={config.icon}
@@ -102,7 +110,11 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({
         />
       )}
       {config.text && (
-        <Text className={`text-white font-century-gothic-sans-medium ${textSize} ${config.icon ? 'ml-0.5' : ''}`}>
+        <Text
+          numberOfLines={limitHeight ? 1 : undefined}
+          ellipsizeMode={limitHeight ? 'tail' : undefined}
+          className={`text-white font-century-gothic-sans-medium ${textSize} ${config.icon ? 'ml-0.5' : ''}`}
+        >
           {config.text}
         </Text>
       )}

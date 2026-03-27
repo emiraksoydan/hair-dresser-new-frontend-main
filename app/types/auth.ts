@@ -73,11 +73,14 @@ export interface SettingGetDto {
   id: string;
   userId: string;
   showImageAnimation: boolean;
+  showPriceAnimation: boolean;
   notificationSoundUrl?: string;
 }
 
 export interface SettingUpdateDto {
   showImageAnimation: boolean;
+  /** Backend: null/omit = mevcut değeri koru; biz her zaman gönderiyoruz. */
+  showPriceAnimation?: boolean;
   // notificationSoundUrl kaldırıldı - kullanıcı ayarlardan seçemez, backend'deki varsayılan ses kullanılır
 }
 

@@ -3,7 +3,7 @@ import { Text } from '../../components/common/Text'
 import { Avatar, IconButton, TextInput, HelperText, Switch, Icon, Portal, Modal as PaperModal } from 'react-native-paper';
 import { OtpInput } from 'react-native-otp-entry';
 import { Button } from '../../components/common/Button';
-import { useRevokeMutation, useGetMeQuery, useUpdateProfileMutation, useUploadImageMutation, useUpdateImageBlobMutation, useGetSettingQuery, useUpdateSettingMutation, useGetSubscriptionStatusQuery, useSendPhoneChangeOtpMutation, useUpdatePhoneMutation } from '../../store/api';
+import { useRevokeMutation, useGetMeQuery, useUpdateProfileMutation, useUploadImageMutation, useUpdateImageBlobMutation, useGetSettingQuery, useUpdateSettingMutation, useGetSubscriptionStatusQuery, useSendPhoneChangeOtpMutation, useUpdatePhoneMutation, useGetMineStoresQuery } from '../../store/api';
 import { tokenStore } from '../../lib/tokenStore';
 import { clearStoredTokens, saveTokens } from '../../lib/tokenStorage';
 import { resetSignalRState } from '../../store/signalrSlice';
@@ -59,6 +59,7 @@ const Index = () => {
     const [updateImageBlob] = useUpdateImageBlobMutation();
     const { data: settingData, isLoading: isLoadingSetting } = useGetSettingQuery();
     const { data: subscriptionData } = useGetSubscriptionStatusQuery();
+    const { data: mineStores = [] } = useGetMineStoresQuery();
     const [updateSetting, { isLoading: isUpdatingSetting }] = useUpdateSettingMutation();
     const [sendPhoneChangeOtp, { isLoading: isSendingOtp }] = useSendPhoneChangeOtpMutation();
     const [updatePhone, { isLoading: isUpdatingPhone }] = useUpdatePhoneMutation();
@@ -70,13 +71,16 @@ const Index = () => {
     const [newPhoneInput, setNewPhoneInput] = useState('');
     const [otpCode, setOtpCode] = useState('');
     const [localShowImageAnimation, setLocalShowImageAnimation] = useState<boolean | null>(null);
+    const [localShowPriceAnimation, setLocalShowPriceAnimation] = useState<boolean | null>(null);
     const displayShowImageAnimation = localShowImageAnimation !== null ? localShowImageAnimation : (settingData?.data?.showImageAnimation ?? true);
+    const displayShowPriceAnimation = localShowPriceAnimation !== null ? localShowPriceAnimation : (settingData?.data?.showPriceAnimation ?? true);
 
     useEffect(() => {
         if (settingData?.data) {
             setLocalShowImageAnimation(settingData.data.showImageAnimation);
+            setLocalShowPriceAnimation(settingData.data.showPriceAnimation);
         }
-    }, [settingData?.data?.showImageAnimation]);
+    }, [settingData?.data?.showImageAnimation, settingData?.data?.showPriceAnimation]);
 
     // Memoize theme objects
     const textInputTheme = useMemo(() => ({
@@ -506,6 +510,42 @@ const Index = () => {
                     </Button>
                 </View>
 
+                <Text className='text-lg mb-4 font-century-gothic-bold' style={{ color: colors.sectionHeaderText }}>{t('profile.informationSection')}</Text>
+                <View className='rounded-xl mb-6' style={{ backgroundColor: colors.cardBg }}>
+                    <TouchableOpacity
+                        onPress={() => router.push('/(screens)/profile/shop-insights')}
+                        activeOpacity={0.7}
+                        className='flex-row items-center justify-between p-4'
+                        style={{ borderBottomColor: colors.borderColor, borderBottomWidth: 1 }}
+                    >
+                        <View className='flex-row items-center flex-1'>
+                            <Icon source="chart-line" size={24} color="#3b82f6" />
+                            <View className='ml-3 flex-1'>
+                                <Text className='text-base' style={{ color: colors.sectionHeaderText }}>{t('profile.storeEarningsTitle')}</Text>
+                                <Text className='text-xs mt-0.5' style={{ color: colors.textSecondary }}>{t('profile.storeEarningsSubtitle')}</Text>
+                            </View>
+                        </View>
+                        <Icon source="chevron-right" size={24} color="#6b7280" />
+                    </TouchableOpacity>
+                    {mineStores.length >= 2 && (
+                    <TouchableOpacity
+                        onPress={() => router.push('/(screens)/profile/store-compare')}
+                        activeOpacity={0.7}
+                        className='flex-row items-center justify-between p-4'
+                        style={{ borderBottomColor: colors.borderColor, borderBottomWidth: 0 }}
+                    >
+                        <View className='flex-row items-center flex-1'>
+                            <Icon source="compare-horizontal" size={24} color="#ffb900" />
+                            <View className='ml-3 flex-1'>
+                                <Text className='text-base' style={{ color: colors.sectionHeaderText }}>{t('profile.compareStores')}</Text>
+                                <Text className='text-xs mt-0.5' style={{ color: colors.textSecondary }}>{t('profile.compareStoresSubtitle')}</Text>
+                            </View>
+                        </View>
+                        <Icon source="chevron-right" size={24} color="#6b7280" />
+                    </TouchableOpacity>
+                    )}
+                </View>
+
                 <Text className='text-lg mb-4 font-century-gothic-bold' style={{ color: colors.sectionHeaderText }}>{t('profile.userActions') || 'Kullanıcı İşlemleri'}</Text>
                 <View className='rounded-xl mb-6' style={{ backgroundColor: colors.cardBg }}>
                     <TouchableOpacity
@@ -565,11 +605,40 @@ const Index = () => {
                                 try {
                                     const settingResult = await updateSetting({
                                         showImageAnimation: value,
+                                        showPriceAnimation: displayShowPriceAnimation,
                                     }).unwrap();
                                     // refetchSetting çağrısını kaldırdık - RTK Query otomatik güncelliyor
                                     dispatch(showSnack({ message: settingResult.message || t('settings.updateSuccess'), isError: false }));
                                 } catch (error: any) {
                                     setLocalShowImageAnimation(!value);
+                                    const errorMessage = error?.data?.message || getErrorMessage(error);
+                                    dispatch(showSnack({ message: errorMessage || t('profile.settingUpdateError'), isError: true }));
+                                } finally {
+                                    isUpdatingSettingRef.current = false;
+                                }
+                            }}
+                            disabled={isUpdatingSetting || isLoadingSetting}
+                        />
+                    </View>
+                    <View className='flex-row items-center justify-between mt-4'>
+                        <View className='flex-1 mr-4'>
+                            <Text className='text-base font-medium mb-1' style={{ color: colors.sectionHeaderText }}>{t('profile.priceAnimation')}</Text>
+                            <Text className='text-sm' style={{ color: colors.textSecondary }}>{t('profile.priceAnimationDescription')}</Text>
+                        </View>
+                        <Switch
+                            value={displayShowPriceAnimation}
+                            onValueChange={async (value) => {
+                                if (isUpdatingSettingRef.current) return;
+                                isUpdatingSettingRef.current = true;
+                                setLocalShowPriceAnimation(value);
+                                try {
+                                    const settingResult = await updateSetting({
+                                        showImageAnimation: displayShowImageAnimation,
+                                        showPriceAnimation: value,
+                                    }).unwrap();
+                                    dispatch(showSnack({ message: settingResult.message || t('settings.updateSuccess'), isError: false }));
+                                } catch (error: any) {
+                                    setLocalShowPriceAnimation(!value);
                                     const errorMessage = error?.data?.message || getErrorMessage(error);
                                     dispatch(showSnack({ message: errorMessage || t('profile.settingUpdateError'), isError: true }));
                                 } finally {

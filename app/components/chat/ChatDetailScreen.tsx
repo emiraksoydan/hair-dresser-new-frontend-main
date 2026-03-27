@@ -13,6 +13,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
+  Pressable,
 } from "react-native";
 import { Text } from "../common/Text";
 import { useSafeNavigation } from "../../hook/useSafeNavigation";
@@ -64,12 +65,15 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({
   threadId,
 }) => {
   const { colors, isDark } = useTheme();
+  const brandColor = "#f05e23";
+  const mutedTextColor = isDark ? "#94a3b8" : "#64748b";
+  const softBrandBg = isDark ? "rgba(240,94,35,0.18)" : "rgba(240,94,35,0.10)";
   const router = useSafeNavigation();
   const [messageText, setMessageText] = useState("");
   const flatListRef = useRef<FlatList>(null);
   const { userId: currentUserId, userType: currentUserType } = useAuth();
   const [typingUsers, setTypingUsers] = useState<Set<string>>(new Set());
-  const { t } = useLanguage();
+  const { t, currentLanguage } = useLanguage();
   const { alertError } = useAlert();
   const participantsSheetRef = useRef<BottomSheetModal>(null);
   type OptimisticMessage = ChatMessageItemDto & { isPending: true };
@@ -380,6 +384,35 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({
     }
   };
 
+  const getDateSeparatorLabel = useCallback((dateStr: string) => {
+    const date = new Date(dateStr);
+    if (Number.isNaN(date.getTime())) {
+      return "";
+    }
+
+    const now = new Date();
+    const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+    const todayStart = startOfDay(now);
+    const dateStart = startOfDay(date);
+    const diffDays = Math.round((todayStart - dateStart) / (1000 * 60 * 60 * 24));
+
+    if (diffDays === 0) return t("chat.today");
+    if (diffDays === 1) return t("chat.yesterday");
+
+    const localeByLanguage: Record<string, string> = {
+      tr: "tr-TR",
+      en: "en-US",
+      de: "de-DE",
+      ar: "ar-SA",
+    };
+    const locale = localeByLanguage[currentLanguage] || "en-US";
+    return date.toLocaleDateString(locale, {
+      day: "2-digit",
+      month: "long",
+      year: "numeric",
+    });
+  }, [currentLanguage, t]);
+
   // Messages from backend are oldest first, newest last
   // Reverse for inverted FlatList: newest first (will appear at bottom visually)
   // WhatsApp style: oldest at top, newest at bottom, new messages added at bottom
@@ -400,6 +433,36 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({
     if (optimisticMessages.length === 0) return sortedMessages;
     return [...[...optimisticMessages].reverse(), ...sortedMessages];
   }, [optimisticMessages, sortedMessages]);
+
+  type DisplayRow =
+    | { rowType: "message"; key: string; item: ChatMessageItemDto | OptimisticMessage }
+    | { rowType: "separator"; key: string; label: string };
+
+  const messageRows = useMemo<DisplayRow[]>(() => {
+    if (!displayMessages.length) return [];
+
+    const rows: DisplayRow[] = [];
+    for (let i = 0; i < displayMessages.length; i += 1) {
+      const msg = displayMessages[i];
+      rows.push({ rowType: "message", key: `msg-${msg.messageId}`, item: msg });
+
+      const nextMsg = displayMessages[i + 1];
+      const currentDateKey = new Date(msg.createdAt).toDateString();
+      const nextDateKey = nextMsg ? new Date(nextMsg.createdAt).toDateString() : null;
+
+      if (!nextMsg || currentDateKey !== nextDateKey) {
+        const label = getDateSeparatorLabel(msg.createdAt);
+        if (label) {
+          rows.push({
+            rowType: "separator",
+            key: `sep-${currentDateKey}-${i}`,
+            label,
+          });
+        }
+      }
+    }
+    return rows;
+  }, [displayMessages, getDateSeparatorLabel]);
 
   // Participants'ı Map'e çevir - hızlı lookup için (senderParticipant undefined sorununu çözer)
   // Normalize edilmiş userId ile lookup yapıyoruz (trim, toLowerCase) - backend'den gelen verilerde farklılık olabilir
@@ -471,18 +534,18 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({
 
   if (isLoading) {
     return (
-      <View className="flex-1 items-center justify-center">
-        <ActivityIndicator size="large" color="#22c55e" />
+      <View className="flex-1 items-center justify-center" style={{ backgroundColor: colors.screenBg }}>
+        <ActivityIndicator size="large" color={brandColor} />
       </View>
     );
   }
 
   if (!currentThread) {
     return (
-      <View className="flex-1 items-center justify-center">
-        <Text className="text-gray-400">{t("chat.threadNotFound")}</Text>
+      <View className="flex-1 items-center justify-center" style={{ backgroundColor: colors.screenBg }}>
+        <Text style={{ color: mutedTextColor }}>{t("chat.threadNotFound")}</Text>
         <TouchableOpacity onPress={() => router.back()} className="mt-4">
-          <Text className="text-green-500">{t("common.goBack")}</Text>
+          <Text style={{ color: brandColor }}>{t("common.goBack")}</Text>
         </TouchableOpacity>
       </View>
     );
@@ -493,10 +556,11 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({
       className="flex-1"
       behavior={Platform.OS === "ios" ? "padding" : "height"}
       keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 0}
+      style={{ backgroundColor: colors.screenBg }}
     >
       {/* Header with Participants */}
       <SafeAreaView style={{ backgroundColor: colors.headerBg }}>
-        <View className="px-4 py-3 flex-row items-center">
+        <View className="px-4 py-3 flex-row items-center" style={{ borderBottomWidth: 1, borderBottomColor: colors.borderColor }}>
           <TouchableOpacity
             onPress={() => router.back()}
             className="mr-0 flex-row items-center"
@@ -565,21 +629,23 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({
                 </Text>
                 {currentThread.status !== null &&
                   currentThread.status !== undefined && (
-                    <Text className="text-gray-400 text-xs mt-0.5">
-                      {currentThread.status === AppointmentStatus.Approved
-                        ? t("appointment.status.approved")
-                        : currentThread.status === AppointmentStatus.Pending
-                          ? t("appointment.status.pending")
-                          : currentThread.status === AppointmentStatus.Completed
-                            ? t("appointment.status.completed")
-                            : currentThread.status === AppointmentStatus.Cancelled
-                              ? t("appointment.status.cancelled")
-                              : currentThread.status === AppointmentStatus.Rejected
-                                ? t("appointment.status.rejected")
-                                : currentThread.status === AppointmentStatus.Unanswered
-                                  ? t("appointment.status.unanswered")
-                                  : ""}
-                    </Text>
+                    <View className="self-start mt-1 px-2 py-0.5 rounded-full" style={{ backgroundColor: softBrandBg, borderWidth: 1, borderColor: "rgba(240,94,35,0.35)" }}>
+                      <Text className="text-[10px] font-century-gothic-sans-medium" style={{ color: brandColor }}>
+                        {currentThread.status === AppointmentStatus.Approved
+                          ? t("appointment.status.approved")
+                          : currentThread.status === AppointmentStatus.Pending
+                            ? t("appointment.status.pending")
+                            : currentThread.status === AppointmentStatus.Completed
+                              ? t("appointment.status.completed")
+                              : currentThread.status === AppointmentStatus.Cancelled
+                                ? t("appointment.status.cancelled")
+                                : currentThread.status === AppointmentStatus.Rejected
+                                  ? t("appointment.status.rejected")
+                                  : currentThread.status === AppointmentStatus.Unanswered
+                                    ? t("appointment.status.unanswered")
+                                    : ""}
+                      </Text>
+                    </View>
                   )}
               </View>
               <Icon source="chevron-down" size={20} color={colors.textSecondary} />
@@ -591,9 +657,9 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({
       {/* Messages List - WhatsApp style: inverted FlatList for bottom-aligned messages */}
       <FlatList
         ref={flatListRef}
-        data={displayMessages}
-        keyExtractor={(item) => item.messageId}
-        contentContainerStyle={{ padding: 16, gap: 12 }}
+        data={messageRows}
+        keyExtractor={(item) => item.key}
+        contentContainerStyle={{ padding: 16, gap: 12, backgroundColor: colors.screenBg }}
         inverted={true}
         maintainVisibleContentPosition={{
           minIndexForVisible: 0,
@@ -604,24 +670,40 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({
             flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
           }, 100);
         }}
-        renderItem={({ item }: { item: ChatMessageItemDto | OptimisticMessage }) => {
-          const isMe = item.senderUserId === currentUserId;
-          const isPending = (item as OptimisticMessage).isPending === true;
+        renderItem={({ item }: { item: DisplayRow }) => {
+          if (item.rowType === "separator") {
+            return (
+              <View className="items-center my-1.5">
+                <View
+                  className="px-3 py-1 rounded-full"
+                  style={{ backgroundColor: isDark ? "#1f2937" : "#e2e8f0", borderWidth: 1, borderColor: colors.borderColor }}
+                >
+                  <Text className="text-[11px] font-century-gothic-sans-medium" style={{ color: mutedTextColor }}>
+                    {item.label}
+                  </Text>
+                </View>
+              </View>
+            );
+          }
+
+          const message = item.item;
+          const isMe = message.senderUserId === currentUserId;
+          const isPending = (message as OptimisticMessage).isPending === true;
 
           // Participants Map'inden lookup
           let senderParticipant: ChatThreadParticipantDto | null = null;
-          if (item.senderUserId) {
-            const normalizedKey = item.senderUserId.trim().toLowerCase();
+          if (message.senderUserId) {
+            const normalizedKey = message.senderUserId.trim().toLowerCase();
             senderParticipant =
               participantsMap.get(normalizedKey) ||
-              participantsMap.get(item.senderUserId) ||
+              participantsMap.get(message.senderUserId) ||
               null;
           }
 
           // Fallback: Eğer participant bulunamadıysa, mesajdan bilgi oluştur
           const displayInfo = senderParticipant || {
-            userId: item.senderUserId,
-            displayName: item.senderUserId?.substring(0, 8) || t("favorites.unknown"),
+            userId: message.senderUserId,
+            displayName: message.senderUserId?.substring(0, 8) || t("favorites.unknown"),
             userType: UserType.Customer, // Default
             imageUrl: null,
             barberType: null,
@@ -657,16 +739,16 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({
               )}
 
               <View
-                className={`max-w-[75%] ${isMe ? "items-end" : "items-start"}`}
+                className={`max-w-[82%] ${isMe ? "items-end" : "items-start"}`}
                 style={{ flexShrink: 1, minWidth: 0 }}
               >
                 <View
-                  className={`rounded-2xl px-4 py-2.5 ${isMe ? "bg-green-600 rounded-tr-sm" : "rounded-tl-sm"}`}
-                  style={[{ flexShrink: 1 }, !isMe ? { backgroundColor: colors.cardBg2 } : undefined]}
+                  className={`rounded-2xl px-4 py-2.5 ${isMe ? "rounded-tr-sm" : "rounded-tl-sm"}`}
+                  style={[{ flexShrink: 1, backgroundColor: isMe ? brandColor : colors.cardBg2, borderWidth: isMe ? 0 : 1, borderColor: isMe ? "transparent" : colors.borderColor }]}
                 >
                   {!isMe && (
                     <View className="flex-row items-center gap-1.5 mb-1.5 flex-wrap">
-                      <Text className="text-gray-300 text-xs font-century-gothic">
+                      <Text className="text-xs font-century-gothic" style={{ color: mutedTextColor }}>
                         {displayInfo.displayName}
                         {senderParticipant &&
                           senderParticipant.userType !== currentUserType &&
@@ -677,17 +759,17 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({
                               : t("card.customer")}`}
                       </Text>
                       {!senderParticipant && (
-                        <Text className="text-gray-500 text-xs">
+                        <Text className="text-xs" style={{ color: mutedTextColor }}>
                           ({t("common.loading")})
                         </Text>
                       )}
                     </View>
                   )}
                   <Text
-                    className={`text-white text-sm ${isMe ? "text-right" : "text-left"} font-century-gothic`}
-                    style={{ flexWrap: "wrap", flexShrink: 1 }}
+                    className={`text-sm ${isMe ? "text-right" : "text-left"} font-century-gothic`}
+                    style={{ flexWrap: "wrap", flexShrink: 1, color: isMe ? "#ffffff" : colors.sectionHeaderText }}
                   >
-                    {item.text}
+                    {message.text}
                   </Text>
                 </View>
                 <View className={`flex-row items-center gap-1 mt-1 ${isMe ? "justify-end" : "justify-start"} px-2`}>
@@ -696,15 +778,16 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({
                   )}
                   {isMe && !isPending && (
                     <Icon
-                      source={(item as ChatMessageItemDto).isFullyRead ? "check-all" : "check"}
+                      source={(message as ChatMessageItemDto).isFullyRead ? "check-all" : "check"}
                       size={13}
-                      color={(item as ChatMessageItemDto).isFullyRead ? "#22c55e" : colors.textSecondary}
+                      color={(message as ChatMessageItemDto).isFullyRead ? brandColor : colors.textSecondary}
                     />
                   )}
                   <Text
-                    className={`text-gray-500 text-xs ${isMe ? "text-right" : "text-left"} ${isPending ? "opacity-60" : ""}`}
+                    className={`text-xs ${isMe ? "text-right" : "text-left"} ${isPending ? "opacity-60" : ""}`}
+                    style={{ color: mutedTextColor }}
                   >
-                    {formatMessageTime(item.createdAt)}
+                    {formatMessageTime(message.createdAt)}
                   </Text>
                 </View>
               </View>
@@ -734,8 +817,8 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({
         }}
         ListEmptyComponent={
           <View className="flex-1 items-center justify-center py-20">
-            <Text className="text-gray-400">{t("chat.noMessagesYet")}</Text>
-            <Text className="text-gray-500 text-xs mt-2">
+            <Text style={{ color: mutedTextColor }}>{t("chat.noMessagesYet")}</Text>
+            <Text className="text-xs mt-2" style={{ color: mutedTextColor }}>
               {t("chat.sendFirstMessage")}
             </Text>
           </View>
@@ -743,7 +826,7 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({
         ListHeaderComponent={
           typingUsers.size > 0 ? (
             <View className="flex-row items-center px-4 py-2">
-              <Text className="text-gray-500 text-xs italic">
+              <Text className="text-xs italic" style={{ color: mutedTextColor }}>
                 {Array.from(typingUsers)
                   .map((userId) => {
                     const user = currentThread.participants.find(
@@ -765,20 +848,20 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({
         style={{ backgroundColor: colors.headerBg, borderTopWidth: 1, borderTopColor: colors.borderColor, paddingBottom: Math.max(insets.bottom, 12) }}
       >
         {!isConnected && (
-          <View className="bg-red-900/20 border border-red-800/30 rounded-lg px-3 py-2 mb-2">
-            <Text className="text-red-400 text-xs text-center">
+          <View className="rounded-lg px-3 py-2 mb-2" style={{ backgroundColor: isDark ? "rgba(239,68,68,0.18)" : "rgba(239,68,68,0.12)", borderWidth: 1, borderColor: "rgba(239,68,68,0.35)" }}>
+            <Text className="text-xs text-center" style={{ color: isDark ? "#fca5a5" : "#b91c1c" }}>
               {t("chat.serverConnectionError")}
             </Text>
           </View>
         )}
         {!canSendMessage && isConnected && (
-          <View className="bg-yellow-900/20 border border-yellow-800/30 rounded-lg px-3 py-2 mb-2">
-            <Text className="text-yellow-400 text-xs text-center">
+          <View className="rounded-lg px-3 py-2 mb-2" style={{ backgroundColor: isDark ? "rgba(245,158,11,0.18)" : "rgba(245,158,11,0.12)", borderWidth: 1, borderColor: "rgba(245,158,11,0.35)" }}>
+            <Text className="text-xs text-center" style={{ color: isDark ? "#fcd34d" : "#b45309" }}>
               {t("chat.cannotSendToThread")}
             </Text>
           </View>
         )}
-        <View className="flex-row items-center gap-2">
+        <View className="flex-row items-center gap-2 px-2 py-1.5 rounded-full" style={{ backgroundColor: colors.cardBg, borderWidth: 1, borderColor: colors.borderColor }}>
           <TextInput
             value={messageText}
             onChangeText={handleTextChange}
@@ -794,22 +877,24 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({
             editable={canSendMessage}
             style={{
               fontFamily: Platform.OS === "ios" ? "CenturyGothic" : "CenturyGothic",
+              minHeight: 40,
+              maxHeight: 110,
               backgroundColor: colors.cardBg2,
               color: colors.sectionHeaderText,
             }}
           />
-          <TouchableOpacity
+          <Pressable
             onPress={handleSend}
             disabled={!messageText.trim() || isSending || !canSendMessage}
-            className={`w-10 h-10 rounded-full items-center justify-center ${messageText.trim() && canSendMessage ? "bg-green-600" : ""}`}
-            style={!(messageText.trim() && canSendMessage) ? { backgroundColor: colors.cardBg2 } : undefined}
+            className="w-10 h-10 rounded-full items-center justify-center"
+            style={{ backgroundColor: messageText.trim() && canSendMessage ? brandColor : colors.cardBg2 }}
           >
             {isSending ? (
               <ActivityIndicator size="small" color="white" />
             ) : (
               <Icon source="send" size={20} color="white" />
             )}
-          </TouchableOpacity>
+          </Pressable>
         </View>
       </View>
 
@@ -855,8 +940,8 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({
             const labelText = [label, barberLabel].filter(Boolean).join(' • ');
 
             return (
-              <View key={participant.userId} className="flex-row items-center mb-4">
-                <View className="w-12 h-12 rounded-full overflow-hidden items-center justify-center" style={{ flexShrink: 0, backgroundColor: colors.cardBg2 }}>
+              <View key={participant.userId} className="flex-row items-center mb-3 px-3 py-2.5 rounded-xl" style={{ backgroundColor: colors.cardBg, borderWidth: 1, borderColor: colors.borderColor }}>
+                <View className="w-12 h-12 rounded-full overflow-hidden items-center justify-center" style={{ flexShrink: 0, backgroundColor: colors.cardBg2, borderWidth: 1, borderColor: colors.borderColor }}>
                   <OwnerAvatar
                     ownerId={participant.userId}
                     ownerType={ImageOwnerType.User}

@@ -1,5 +1,6 @@
 import React, { useCallback, useState, useEffect, useRef, useMemo } from "react";
 import { View, TouchableOpacity } from "react-native";
+import { Icon } from "react-native-paper";
 import { Text } from "../common/Text";
 import { FreeBarGetDto, FavoriteTargetType } from "../../types";
 import { useFavoriteToggle } from "../../hook/useFavoriteToggle";
@@ -31,6 +32,7 @@ type Props = {
   onCallFreeBarber?: (freeBarberId: string) => void;
   storeId?: string;
   showImageAnimation?: boolean;
+  panelCompare?: { selected: boolean; onPress: () => void; hidden?: boolean };
 };
 
 const FreeBarberCard: React.FC<Props> = ({
@@ -46,6 +48,7 @@ const FreeBarberCard: React.FC<Props> = ({
   onCallFreeBarber,
   storeId,
   showImageAnimation = true,
+  panelCompare,
 }) => {
   const { colors } = useTheme();
   const carouselWidth = Math.max(0, cardWidthFreeBarber - 20);
@@ -202,17 +205,37 @@ const FreeBarberCard: React.FC<Props> = ({
               height={isList ? 250 : 112}
               autoPlay={showImageAnimation}
             />
+            {isList && panelCompare && !panelCompare.hidden && (
+              <TouchableOpacity
+                onPress={panelCompare.onPress}
+                className="absolute top-2 left-2 z-20"
+                hitSlop={8}
+              >
+                <View
+                  style={{
+                    backgroundColor: panelCompare.selected ? "#ffb900" : "rgba(15,23,42,0.78)",
+                    borderColor: "#ffb900",
+                    borderWidth: 1.5,
+                    borderRadius: 22,
+                    padding: 7,
+                  }}
+                >
+                  <Icon
+                    source={panelCompare.selected ? "check" : "compare-horizontal"}
+                    size={19}
+                    color={panelCompare.selected ? "#1f2937" : "#ffffff"}
+                  />
+                </View>
+              </TouchableOpacity>
+            )}
             {isList && (
               <View
                 className="absolute top-2 left-2 right-2 z-10 flex-row flex-wrap justify-end items-center gap-2"
                 pointerEvents="box-none"
               >
                 {hasBeautySalonCertificate && (
-                  <View className="bg-purple-600/90 px-2.5 py-1 rounded-full max-w-[48%]">
-                    <Text
-                      className="text-white text-sm font-century-gothic-sans-semibold"
-                      numberOfLines={1}
-                    >
+                  <View className="bg-purple-600/90 px-2.5 py-1 rounded-full self-start max-w-full">
+                    <Text className="text-white text-sm font-century-gothic-sans-semibold">
                       {t("card.beautyExpert")}
                     </Text>
                   </View>
@@ -228,12 +251,10 @@ const FreeBarberCard: React.FC<Props> = ({
                   type="barber-type"
                   barberType={freeBarber.type}
                   isList={true}
-                  compact
                 />
                 <StatusBadge
                   type={isAvailable ? "available" : "busy"}
                   isList={true}
-                  compact
                 />
                 {mode === "barbershop" && isAvailable && !hasCalled && (
                   <TouchableOpacity
@@ -352,7 +373,10 @@ export const FreeBarberCardInner = React.memo(FreeBarberCard, (prev, next) => {
     prev.onPressUpdate === next.onPressUpdate &&
     prev.onPressRatings === next.onPressRatings &&
     prev.onCallFreeBarber === next.onCallFreeBarber &&
-    prev.showImageAnimation === next.showImageAnimation;
+    prev.showImageAnimation === next.showImageAnimation &&
+    prev.panelCompare?.selected === next.panelCompare?.selected &&
+    prev.panelCompare?.hidden === next.panelCompare?.hidden &&
+    prev.panelCompare?.onPress === next.panelCompare?.onPress;
 
   return sameFreeBarber && sameProps;
 });

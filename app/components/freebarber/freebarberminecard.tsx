@@ -144,11 +144,11 @@ const FreeBarberMineCard: React.FC<Props> = ({
                   </Text>
                 </View>
               )}
-              <StatusBadge
-                type="barber-type"
-                barberType={freeBarber.type}
-                isList={isList}
-              />
+          <StatusBadge
+            type="barber-type"
+            barberType={freeBarber.type}
+            isList={isList}
+          />
               <TouchableOpacity
                 onPress={handleToggleAvailability}
                 disabled={isUpdatingAvailability}

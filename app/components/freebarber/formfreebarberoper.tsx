@@ -1556,11 +1556,12 @@ export const FormFreeBarberOperation = React.memo(
                                 onBlur={onBlur}
                                 textColor={colors.sectionHeaderText}
                                 outlineColor={errors.name ? "#b00020" : colors.borderColor2}
+                                activeOutlineColor={errors.name ? "#b00020" : "#ffb900"}
                                 theme={{
                                   roundness: 10,
                                   colors: {
                                     onSurfaceVariant: "gray",
-                                    primary: colors.sectionHeaderText,
+                                    primary: "#ffb900",
                                   },
                                 }}
                                 style={{ backgroundColor: colors.cardBg }}
@@ -1587,11 +1588,12 @@ export const FormFreeBarberOperation = React.memo(
                                 onBlur={onBlur}
                                 textColor={colors.sectionHeaderText}
                                 outlineColor={errors.surname ? "#b00020" : colors.borderColor2}
+                                activeOutlineColor={errors.surname ? "#b00020" : "#ffb900"}
                                 theme={{
                                   roundness: 10,
                                   colors: {
                                     onSurfaceVariant: "gray",
-                                    primary: colors.sectionHeaderText,
+                                    primary: "#ffb900",
                                   },
                                 }}
                                 style={{ backgroundColor: colors.cardBg }}

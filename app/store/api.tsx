@@ -17,7 +17,7 @@ import {
     ComplaintGetDto, CreateComplaintDto,
     RequestGetDto, CreateRequestDto,
     BlockedGetDto, CreateBlockedDto, UnblockDto, BlockStatusDto,
-    CategoryHierarchyDto
+    CategoryHierarchyDto, EarningsDto
 } from '../types';
 import { FilterRequestDto, SavedFilterGetDto, SavedFilterCreateDto, SavedFilterUpdateDto } from '../types/filter';
 import { transformArrayResponse, transformObjectResponse, transformBooleanResponse, transformApiResponse } from '../utils/api/transform-response';
@@ -1328,6 +1328,26 @@ export const api = createApi({
             invalidatesTags: ['Subscription'],
         }),
 
+        // --- EARNINGS API ---
+        getBarberStoreEarnings: builder.query<EarningsDto, { storeId: string; startDate?: string; endDate?: string }>({
+            query: ({ storeId, startDate, endDate }) => ({
+                url: 'BarberStore/earnings',
+                method: 'GET',
+                params: { storeId, startDate, endDate },
+            }),
+            keepUnusedDataFor: CACHE_DURATIONS.DYNAMIC,
+            transformResponse: (response: any) => transformObjectResponse<EarningsDto>(response),
+        }),
+        getFreeBarberEarnings: builder.query<EarningsDto, { startDate?: string; endDate?: string }>({
+            query: ({ startDate, endDate }) => ({
+                url: 'FreeBarber/earnings',
+                method: 'GET',
+                params: { startDate, endDate },
+            }),
+            keepUnusedDataFor: CACHE_DURATIONS.DYNAMIC,
+            transformResponse: (response: any) => transformObjectResponse<EarningsDto>(response),
+        }),
+
     }),
 });
 
@@ -1443,4 +1463,9 @@ export const {
     useCreateSavedFilterMutation,
     useUpdateSavedFilterMutation,
     useDeleteSavedFilterMutation,
+    // Earnings
+    useGetBarberStoreEarningsQuery,
+    useLazyGetBarberStoreEarningsQuery,
+    useGetFreeBarberEarningsQuery,
+    useLazyGetFreeBarberEarningsQuery,
 } = api;

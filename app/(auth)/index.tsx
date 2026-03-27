@@ -32,6 +32,8 @@ import { LanguageSelector } from "../components/common/LanguageSelector";
 import { LegalAgreementCheckbox } from "../components/auth/LegalAgreementCheckbox";
 import { useSafeNavigation } from "../hook/useSafeNavigation";
 
+const OTP_COUNTDOWN_SECONDS = 600;
+
 // Schema'yı dinamik olarak oluşturmak için fonksiyon
 const createSchemas = (t: (key: string) => string) => {
   const registerSchema = z.object({
@@ -180,7 +182,7 @@ const Index = () => {
   // Bu süre boyunca resend butonu devre dışı olmalı
   useEffect(() => {
     if (modalVisible) {
-      setLeft(120); // 2 minutes (120 seconds) - NetGSM OTP validity period
+      setLeft(OTP_COUNTDOWN_SECONDS);
     }
   }, [modalVisible]);
 
@@ -228,7 +230,7 @@ const Index = () => {
 
       if (result.data?.success) {
         setModalVisible(true);
-        setLeft(600); // Start 10 minute countdown (Twilio OTP validity period)
+        setLeft(OTP_COUNTDOWN_SECONDS);
         dispatch(
           showSnack({
             message: result.data.message || t("auth.codeSent") || "Doğrulama kodu gönderildi",
@@ -409,7 +411,7 @@ const Index = () => {
       }
 
       if (result.data?.success) {
-        setLeft(600); // Reset countdown to 10 minutes (Twilio OTP validity period)
+        setLeft(OTP_COUNTDOWN_SECONDS);
         dispatch(
           showSnack({
             message: result.data.message || t("auth.codeSent") || "Yeni doğrulama kodu gönderildi",
@@ -457,7 +459,7 @@ const Index = () => {
                 letterSpacing: 0.5,
               }}
             >
-              {t("auth.title").toLocaleUpperCase('tr-TR')}
+              {String(t("auth.title")).toUpperCase()}
             </Text>
           </View>
 

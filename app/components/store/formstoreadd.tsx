@@ -75,6 +75,7 @@ import { MESSAGES } from "../../constants/messages";
 import { ensureLocationGateWithUI } from "../location/location-gate";
 import { LocationStatus } from "../../types";
 import { StepFormIndicator } from "../common/StepFormIndicator";
+import { extractCreatedStoreIdFromResponse } from "../../utils/form/store-create-response";
 
 const createChairPricingSchema = (t: (key: string) => string) =>
   z
@@ -435,7 +436,10 @@ const FormStoreAdd = ({
 
   const { userId } = useAuth();
   const { t, currentLanguage } = useLanguage();
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
+  const dropdownItemActiveBg = isDark
+    ? "rgba(194, 165, 35, 0.22)"
+    : "rgba(139, 115, 85, 0.16)";
 
   const stepLabels = useMemo(() => [
     t("form.stepStoreInfo"),
@@ -648,6 +652,7 @@ const FormStoreAdd = ({
             isError: true,
           }),
         );
+        setIsSubmitting(false);
         return;
       }
       const formData = new FormData();
@@ -656,7 +661,7 @@ const FormStoreAdd = ({
         name: data.taxDocumentImage.name ?? "tax-document.jpg",
         type: data.taxDocumentImage.type ?? "image/jpeg",
       } as any);
-      formData.append("ownerType", String(ImageOwnerType.Store));
+      formData.append("ownerType", String(ImageOwnerType.User));
       formData.append("ownerId", userId);
 
       const uploadRes = await uploadImage({ data: formData });
@@ -761,7 +766,7 @@ const FormStoreAdd = ({
     // Store oluşturma başarılı, şimdi resim işlemleri
     let uploadError: string | null = null;
     if (hasUploads) {
-      const createdStoreId = storeResult.data?.data;
+      const createdStoreId = extractCreatedStoreIdFromResponse(storeResult.data);
       if (!createdStoreId) {
         uploadError = MESSAGES.FORM.STORE_ID_NOT_FOUND;
       } else {
@@ -1407,7 +1412,7 @@ const FormStoreAdd = ({
                                 borderRadius: 10,
                                 overflow: "hidden",
                               }}
-                              activeColor="#3a3b3d"
+                              activeColor={dropdownItemActiveBg}
                             />
                             <HelperText
                               className="text-4xl"
@@ -1647,7 +1652,14 @@ const FormStoreAdd = ({
                   </Button>
                 </View>
                 {barberFields.length > 0 && (
-                  <View className="rounded-xl mx-2 px-3 pt-4 pb-2" style={{ backgroundColor: colors.cardBg }}>
+                  <View
+                    className="rounded-xl mx-2 px-3 pt-3 pb-2"
+                    style={{
+                      backgroundColor: colors.cardBg,
+                      borderWidth: 1,
+                      borderColor: colors.borderColor,
+                    }}
+                  >
                     {barberFields.map((item, index) => (
                       <ManuelBarberItem
                         key={item._key}
@@ -1674,7 +1686,7 @@ const FormStoreAdd = ({
                   </View>
                 )}
 
-                <View className="mt-2 mx-0 px-2 flex-row items-center">
+                <View className="mt-1 mx-0 px-2 flex-row items-center">
                   <Text className="text-white text-xl flex-1" style={{ color: colors.sectionHeaderText }}>
                     Koltuk Sayısı : {chairFields.length}
                   </Text>
@@ -1690,7 +1702,14 @@ const FormStoreAdd = ({
                 </View>
 
                 {chairFields.length > 0 && (
-                  <View className="rounded-xl mx-2 px-3 pt-4 pb-2" style={{ backgroundColor: colors.cardBg }}>
+                  <View
+                    className="rounded-xl mx-2 px-3 pt-3 pb-2"
+                    style={{
+                      backgroundColor: colors.cardBg,
+                      borderWidth: 1,
+                      borderColor: colors.borderColor,
+                    }}
+                  >
                     {chairFields.map((item, index) => (
                       <ChairItem
                         key={item._key}
@@ -1872,7 +1891,7 @@ const FormStoreAdd = ({
                                 borderRadius: 10,
                                 overflow: "hidden",
                               }}
-                              activeColor="#ffb900"
+                              activeColor={dropdownItemActiveBg}
                             />
                             <HelperText
                               type="error"
@@ -2243,7 +2262,7 @@ const FormStoreAdd = ({
             <Button
               className="flex-1"
               disabled={isLoading || isSubmitting}
-              loading={isLoading || isSubmitting}
+              loading={isLoading}
               mode="contained"
               onPress={handleSubmit((data) => guard(() => OnSubmit(data)))}
               buttonColor="#10B981"

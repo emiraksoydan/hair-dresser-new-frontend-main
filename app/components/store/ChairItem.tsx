@@ -30,7 +30,10 @@ export const ChairItem = React.memo<ChairItemProps>(
     onModeChange,
   }) => {
     const { t } = useLanguage();
-    const { colors } = useTheme();
+    const { colors, isDark } = useTheme();
+    const dropdownItemActiveBg = isDark
+      ? "rgba(194, 165, 35, 0.22)"
+      : "rgba(139, 115, 85, 0.16)";
     const chairError = (errors as any)?.chairs?.[index];
     const nameError = (chairError as any)?.name?.message;
     const barberIdError = (chairError as any)?.barberId?.message;
@@ -38,7 +41,7 @@ export const ChairItem = React.memo<ChairItemProps>(
     const disabled = mode === "barber" && barberOptions.length === 0;
 
     return (
-      <View className="flex-row items-center gap-3 mb-3">
+      <View className="flex-row items-center gap-3 mb-2">
         {/* Chair Icon */}
         <Icon size={24} source={"chair-rolling"} color="#c2a523" />
 
@@ -50,8 +53,8 @@ export const ChairItem = React.memo<ChairItemProps>(
             render={({ field: { value, onChange } }) => (
               <Dropdown
                 data={[
-                  { label: t("form.chairNameRequired"), value: "named" },
-                  { label: t("form.barberSelectionRequired"), value: "barber" },
+                  { label: t("form.namedChair"), value: "named" },
+                  { label: t("form.barberChair"), value: "barber" },
                 ]}
                 labelField="label"
                 valueField="value"
@@ -81,7 +84,7 @@ export const ChairItem = React.memo<ChairItemProps>(
                   borderRadius: 10,
                   overflow: "hidden",
                 }}
-                activeColor="#3a3b3d"
+                activeColor={dropdownItemActiveBg}
               />
             )}
           />
@@ -160,7 +163,7 @@ export const ChairItem = React.memo<ChairItemProps>(
                     color: colors.sectionHeaderText,
                     fontFamily: "CenturyGothic",
                   }}
-                  activeColor="#3a3b3d"
+                  activeColor={dropdownItemActiveBg}
                 />
               )}
             />

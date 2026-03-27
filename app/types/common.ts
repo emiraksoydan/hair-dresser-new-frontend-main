@@ -47,3 +47,16 @@ export interface CategoryHierarchyDto {
   name: string;
   children: CategoryHierarchyDto[];
 }
+
+export interface DailyEarningDto {
+  date: string; // yyyy-MM-dd
+  amount: number;
+}
+
+export interface EarningsDto {
+  totalEarnings: number;
+  dailyEarnings: number;
+  previousPeriodEarnings: number;
+  changePercent: number;
+  dailyBreakdown: DailyEarningDto[];
+}
