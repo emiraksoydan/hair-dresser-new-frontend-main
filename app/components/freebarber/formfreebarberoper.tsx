@@ -9,14 +9,7 @@ import {
   Dimensions,
 } from "react-native";
 import { Text } from "../common/Text";
-import {
-  Divider,
-  Icon,
-  IconButton,
-  TextInput,
-  HelperText,
-  Switch,
-} from "react-native-paper";
+import { Divider, HelperText, Icon, IconButton, Switch, TextInput } from "react-native-paper";
 import { Button } from "../common/Button";
 import { useForm, Controller } from "react-hook-form";
 import { z } from "zod";

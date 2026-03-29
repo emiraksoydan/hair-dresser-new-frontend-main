@@ -28,18 +28,13 @@ const BarberStoreLayout = () => {
     label: t(panelTabConfigs.barberStore.labelKey),
   }), [t]);
 
-  // Dropdown menu items - memoized
-  const dropdownMenuItems = useMemo(
+  const fabExtraItems = useMemo(
     () => [
       {
+        id: "add-store",
         icon: "plus",
         label: t("navigation.addStore"),
         onPress: () => addStoreSheet.present(),
-      },
-      {
-        icon: "shopping-outline",
-        label: t("navigation.shopping"),
-        onPress: () => {},
       },
     ],
     [t, addStoreSheet],
@@ -77,7 +72,7 @@ const BarberStoreLayout = () => {
       userType={UserType.BarberStore}
       accentColor={accentColors.barberStore}
       tabs={tabs}
-      dropdownMenuItems={dropdownMenuItems}
+      fabExtraItems={fabExtraItems}
       renderAdditionalBottomSheets={renderAdditionalBottomSheets}
     />
   );

@@ -1,7 +1,8 @@
+import { Icon } from "react-native-paper";
 import React from "react";
 import { View, ActivityIndicator, TouchableOpacity, Image, FlatList, RefreshControl } from "react-native";
 import { Text } from "../../components/common/Text";
-import { Icon } from "react-native-paper";
+
 import { useGetMyComplaintsQuery, useDeleteComplaintMutation } from "../../store/api";
 import { ComplaintGetDto, UserType } from "../../types";
 import { useLanguage } from "../../hook/useLanguage";

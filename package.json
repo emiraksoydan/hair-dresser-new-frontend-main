@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@babel/core": "^7.26.0",
+    "@expo-google-fonts/dancing-script": "^0.4.2",
     "@gorhom/bottom-sheet": "^5.2.6",
     "@hookform/resolvers": "^5.2.2",
     "@legendapp/list": "^2.0.12",

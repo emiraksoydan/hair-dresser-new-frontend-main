@@ -4,6 +4,7 @@ import { Text } from "./Text";
 import { LottieViewComponent } from "./lottieview";
 import { useLanguage } from "../../hook/useLanguage";
 import { useTheme } from "../../hook/useTheme";
+import { COLORS } from "../../constants/colors";
 import { LocationStatus } from "../../types";
 
 export type StateType =
@@ -111,8 +112,11 @@ export const UnifiedStateManager: React.FC<UnifiedStateProps> = ({
   // Loading state - show spinner
   if (currentState === "loading") {
     return (
-      <View className="flex-1 items-center justify-center py-8">
-        <ActivityIndicator size="large" color="#c2a523" />
+      <View
+        className="flex-1 items-center justify-center py-8"
+        style={{ backgroundColor: colors.screenBg }}
+      >
+        <ActivityIndicator size="large" color={colors.tagline} />
       </View>
     );
   }
@@ -122,8 +126,18 @@ export const UnifiedStateManager: React.FC<UnifiedStateProps> = ({
   const shouldShowRetry = showRetryButton && config.showRetry && onRetry;
 
   return (
-    <View className="flex-1 items-center justify-start py-4 px-2">
-      <View style={{ backgroundColor: colors.cardBg }} className="rounded-2xl p-6 items-center w-full">
+    <View
+      className="flex-1 items-center justify-start py-4 px-2"
+      style={{ backgroundColor: colors.screenBg }}
+    >
+      <View
+        style={{
+          backgroundColor: colors.cardBg,
+          borderWidth: 1,
+          borderColor: colors.borderColor2,
+        }}
+        className="rounded-2xl p-6 items-center w-full"
+      >
         <LottieViewComponent
           animationSource={animationSource}
           message={displayMessage}
@@ -133,10 +147,16 @@ export const UnifiedStateManager: React.FC<UnifiedStateProps> = ({
           <View className="mt-4">
             <TouchableOpacity
               onPress={onRetry}
-              className="bg-[#c2a523] px-6 py-2 rounded-lg"
+              style={{ backgroundColor: COLORS.UI.ACCENT_GOLD }}
+              className="px-6 py-2 rounded-lg"
               activeOpacity={0.8}
             >
-              <Text className="text-white font-medium">{t("common.retry")}</Text>
+              <Text
+                style={{ color: COLORS.UI.TEXT_ON_GOLD }}
+                className="font-medium"
+              >
+                {t("common.retry")}
+              </Text>
             </TouchableOpacity>
           </View>
         )}

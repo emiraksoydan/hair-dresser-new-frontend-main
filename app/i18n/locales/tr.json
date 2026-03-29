@@ -15,6 +15,7 @@
     "login": "Giriş yap",
     "register": "Kayıt ol",
     "verifyPhone": "Telefonunu doğrula",
+    "otpAccessHint": "Başlamak için erişim kodunu girin.",
     "enterCode": "{{phone}} numarasına gelen 6 haneli kodu gir.",
     "timeRemaining": "Süre: {{time}}",
     "resendCode": "Kodu yeniden gönder",
@@ -116,12 +117,15 @@
     "customStart": "Başlangıç",
     "customEnd": "Bitiş",
     "profitRate": "Toplam Kar Oranı",
+    "allTimeTotalLabel": "Bugüne kadar genel toplam",
     "exportExcel": "Excel olarak dışa aktar",
     "exportPdf": "PDF olarak dışa aktar",
     "exportError": "Dışa aktarma başarısız oldu.",
     "earningsEmptyTitle": "Bu dönemde kazanç görünmüyor",
     "earningsEmptySubtitle": "Farklı bir tarih aralığı seçebilir veya randevu tamamlandıkça verilerin dolmasını bekleyebilirsiniz.",
     "chartScrollHint": "Çok sayıda etiket varsa grafiği yatay kaydırın.",
+    "chartPeriodTotal": "Dönem toplamı:",
+    "chartLoading": "Grafik yükleniyor…",
     "pickDateHint": "Takvimden tarihi seçin; bitince Tamam’a basın."
   },
   "subscription": {
@@ -267,7 +271,8 @@
       "myServices": "İşlemlerim",
       "services": "Hizmetler",
       "scheduleDate": "Tarih",
-      "scheduleTime": "Saat"
+      "scheduleTime": "Saat",
+      "chair": "Koltuk"
     }
   },
   "time": {
@@ -417,6 +422,8 @@
     "storeNoWorkingHours": "Dükkan bu gün için çalışma saati tanımlamamış (kapalı).",
     "storeHasActiveAppointments": "Bu dükkana ait aktif veya bekleyen randevu var önce müsait olmalısınız.",
     "appointmentSlotOverlap": "Seçilen saat aralığı başka bir randevu ile çakışıyor.",
+    "availabilityRangeInvalid": "Bitiş tarihi başlangıçtan önce olamaz.",
+    "availabilityRangeTooLarge": "Müsaitlik aralığı tek istekte en fazla 7 gün olabilir.",
     "appointmentSlotTaken": "Bu randevu zamanı daha önce alınmış.",
     "freebarberNotAvailable": "Serbest berber şu anda müsait değil.",
     "freebarberNotFound": "Serbest berber bulunamadı.",
@@ -621,6 +628,10 @@
     "stepStoreHours": "Çalışma Saatleri",
     "stepStoreAddress": "Adres",
     "addPanelText": "Lütfen Panel Ekleyin",
+    "selectChair": "Koltuk Seçin",
+    "selectTime": "Saat Seçin",
+    "selectedTime": "Seçilen Saat",
+    "hours": "Saat",
     "selectChairFirst": "Önce koltuk seç",
     "timePassed": "ZAMAN GEÇTİ",
     "assignToBarber": "Berbere ata",
@@ -635,6 +646,11 @@
     "chairPricing": "Koltuk Fiyatları Belirle",
     "rentPriceHourly": "Kiralama Fiyatı - 1 Saatlik",
     "workingHours": "Çalışma Saatleri",
+    "startTimeShort": "Başlangıç",
+    "endTimeShort": "Bitiş",
+    "closed": "Kapalı",
+    "closedDays": "Kapalı Günler",
+    "closedDaysHint": "Kapalı güne dokunarak açabilirsiniz",
     "setAddress": "Adres Belirle",
     "addressDescription": "Adres açıklaması",
     "storeNameLabel": "İşletme Adı",
@@ -704,7 +720,14 @@
     "freebarberUserNotFound": "Serbest berber kullanıcısı bulunamadı.",
     "barberCallFailed": "Berber çağırma işlemi başarısız.",
     "appointmentNotePlaceholder": "Hizmetler, fiyatlar, saat bilgisi yazabilirsiniz...",
-    "appointmentNotePlaceholderAlt": "Hizmetler, fiyatlar, saat bilgisi vb. yazabilirsiniz..."
+    "appointmentNotePlaceholderAlt": "Hizmetler, fiyatlar, saat bilgisi vb. yazabilirsiniz...",
+    "today": "Bugün",
+    "weekGridTitle": "Haftalık müsaitlik",
+    "weekGridFree": "Müsait",
+    "weekGridBooked": "Dolu",
+    "weekGridPast": "Geçmiş",
+    "weekGridClosed": "Kapalı",
+    "selectedTime": "Seçili"
   },
   "complaint": {
     "title": "Şikayet Et",
@@ -750,7 +773,45 @@
     "threadNotFound": "Sohbet bulunamadı",
     "today": "Bugün",
     "yesterday": "Dün",
-    "newMessage": "Yeni Mesaj"
+    "newMessage": "Yeni Mesaj",
+    "reply": "Yanıtla",
+    "delete": "Sil",
+    "deleteMessage": "Mesajı Sil",
+    "deleteMessageConfirm": "Bu mesajı silmek istediğinize emin misiniz?",
+    "replyTo": "Yanıtlıyor:",
+    "replyingTo": "Yanıtlıyorsunuz:",
+    "galleryPermission": "Fotoğraf göndermek için galeri izni gereklidir.",
+    "microphonePermission": "Sesli mesaj için mikrofon izni gereklidir.",
+    "locationPermission": "Konum paylaşmak için konum izni gereklidir.",
+    "imageUploadFailed": "Fotoğraf yüklenemedi. Lütfen tekrar deneyin.",
+    "locationFailed": "Konum alınamadı. Lütfen tekrar deneyin.",
+    "recordingFailed": "Ses kaydı başlatılamadı.",
+    "transcriptionFailed": "Ses metne dönüştürülemedi.",
+    "uploadingMedia": "Medya yükleniyor...",
+    "locationShared": "Konum paylaşıldı",
+    "photo": "Fotoğraf",
+    "location": "Konum",
+    "deleteThread": "Sohbeti Sil",
+    "deleteThreadConfirm": "Bu sohbeti sizin için silmek istiyor musunuz? Diğer katılımcılar sohbeti görmeye devam edecektir.",
+    "fileUploadFailed": "Dosya yüklenemedi. Lütfen tekrar deneyin.",
+    "tapToOpen": "Açmak için dokun",
+    "file": "Dosya"
+  },
+  "ai": {
+    "assistantTitle": "AI Asistan",
+    "tapToSpeak": "Randevularınız hakkında konuşun",
+    "recording": "Dinliyorum...",
+    "transcribing": "Ses dönüştürülüyor...",
+    "thinking": "Düşünüyorum...",
+    "tapToStop": "Durdurmak için dokun",
+    "retry": "Tekrar dene",
+    "actionTaken": "İşlem tamamlandı",
+    "error_recording_permission_denied": "Mikrofon izni gereklidir.",
+    "error_recording_failed": "Ses kaydı başlatılamadı.",
+    "error_transcription_empty": "Ses algılanamadı. Lütfen tekrar konuşun.",
+    "error_whisper_failed": "Ses metne dönüştürülemedi.",
+    "error_ai_error": "AI asistanı yanıt veremedi.",
+    "error_unknown": "Beklenmedik bir hata oluştu."
   },
   "rating": {
     "selectRating": "Lütfen bir puan seçin.",
@@ -983,7 +1044,14 @@
     "topSectionExpandedHint": "Arama ve özeti gizlemek için dokunun",
     "topSectionCollapsedHint": "Arama ve özeti açmak için dokunun",
     "collapseTopSection": "Üst bölümü daralt",
-    "expandTopSection": "Üst bölümü aç"
+    "expandTopSection": "Üst bölümü aç",
+    "viewMyPanel": "Panelimi görüntüle",
+    "viewMyBusinesses": "İşletmelerimi görüntüle",
+    "layoutToggleHint": "Liste veya ızgara",
+    "overflowCompare": "Karşılaştır",
+    "overflowPhotos": "Fotoğrafları gör",
+    "overflowMenuA11y": "Panel işlemleri",
+    "locationDeniedShort": "Konum izni kapalı; keşif kapalı, panel verileriniz yine de yüklenir."
   },
   "moderation": {
     "inappropriateText": "Mesajınız uygunsuz içerik barındırmaktadır. Lütfen küfür, hakaret veya uygunsuz ifadeler kullanmayınız.",
@@ -1000,5 +1068,10 @@
     "consentAgreement": "Kişisel verilerimin işlenmesine açık rıza veriyorum.",
     "mustAgree": "Devam etmek için sözleşmeleri kabul etmelisiniz.",
     "close": "Kapat"
+  },
+  "nativePermissions": {
+    "locationWhenInUse": "Yakınındaki berber ve dükkanları göstermek için konumunu kullanır.",
+    "locationAlways": "Uygulama arka plandayken serbest berber konumunun güncel kalması için konum kullanılır.",
+    "microphone": "Sesli mesaj göndermek için mikrofon kullanılır."
   }
 }

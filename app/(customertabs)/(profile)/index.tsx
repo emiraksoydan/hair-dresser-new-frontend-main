@@ -1,6 +1,7 @@
 import { InteractionManager, View, ScrollView, RefreshControl, TouchableOpacity } from 'react-native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Text } from '../../components/common/Text'
-import { Avatar, IconButton, TextInput, HelperText, Icon, Switch, Portal, Modal as PaperModal } from 'react-native-paper';
+import { Avatar, HelperText, Icon, IconButton, Modal as PaperModal, Portal, Switch, TextInput } from "react-native-paper";
 import { OtpInput } from 'react-native-otp-entry';
 import { Button } from '../../components/common/Button';
 import { useRevokeMutation, useGetMeQuery, useUpdateProfileMutation, useUploadImageMutation, useUpdateImageBlobMutation, useSendPhoneChangeOtpMutation, useUpdatePhoneMutation, useGetSettingQuery, useUpdateSettingMutation } from '../../store/api';
@@ -27,6 +28,7 @@ import { useTheme } from '../../hook/useTheme';
 import { DEFAULT_AVATAR } from '../../constants/images';
 import { useSafeNavigation } from '../../hook/useSafeNavigation';
 import { useActionGuard } from '../../hook/useActionGuard';
+import { getTabFabScrollPadding } from '../../components/layout/panelBottomOverlays';
 
 const createProfileSchema = (t: (key: string) => string) => z.object({
     firstName: z.string({ required_error: t('auth.firstName') + ' ' + t('common.required') })
@@ -46,6 +48,8 @@ type ProfileFormValues = z.infer<ReturnType<typeof createProfileSchema>>;
 const Index = () => {
     const router = useSafeNavigation();
     const guard = useActionGuard();
+    const insets = useSafeAreaInsets();
+    const scrollBottomPad = useMemo(() => getTabFabScrollPadding(insets.bottom), [insets.bottom]);
     const { t, currentLanguage } = useLanguage();
     const { themeMode, toggleTheme } = useThemeContext();
     const { colors, isDark } = useTheme();
@@ -81,7 +85,6 @@ const Index = () => {
     }, [settingData?.data?.showImageAnimation, settingData?.data?.showPriceAnimation]);
 
     // Memoize theme objects
-
 
     // Memoize avatar source
     const avatarSource = useMemo(() => {
@@ -342,6 +345,7 @@ const Index = () => {
         <ScrollView
             className='flex-1 pl-0 pt-4'
             style={{ backgroundColor: colors.screenBg }}
+            contentContainerStyle={{ paddingBottom: scrollBottomPad }}
             refreshControl={
                 <RefreshControl
                     refreshing={refreshing}
@@ -627,7 +631,6 @@ const Index = () => {
                         />
                     </View>
                 </View>
-
 
                 <Button
                     mode='contained'

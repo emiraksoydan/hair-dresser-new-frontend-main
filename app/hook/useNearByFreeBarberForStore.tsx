@@ -32,6 +32,16 @@ export function useNearbyStoresControl({
     const [error, setError] = useState<any>(null);
     const [location, setLocation] = useState<{ latitude: number; longitude: number } | undefined>(undefined);
 
+    /** Bağımsız “sadece benim işletmelerim” ekranında keşif kapalıyken yükleme bayrağını sıfırla */
+    useEffect(() => {
+        if (!enabled) {
+            setIsInitialLoad(false);
+            setIsLoading(false);
+            setFreeBarbers([]);
+            setError(null);
+        }
+    }, [enabled]);
+
     // Konum izni kontrolü
     useEffect(() => {
         if (!enabled) return;

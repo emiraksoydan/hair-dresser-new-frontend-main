@@ -1,3 +1,4 @@
+import { Icon } from "react-native-paper";
 import React, { useMemo, useState } from "react";
 import {
   View,
@@ -8,7 +9,7 @@ import {
 } from "react-native";
 import { Text } from "../common/Text";
 import { BottomSheetView, BottomSheetFlatList } from "@gorhom/bottom-sheet";
-import { Icon } from "react-native-paper";
+
 import { useGetRatingsByTargetQuery } from "../../store/api";
 import { RatingGetDto, UserType, BarberType } from "../../types";
 import { useAuth } from "../../hook/useAuth";

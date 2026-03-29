@@ -1,14 +1,17 @@
 import React, { useCallback, useMemo, useRef, useState } from "react";
 import {
   Dimensions,
-  FlatList,
   RefreshControl,
   TouchableOpacity,
   View,
 } from "react-native";
+import Animated, {
+  useAnimatedScrollHandler,
+  useSharedValue,
+} from "react-native-reanimated";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Text } from "../../components/common/Text";
 import MapView from "react-native-maps";
-import { IconButton } from "react-native-paper";
 import { useSafeNavigation } from "../../hook/useSafeNavigation";
 import SearchBar from "../../components/common/searchbar";
 import { BottomSheetModal, BottomSheetView } from "@gorhom/bottom-sheet";
@@ -41,13 +44,28 @@ import { useTheme } from "../../hook/useTheme";
 import { useActionGuard } from "../../hook/useActionGuard";
 import { isOtherUsersFreeBarber, isOtherUsersStore } from "../../utils/compare-eligibility";
 import { PanelCollapsibleTop } from "../../components/panel/PanelCollapsibleTop";
+import { PerplexityHorizontalList } from "../../components/panel/PerplexityHorizontalList";
+import { usePanelMoreFab } from "../../hook/usePanelMoreFab";
+import { getCompareStripBottom } from "../../components/layout/panelBottomOverlays";
+import {
+  compareStripCtaStyle,
+  compareStripOuterStyle,
+  useCompareMetrics,
+} from "../../(screens)/compare/compareShared";
+import { ScrollStackItem } from "../../components/common/ScrollStackItem";
 
 const { width: screenWidth } = Dimensions.get("window");
 
 const Index = () => {
+  const insets = useSafeAreaInsets();
+  const compareStripBottom = useMemo(
+    () => getCompareStripBottom(insets.bottom),
+    [insets.bottom],
+  );
   const { colors, isDark } = useTheme();
   const dispatch = useAppDispatch();
   const { t } = useLanguage();
+  const cmpM = useCompareMetrics();
   const router = useSafeNavigation();
   const guard = useActionGuard();
 
@@ -140,6 +158,19 @@ const Index = () => {
     BarberStoreGetDto | FreeBarGetDto | null
   >(null);
 
+  const panelMapFabItems = useMemo(
+    () => [
+      {
+        id: "panel-map-toggle",
+        icon: isMapMode ? "format-list-bulleted" : "map",
+        label: isMapMode ? t("common.list") : t("common.searchOnMap"),
+        onPress: () => setIsMapMode((m) => !m),
+      },
+    ],
+    [isMapMode, t],
+  );
+  usePanelMoreFab(panelMapFabItems);
+
   // Bottom Sheet States
   const [selectedRatingsTarget, setSelectedRatingsTarget] = useState<{
     targetId: string;
@@ -196,6 +227,13 @@ const Index = () => {
       isRefreshingRef.current = false;
     }
   }, [manualFetchStores, manualFetchFreeBarbers, hasError, locationStatus]);
+
+  const scrollY = useSharedValue(0);
+  const onVerticalScroll = useAnimatedScrollHandler({
+    onScroll: (e) => {
+      scrollY.value = e.contentOffset.y;
+    },
+  });
 
   // Navigation handlers
   const goStoreDetail = useCallback(
@@ -416,76 +454,203 @@ const Index = () => {
     ],
   );
 
-  // List data for FlatList
   const listData = useMemo(() => {
-    const items: Array<{
-      id: string;
-      type:
-      | "stores-header"
-      | "stores-list"
-      | "stores-empty"
-      | "stores-loading"
-      | "stores-error"
-      | "stores-content-horizontal"
-      | "freebarbers-header"
-      | "freebarbers-list"
-      | "freebarbers-empty"
-      | "freebarbers-loading"
-      | "freebarbers-error"
-      | "freebarbers-content-horizontal";
-      data?: any;
-    }> = [];
+    const H = {
+      storesHeader: 52,
+      storesLoading: 130,
+      storesError: 360,
+      storesEmpty: 360,
+      storeRow: expandedStores ? (isList ? 300 : 270) : 200,
+      storesHorizontal: 220,
+      freebarbersHeader: 72,
+      freebarbersLoading: 130,
+      freebarbersError: 360,
+      freebarbersEmpty: 360,
+      fbRow: expandedFreeBarbers ? (isList ? 300 : 270) : 200,
+      freebarbersHorizontal: 220,
+    };
+
+    type Row =
+      | {
+          id: string;
+          type: "stores-header";
+          _scrollStart: number;
+          _scrollLen: number;
+        }
+      | {
+          id: string;
+          type: "stores-loading";
+          _scrollStart: number;
+          _scrollLen: number;
+        }
+      | {
+          id: string;
+          type: "stores-error";
+          _scrollStart: number;
+          _scrollLen: number;
+        }
+      | {
+          id: string;
+          type: "stores-empty";
+          _scrollStart: number;
+          _scrollLen: number;
+        }
+      | {
+          id: string;
+          type: "store-row";
+          data: BarberStoreGetDto;
+          _scrollStart: number;
+          _scrollLen: number;
+        }
+      | {
+          id: string;
+          type: "stores-content-horizontal";
+          data: BarberStoreGetDto[];
+          _scrollStart: number;
+          _scrollLen: number;
+        }
+      | {
+          id: string;
+          type: "freebarbers-header";
+          _scrollStart: number;
+          _scrollLen: number;
+        }
+      | {
+          id: string;
+          type: "freebarbers-loading";
+          _scrollStart: number;
+          _scrollLen: number;
+        }
+      | {
+          id: string;
+          type: "freebarbers-error";
+          _scrollStart: number;
+          _scrollLen: number;
+        }
+      | {
+          id: string;
+          type: "freebarbers-empty";
+          _scrollStart: number;
+          _scrollLen: number;
+        }
+      | {
+          id: string;
+          type: "freebarber-row";
+          data: FreeBarGetDto;
+          _scrollStart: number;
+          _scrollLen: number;
+        }
+      | {
+          id: string;
+          type: "freebarbers-content-horizontal";
+          data: FreeBarGetDto[];
+          _scrollStart: number;
+          _scrollLen: number;
+        };
+
+    const rows: Row[] = [];
+    let y = 0;
+    const push = (partial: Record<string, unknown>, h: number) => {
+      const r = {
+        ...partial,
+        _scrollStart: y,
+        _scrollLen: h,
+      } as Row;
+      rows.push(r);
+      y += h;
+    };
 
     const shouldShowStores =
       filterCriteria.userType === "all" ||
       filterCriteria.userType === "store";
+    if (shouldShowStores) {
+      push({ id: "stores-header", type: "stores-header" }, H.storesHeader);
+      if (!storesFetchedOnce || (storesLoading && filteredStores.length === 0)) {
+        push({ id: "stores-loading", type: "stores-loading" }, H.storesLoading);
+      } else if (storesError) {
+        push({ id: "stores-error", type: "stores-error" }, H.storesError);
+      } else {
+        const storesToDisplay = filteredStores;
+        if (storesToDisplay.length > 0) {
+          if (expandedStores) {
+            storesToDisplay.forEach((store) => {
+              push(
+                {
+                  id: `store-${store.id}`,
+                  type: "store-row",
+                  data: store,
+                },
+                H.storeRow,
+              );
+            });
+          } else {
+            push(
+              {
+                id: "stores-content-horizontal",
+                type: "stores-content-horizontal",
+                data: storesToDisplay,
+              },
+              H.storesHorizontal,
+            );
+          }
+        } else {
+          push({ id: "stores-empty", type: "stores-empty" }, H.storesEmpty);
+        }
+      }
+    }
+
     const shouldShowFreeBarbers =
       filterCriteria.userType === "all" ||
       filterCriteria.userType === "freeBarber";
-
-    if (shouldShowStores) {
-      items.push({ id: "stores-header", type: "stores-header" });
-      if (!storesFetchedOnce || (storesLoading && filteredStores.length === 0)) {
-        items.push({ id: "stores-loading", type: "stores-loading" });
-      } else if (storesError) {
-        items.push({ id: "stores-error", type: "stores-error" });
-      } else if (filteredStores.length > 0) {
-        if (expandedStores) {
-          items.push({ id: "stores-list", type: "stores-list", data: filteredStores });
-        } else {
-          items.push({
-            id: "stores-content-horizontal",
-            type: "stores-content-horizontal",
-            data: filteredStores,
-          });
-        }
-      } else {
-        items.push({ id: "stores-empty", type: "stores-empty" });
-      }
-    }
-
     if (shouldShowFreeBarbers) {
-      items.push({ id: "freebarbers-header", type: "freebarbers-header" });
+      push(
+        { id: "freebarbers-header", type: "freebarbers-header" },
+        H.freebarbersHeader,
+      );
       if (!freeBarbersFetchedOnce || (freeBarbersLoading && filteredFreeBarbers.length === 0)) {
-        items.push({ id: "freebarbers-loading", type: "freebarbers-loading" });
+        push(
+          { id: "freebarbers-loading", type: "freebarbers-loading" },
+          H.freebarbersLoading,
+        );
       } else if (freeBarbersError) {
-        items.push({ id: "freebarbers-error", type: "freebarbers-error" });
-      } else if (filteredFreeBarbers.length > 0) {
-        if (expandedFreeBarbers) {
-          items.push({ id: "freebarbers-list", type: "freebarbers-list", data: filteredFreeBarbers });
-        } else {
-          items.push({
-            id: "freebarbers-content-horizontal",
-            type: "freebarbers-content-horizontal",
-            data: filteredFreeBarbers,
-          });
-        }
+        push(
+          { id: "freebarbers-error", type: "freebarbers-error" },
+          H.freebarbersError,
+        );
       } else {
-        items.push({ id: "freebarbers-empty", type: "freebarbers-empty" });
+        const freeBarbersToDisplay = filteredFreeBarbers;
+        if (freeBarbersToDisplay.length > 0) {
+          if (expandedFreeBarbers) {
+            freeBarbersToDisplay.forEach((fb) => {
+              push(
+                {
+                  id: `freebarber-${(fb as any).id}`,
+                  type: "freebarber-row",
+                  data: fb,
+                },
+                H.fbRow,
+              );
+            });
+          } else {
+            push(
+              {
+                id: "freebarbers-content-horizontal",
+                type: "freebarbers-content-horizontal",
+                data: freeBarbersToDisplay,
+              },
+              H.freebarbersHorizontal,
+            );
+          }
+        } else {
+          push(
+            { id: "freebarbers-empty", type: "freebarbers-empty" },
+            H.freebarbersEmpty,
+          );
+        }
       }
     }
 
-    return items;
+    return rows;
   }, [
     filterCriteria.userType,
     storesLoading,
@@ -498,7 +663,13 @@ const Index = () => {
     freeBarbersError,
     filteredFreeBarbers,
     expandedFreeBarbers,
+    isList,
   ]);
+
+  const verticalSnapOffsets = useMemo(
+    () => listData.map((r) => r._scrollStart),
+    [listData],
+  );
 
   return (
     <View className="flex flex-1 pl-4 pr-2" style={{ backgroundColor: colors.screenBg }}>
@@ -547,9 +718,15 @@ const Index = () => {
         </View>
       )}
       <View style={{ flex: 1 }} pointerEvents={isMapMode ? 'none' : 'auto'}>
-        <FlatList
+        <Animated.FlatList
           data={listData}
           keyExtractor={(item) => item.id}
+          onScroll={onVerticalScroll}
+          scrollEventThrottle={16}
+          decelerationRate="fast"
+          snapToOffsets={
+            verticalSnapOffsets.length > 0 ? verticalSnapOffsets : undefined
+          }
           contentContainerStyle={{ paddingBottom: 100 }}
           showsVerticalScrollIndicator={false}
           removeClippedSubviews={false}
@@ -560,6 +737,8 @@ const Index = () => {
               tintColor="#c2a523"
             />
           }
+          initialNumToRender={10}
+          windowSize={21}
           renderItem={({ item }) => {
             if (item.type === "stores-header") {
               return (
@@ -625,28 +804,29 @@ const Index = () => {
                 </View>
               );
             }
-            if (item.type === "stores-list") {
+            if (item.type === "store-row") {
               return (
-                <View>
-                  {item.data.map((store: BarberStoreGetDto) => (
-                    <View key={store.id}>
-                      {renderStoreItem({ item: store })}
-                    </View>
-                  ))}
-                </View>
+                <ScrollStackItem
+                  scroll={scrollY}
+                  itemStride={item._scrollLen}
+                  scrollAnchor={item._scrollStart}
+                  bandLength={item._scrollLen}
+                >
+                  {renderStoreItem({ item: item.data })}
+                </ScrollStackItem>
               );
             }
 
             if (item.type === "stores-content-horizontal") {
               return (
                 <View style={{ minHeight: 200 }}>
-                  <FlatList
+                  <PerplexityHorizontalList
                     data={item.data}
-                    keyExtractor={(store) => store.id}
-                    renderItem={renderStoreItem}
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    contentContainerStyle={{ gap: 12, paddingTop: 8 }}
+                    keyExtractor={(store: BarberStoreGetDto) => store.id}
+                    snapInterval={cardWidthStore + 12}
+                    minHeight={isList ? 260 : 280}
+                    contentContainerStyle={{ paddingTop: 8, paddingBottom: 4 }}
+                    renderItem={({ item: store }) => renderStoreItem({ item: store })}
                   />
                 </View>
               );
@@ -721,28 +901,29 @@ const Index = () => {
               );
             }
 
-            if (item.type === "freebarbers-list") {
+            if (item.type === "freebarber-row") {
               return (
-                <View>
-                  {item.data.map((fb: FreeBarGetDto) => (
-                    <View key={(fb as any).id}>
-                      {renderFreeBarberItem({ item: fb })}
-                    </View>
-                  ))}
-                </View>
+                <ScrollStackItem
+                  scroll={scrollY}
+                  itemStride={item._scrollLen}
+                  scrollAnchor={item._scrollStart}
+                  bandLength={item._scrollLen}
+                >
+                  {renderFreeBarberItem({ item: item.data })}
+                </ScrollStackItem>
               );
             }
 
             if (item.type === "freebarbers-content-horizontal") {
               return (
                 <View style={{ minHeight: 200 }}>
-                  <FlatList
+                  <PerplexityHorizontalList
                     data={item.data}
                     keyExtractor={(fb: FreeBarGetDto) => (fb as any).id}
-                    renderItem={renderFreeBarberItem}
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    contentContainerStyle={{ gap: 12, paddingTop: 8 }}
+                    snapInterval={cardWidthFreeBarber + 12}
+                    minHeight={isList ? 260 : 280}
+                    contentContainerStyle={{ paddingTop: 8, paddingBottom: 4 }}
+                    renderItem={({ item: fb }) => renderFreeBarberItem({ item: fb })}
                   />
                 </View>
               );
@@ -754,10 +935,7 @@ const Index = () => {
       </View>
 
       {(compareStoreIds.length === 2 || compareFbIds.length === 2) && (
-        <View
-          className="absolute left-4 right-4 z-30 px-3 py-3 rounded-2xl"
-          style={{ bottom: 88, backgroundColor: isDark ? "#1a1a2e" : "#ffffff", borderWidth: 1, borderColor: "#ffb90055", elevation: 10 }}
-        >
+        <View style={[{ zIndex: 30 }, compareStripOuterStyle(isDark, cmpM, compareStripBottom)]}>
           <TouchableOpacity
             onPress={() => {
               if (compareStoreIds.length === 2) {
@@ -776,32 +954,14 @@ const Index = () => {
                 });
               }
             }}
-            className="items-center py-2 rounded-xl"
-            style={{ backgroundColor: "#ffb900" }}
+            style={compareStripCtaStyle(cmpM)}
           >
-            <Text className="font-century-gothic-bold text-base" style={{ color: "#1f2937" }}>
+            <Text style={{ fontFamily: "CenturyGothic-Bold", fontSize: cmpM.rowFont + 2, color: "#1f2937" }}>
               {t("compare.continue")}
             </Text>
           </TouchableOpacity>
         </View>
       )}
-
-      {/* Map toggle button */}
-      <TouchableOpacity
-        onPress={() => setIsMapMode(!isMapMode)}
-        className="absolute right-0 bottom-6 rounded-full rounded-r-none items-center justify-center z-20 shadow-lg px-2 py-1 flex-row gap-0"
-        style={{ backgroundColor: colors.mapToggleBg, borderColor: colors.mapToggleBorder, borderWidth: 1, elevation: 8 }}
-      >
-        <IconButton
-          icon={isMapMode ? "format-list-bulleted" : "map"}
-          iconColor="#ffb900"
-          size={24}
-          style={{ margin: 0 }}
-        />
-        <Text className="font-semibold text-sm" style={{ color: colors.sectionHeaderText }}>
-          {isMapMode ? t("common.list") : t("common.searchOnMap")}
-        </Text>
-      </TouchableOpacity>
 
       {/* Filter drawer */}
       <FilterDrawer

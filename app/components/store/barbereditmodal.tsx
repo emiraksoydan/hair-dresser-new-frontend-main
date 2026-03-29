@@ -2,13 +2,7 @@
 import "react-native-get-random-values";
 import React, { useEffect, useState } from "react";
 import { View, TouchableOpacity, Image } from "react-native";
-import {
-  Dialog,
-  HelperText,
-  Icon,
-  Portal,
-  TextInput,
-} from "react-native-paper";
+import { Dialog, HelperText, Icon, Portal, TextInput } from "react-native-paper";
 import { Text } from "../common/Text";
 import { useAppDispatch } from "../../store/hook";
 import { showSnack } from "../../store/snackbarSlice";

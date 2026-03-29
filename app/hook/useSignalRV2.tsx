@@ -52,7 +52,9 @@ export const useSignalRV2 = () => {
       dispatch(
         api.util.updateQueryData("getAllNotifications", undefined, (draft) => {
           if (!draft) return;
-          if (!draft.some((n) => n.id === dto.id)) {
+          const norm = (s: string) => s.replace(/-/g, "").toLowerCase();
+          const idN = norm(dto.id);
+          if (!draft.some((n) => norm(n.id) === idN)) {
             draft.unshift({ ...dto, _updatedAt: Date.now() });
           }
         }),
@@ -63,13 +65,14 @@ export const useSignalRV2 = () => {
       dispatch(
         api.util.updateQueryData("getAllNotifications", undefined, (draft) => {
           if (!draft) return;
-          const index = draft.findIndex((n) => n.id === dto.id);
+          const norm = (s: string) => s.replace(/-/g, "").toLowerCase();
+          const idN = norm(dto.id);
+          const index = draft.findIndex((n) => norm(n.id) === idN);
           if (index >= 0) {
             draft[index] = { ...dto, _updatedAt: Date.now() };
-          } else {
-            draft.unshift({ ...dto, _updatedAt: Date.now() });
-            // badge.updated event'i badge count'u ayrıca güncelleyecek
           }
+          // Listede yoksa ekleme: optimistic/son silme sonrası aynı id ile güncelleme hayalet satır yaratırdı.
+          // Yeni bildirimler notification.received ile gelir.
         }),
       );
     });
@@ -109,7 +112,16 @@ export const useSignalRV2 = () => {
           api.util.updateQueryData("getChatMessagesByThread", { threadId: dto.threadId }, (draft) => {
             if (!draft) return;
             if (!draft.find((m) => m.messageId === dto.messageId)) {
-              draft.push({ messageId: dto.messageId, senderUserId: dto.senderUserId, text: dto.text, createdAt: dto.createdAt });
+              draft.push({
+                messageId: dto.messageId,
+                senderUserId: dto.senderUserId,
+                text: dto.text,
+                createdAt: dto.createdAt,
+                messageType: dto.messageType,
+                mediaUrl: dto.mediaUrl,
+                replyToMessageId: dto.replyToMessageId,
+                replyToTextPreview: dto.replyToTextPreview,
+              });
               draft.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
             }
           }),

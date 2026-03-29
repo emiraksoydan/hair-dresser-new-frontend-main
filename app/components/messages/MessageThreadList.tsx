@@ -3,12 +3,15 @@
  * Used across different user type message pages
  */
 
+import { Icon } from "react-native-paper";
 import React, { useMemo, useCallback } from 'react';
-import { View, TouchableOpacity, RefreshControl, ScrollView } from 'react-native';
+import { View, TouchableOpacity, RefreshControl } from 'react-native';
 import { Text } from '../common/Text';
-import { LegendList } from '@legendapp/list';
+import { useAnimatedScrollHandler, useSharedValue } from 'react-native-reanimated';
+import { AnimatedLegendList } from '../common/AnimatedLegendList';
+import { ScrollStackItem } from '../common/ScrollStackItem';
 import { useSafeNavigation } from '../../hook/useSafeNavigation';
-import { Icon } from 'react-native-paper';
+
 import { useGetChatThreadsQuery } from '../../store/api';
 import { ChatThreadListItemDto, ChatThreadParticipantDto, AppointmentStatus, UserType, BarberType, ImageOwnerType } from '../../types';
 import { SkeletonComponent } from '../common/skeleton';
@@ -27,10 +30,18 @@ interface MessageThreadListProps {
     iconSource: string; // Icon name for the avatar (react-native-paper icon name)
 }
 
+const THREAD_ROW_STRIDE = 132;
+
 export const MessageThreadList: React.FC<MessageThreadListProps> = ({ routePrefix, iconSource }) => {
     const router = useSafeNavigation();
     const { t } = useLanguage();
     const { colors, isDark } = useTheme();
+    const scrollY = useSharedValue(0);
+    const onThreadScroll = useAnimatedScrollHandler({
+        onScroll: (e) => {
+            scrollY.value = e.contentOffset.y;
+        },
+    });
     const { data: threads, isLoading, refetch, isFetching, error, isError } = useGetChatThreadsQuery();
     const formatTime = useFormatTime();
     const { userType: currentUserType } = useAuth();
@@ -46,7 +57,7 @@ export const MessageThreadList: React.FC<MessageThreadListProps> = ({ routePrefi
     // - Favori thread'ler: En az 1 aktif favori varsa görünür
     // - Randevu thread'leri: Sadece Pending/Approved durumunda görünür
 
-    const renderItem = useCallback(({ item }: { item: ChatThreadListItemDto }) => {
+    const renderItem = useCallback(({ item, index }: { item: ChatThreadListItemDto; index: number }) => {
         const hasUnread = item.unreadCount > 0;
         const statusColor = item.status ? getAppointmentStatusColor(item.status) : undefined;
         const statusText = item.status === AppointmentStatus.Approved
@@ -198,10 +209,17 @@ export const MessageThreadList: React.FC<MessageThreadListProps> = ({ routePrefi
         };
 
         return (
+            <ScrollStackItem index={index} scroll={scrollY} itemStride={THREAD_ROW_STRIDE}>
             <TouchableOpacity
                 onPress={handlePress}
-                className="rounded-xl pt-2 p-4 mb-3"
-                style={{ backgroundColor: threadBackground, borderWidth: 1, borderColor: threadBorder, ...cardShadowStyle }}
+                className="rounded-2xl pt-2 p-4 mb-3"
+                activeOpacity={0.82}
+                style={{
+                    backgroundColor: hasUnread ? threadBackground : colors.cardBg,
+                    borderWidth: 1,
+                    borderColor: hasUnread ? threadBorder : (isDark ? 'rgba(148,163,184,0.18)' : 'rgba(148,163,184,0.28)'),
+                    ...cardShadowStyle,
+                }}
             >
                 {statusText && statusColor ? (
                     <View className="flex-row items-center mb-2 justify-end gap-2">
@@ -283,8 +301,9 @@ export const MessageThreadList: React.FC<MessageThreadListProps> = ({ routePrefi
                     </View>
                 </View>
             </TouchableOpacity>
+            </ScrollStackItem>
         );
-    }, [router, routePrefix, iconSource, formatTime, currentUserType, t, isDark, colors, mutedTextColor, tertiaryTextColor, unreadAccent, cardShadowStyle]);
+    }, [router, routePrefix, iconSource, formatTime, currentUserType, t, isDark, colors, mutedTextColor, tertiaryTextColor, unreadAccent, cardShadowStyle, scrollY]);
 
     // Loading durumu
     if (isLoading) {
@@ -295,53 +314,37 @@ export const MessageThreadList: React.FC<MessageThreadListProps> = ({ routePrefi
         );
     }
 
-    // Error veya Empty durumu - UnifiedStateWrapper ile
     const hasNoThreads = !threads || (Array.isArray(threads) && threads.length === 0);
-
-    if (isError || hasNoThreads) {
-        return (
-            <ScrollView
-                className="flex-1"
-                style={{ backgroundColor: colors.screenBg }}
-                contentContainerStyle={{ flexGrow: 1, paddingHorizontal: 8 }}
-                refreshControl={
-                    <RefreshControl
-                        refreshing={isFetching && !isLoading}
-                        onRefresh={refetch}
-                        tintColor="#f05e23"
-                    />
-                }
-            >
-                <UnifiedStateWrapper
-                    loading={isLoading}
-                    error={error}
-                    data={threads}
-                    fetchedOnce={true}
-                    onRetry={refetch}
-                    customMessages={{
-                        empty: t('empty.noMessages'),
-                    }}
-                    customAnimations={{
-                        empty: require("../../../assets/animations/messages-empty.json"),
-                    }}
-                >
-                    <View />
-                </UnifiedStateWrapper>
-            </ScrollView>
-        );
-    }
 
     return (
         <View className="flex-1" style={{ backgroundColor: colors.screenBg }}>
-            <LegendList
+            <AnimatedLegendList
                 data={threads ?? []}
-                keyExtractor={(item) => item.threadId}
+                keyExtractor={((item: ChatThreadListItemDto) => item.threadId) as any}
                 estimatedItemSize={100}
-                contentContainerStyle={{ padding: 16, paddingBottom: 28, gap: 12 }}
-                // Performance optimizations
-                recycleItems={true} // Item recycling için
-                drawDistance={250} // Render mesafesi
-                renderItem={renderItem}
+                scrollEventThrottle={16}
+                onScroll={onThreadScroll}
+                contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 16, paddingBottom: 28, gap: 4 }}
+                recycleItems={true}
+                drawDistance={250}
+                renderItem={renderItem as any}
+                ListEmptyComponent={
+                    <UnifiedStateWrapper
+                        loading={false}
+                        error={isError ? error : undefined}
+                        data={hasNoThreads && !isError ? [] : threads}
+                        fetchedOnce={true}
+                        onRetry={refetch}
+                        customMessages={{
+                            empty: t('empty.noMessages'),
+                        }}
+                        customAnimations={{
+                            empty: require("../../../assets/animations/messages-empty.json"),
+                        }}
+                    >
+                        <View />
+                    </UnifiedStateWrapper>
+                }
                 refreshControl={
                     <RefreshControl
                         refreshing={isFetching && !isLoading}

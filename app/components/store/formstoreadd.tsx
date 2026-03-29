@@ -11,15 +11,7 @@ import {
 } from "react-native";
 import { Text } from "../common/Text";
 import React, { useEffect, useMemo, useState, useRef, useCallback } from "react";
-import {
-  Divider,
-  Icon,
-  IconButton,
-  TextInput,
-  HelperText,
-  Avatar,
-  Chip,
-} from "react-native-paper";
+import { Avatar, Chip, Divider, HelperText, Icon, IconButton, TextInput } from "react-native-paper";
 import { Button } from "../common/Button";
 import { useForm, Controller, useWatch, useFieldArray } from "react-hook-form";
 import { z } from "zod";
@@ -65,6 +57,7 @@ import { showSnack } from "../../store/snackbarSlice";
 import { useCanPerformAction } from "../../hook/useCanPerformAction";
 import { mapBarberType, mapPricingType } from "../../utils/form/form-mappers";
 import { ChairItem } from "./ChairItem";
+import { WorkingHoursAccordion } from "./WorkingHoursAccordion";
 import { ManuelBarberItem } from "./ManuelBarberItem";
 import { useOptimizedChairOptions } from "../../hooks/useOptimizedFieldArray";
 import { useAuth } from "../../hook/useAuth";
@@ -592,9 +585,6 @@ const FormStoreAdd = ({
   const guard = useActionGuard();
   const [isImagePickerLoading, setIsImagePickerLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [activeDay, setActiveDay] = useState<number>(1);
-  const [activeStart, setActiveStart] = useState(fromHHmm("09:00"));
-  const [activeEnd, setActiveEnd] = useState(fromHHmm("18:00"));
   // Dil değiştiğinde validation'ı tetikle
   useEffect(() => {
     if (Object.keys(errors).length > 0) {
@@ -1077,26 +1067,6 @@ const FormStoreAdd = ({
       });
     });
   }, [holidayDays?.length, getValues, setValue]);
-  // FIX: Use working length instead of working array to avoid infinite loop
-  const workingLengthRef = useRef<number>(0);
-  const lastActiveDayRef = useRef<number | undefined>(undefined);
-  useEffect(() => {
-    const currentLength = working?.length || 0;
-    const lengthChanged = currentLength !== workingLengthRef.current;
-    const dayChanged = activeDay !== lastActiveDayRef.current;
-
-    if (lengthChanged || dayChanged) {
-      const i = (working ?? []).findIndex((w) => w.dayOfWeek === activeDay);
-      if (i >= 0) {
-        const s = getValues(`workingHours.${i}.startTime`);
-        const e = getValues(`workingHours.${i}.endTime`);
-        setActiveStart(fromHHmm(s, "09:00"));
-        setActiveEnd(fromHHmm(e, "18:00"));
-      }
-    }
-    workingLengthRef.current = currentLength;
-    lastActiveDayRef.current = activeDay;
-  }, [activeDay, working?.length, getValues]);
   const updateLocation = (latitude: number, longitude: number) => {
     const addr = getValues("location.addressDescription") ?? "";
     setValue(
@@ -1914,105 +1884,21 @@ const FormStoreAdd = ({
                     {t("form.workingHours")}
                   </Text>
                   <View className="mt-2 mx-0 rounded-xl px-2 py-3" style={{ backgroundColor: colors.cardBg }}>
-                    <View className="mt-2 px-0">
-                      <View className="flex-row  gap-2">
-                        {DAYS_TR.map((d) => {
-                          const isHoliday = (holidayDays ?? []).includes(d.day);
-                          const isActive = activeDay === d.day;
-                          return (
-                            <TouchableOpacity
-                              key={d.day}
-                              disabled={isHoliday}
-                              onPress={() => setActiveDay(d.day)}
-                              className={`px-3 py-2 rounded-full border ${isHoliday
-                                ? "opacity-40 border-gray-600"
-                                : isActive
-                                  ? "bg-emerald-500"
-                                  : "border-gray-500"
-                                }`}
-                              activeOpacity={0.8}
-                            >
-                              <Text className="text-white text-xs" style={{ color: colors.sectionHeaderText }}>{d.label}</Text>
-                            </TouchableOpacity>
-                          );
-                        })}
-                      </View>
-                      {(() => {
-                        const idx = (working ?? []).findIndex(
-                          (w) => w.dayOfWeek === activeDay,
-                        );
-                        if (idx < 0) return null;
-                        const dayRow = working[idx];
-                        const isDisabled =
-                          dayRow?.isClosed || (holidayDays ?? []).includes(activeDay);
-                        const dayErr = errors.workingHours?.[idx];
-                        return (
-                          <View className="mt-0 rounded-xl p-0" style={{ backgroundColor: colors.cardBg }}>
-                            <View className="flex-row items-center mt-6">
-                              <Text className="text-white text-sm" style={{ color: colors.sectionHeaderText }}>
-                                Başlangıç saati:
-                              </Text>
-                              <DateTimePicker
-                                value={activeStart}
-                                mode="time"
-                                is24Hour
-                                locale="tr-TR"
-                                disabled={isDisabled}
-                                onChange={(_, d) => {
-                                  if (!d || isDisabled) return;
-                                  setActiveStart(d);
-                                  setValue(
-                                    `workingHours.${idx}.startTime`,
-                                    fmtHHmm(d),
-                                    {
-                                      shouldDirty: true,
-                                      shouldValidate: true,
-                                    },
-                                  );
-                                  trigger([
-                                    `workingHours.${idx}.startTime`,
-                                    `workingHours.${idx}.endTime`,
-                                  ]);
-                                }}
-                              />
-                              <Text className="text-white text-sm ml-5" style={{ color: colors.sectionHeaderText }}>
-                                Bitiş saati:
-                              </Text>
-                              <DateTimePicker
-                                value={activeEnd}
-                                mode="time"
-                                is24Hour
-                                locale="tr-TR"
-                                disabled={isDisabled}
-                                onChange={(_, d) => {
-                                  if (!d || isDisabled) return;
-                                  setActiveEnd(d);
-                                  setValue(
-                                    `workingHours.${idx}.endTime`,
-                                    fmtHHmm(d),
-                                    {
-                                      shouldDirty: true,
-                                      shouldValidate: true,
-                                    },
-                                  );
-                                  trigger([
-                                    `workingHours.${idx}.startTime`,
-                                    `workingHours.${idx}.endTime`,
-                                  ]);
-                                }}
-                              />
-                            </View>
-                            <HelperText
-                              type="error"
-                              visible={!!(dayErr?.startTime || dayErr?.endTime)}
-                            >
-                              {((dayErr?.startTime?.message as string) ||
-                                (dayErr?.endTime?.message as string)) ??
-                                ""}
-                            </HelperText>
-                          </View>
-                        );
-                      })()}
+                    <WorkingHoursAccordion
+                      working={working}
+                      holidayDays={holidayDays}
+                      errors={errors}
+                      colors={{
+                        cardBg: colors.cardBg,
+                        cardBg2: colors.cardBg2,
+                        sectionHeaderText: colors.sectionHeaderText,
+                        textSecondary: colors.textSecondary,
+                        borderColor: colors.borderColor,
+                      }}
+                      isDark={isDark}
+                      setValue={setValue}
+                      trigger={trigger}
+                    />
                       <Text className="text-[#c2a523] font-century-gothic pt-2 pb-1 text-sm">
                         - {t("form.workingHoursInfo")}
                       </Text>
@@ -2042,7 +1928,6 @@ const FormStoreAdd = ({
                       />
                     </View>
                   </View>
-                </View>
               </>
             )}
             {currentStep === 8 && (

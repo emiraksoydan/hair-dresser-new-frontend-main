@@ -1,6 +1,6 @@
 import React, { useCallback, useState, useEffect, useRef, useMemo } from "react";
 import { View, TouchableOpacity } from "react-native";
-import { Icon } from "react-native-paper";
+
 import { Text } from "../common/Text";
 import { FreeBarGetDto, FavoriteTargetType } from "../../types";
 import { useFavoriteToggle } from "../../hook/useFavoriteToggle";
@@ -17,6 +17,7 @@ import { TypeLabel } from "../common/TypeLabel";
 import { getShortBarberTypeLabel } from "../../utils/card-helpers";
 import { useAlert } from "../../hook/useAlert";
 import { useTheme } from "../../hook/useTheme";
+import { PanelImageOverflowMenu } from "../panel/PanelImageOverflowMenu";
 import { useActionGuard } from "../../hook/useActionGuard";
 
 type Props = {
@@ -205,28 +206,12 @@ const FreeBarberCard: React.FC<Props> = ({
               height={isList ? 250 : 112}
               autoPlay={showImageAnimation}
             />
-            {isList && panelCompare && !panelCompare.hidden && (
-              <TouchableOpacity
-                onPress={panelCompare.onPress}
-                className="absolute top-2 left-2 z-20"
-                hitSlop={8}
-              >
-                <View
-                  style={{
-                    backgroundColor: panelCompare.selected ? "#ffb900" : "rgba(15,23,42,0.78)",
-                    borderColor: "#ffb900",
-                    borderWidth: 1.5,
-                    borderRadius: 22,
-                    padding: 7,
-                  }}
-                >
-                  <Icon
-                    source={panelCompare.selected ? "check" : "compare-horizontal"}
-                    size={19}
-                    color={panelCompare.selected ? "#1f2937" : "#ffffff"}
-                  />
-                </View>
-              </TouchableOpacity>
+            {isList && (
+              <PanelImageOverflowMenu
+                images={freeBarber.imageList}
+                panelCompare={panelCompare ?? undefined}
+                galleryTitle={freeBarber.fullName}
+              />
             )}
             {isList && (
               <View
@@ -318,6 +303,13 @@ const FreeBarberCard: React.FC<Props> = ({
                 onPressRatings={handlePressRatings}
               />
             </View>
+            {freeBarber.customerNumber && (
+              <View className="flex-row items-center mt-1">
+                <Text style={{ color: colors.textSecondary, fontSize: 11, fontFamily: 'CenturyGothic' }}>
+                  {'#'}{freeBarber.customerNumber}
+                </Text>
+              </View>
+            )}
           </View>
         </View>
         <View className="rounded-xl pr-2 mt-4">

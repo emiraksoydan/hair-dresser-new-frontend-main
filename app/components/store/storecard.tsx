@@ -1,7 +1,7 @@
 // app/components/StoreCard.tsx
 import React, { useCallback } from 'react';
-import { View, TouchableOpacity } from 'react-native';
-import { Icon } from 'react-native-paper';
+import { View } from 'react-native';
+
 import { Text } from '../common/Text';
 import { BarberStoreGetDto, FavoriteTargetType } from '../../types';
 import { useFavoriteToggle } from '../../hook/useFavoriteToggle';
@@ -14,6 +14,7 @@ import { ServiceOfferingsList } from '../common/ServiceOfferingsList';
 import { PricingInfo } from '../common/PricingInfo';
 import { getBarberTypeLabel } from '../../utils/card-helpers';
 import { useTheme } from '../../hook/useTheme';
+import { PanelImageOverflowMenu } from '../panel/PanelImageOverflowMenu';
 
 type Props = {
     store: BarberStoreGetDto;
@@ -77,29 +78,12 @@ const StoreCard: React.FC<Props> = ({ store, isList, expanded, cardWidthStore, i
                             height={isList ? 250 : 112}
                             autoPlay={showImageAnimation}
                         />
-                        {isList && panelCompare && !panelCompare.hidden && (
-                            <TouchableOpacity
-                                onPress={panelCompare.onPress}
-                                className="absolute top-3 left-3 z-20"
-                                hitSlop={8}
-                                accessibilityRole="button"
-                            >
-                                <View
-                                    style={{
-                                        backgroundColor: panelCompare.selected ? '#ffb900' : 'rgba(15,23,42,0.78)',
-                                        borderColor: '#ffb900',
-                                        borderWidth: 1.5,
-                                        borderRadius: 22,
-                                        padding: 7,
-                                    }}
-                                >
-                                    <Icon
-                                        source={panelCompare.selected ? 'check' : 'compare-horizontal'}
-                                        size={19}
-                                        color={panelCompare.selected ? '#1f2937' : '#ffffff'}
-                                    />
-                                </View>
-                            </TouchableOpacity>
+                        {isList && (
+                            <PanelImageOverflowMenu
+                                images={store.imageList}
+                                panelCompare={panelCompare ?? undefined}
+                                galleryTitle={store.storeName}
+                            />
                         )}
                         {isList && (
                             <View className="absolute top-3 right-3 flex-row gap-2 z-10">
@@ -164,6 +148,13 @@ const StoreCard: React.FC<Props> = ({ store, isList, expanded, cardWidthStore, i
                                 className="flex-1"
                             />
                         </View>
+                        {store.storeNo && (
+                            <View className="flex-row items-center mt-1">
+                                <Text style={{ color: colors.textSecondary, fontSize: 11, fontFamily: 'CenturyGothic' }}>
+                                    {'#'}{store.storeNo}
+                                </Text>
+                            </View>
+                        )}
                     </View>
                 </View>
                 <View className="rounded-xl pr-2  mt-4">

@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { AppState, AppStateStatus } from "react-native";
 import Constants from "expo-constants";
 import { ensureLocationGateWithUI } from "../components/location/location-gate";
+import i18n from "../i18n/config";
 import type { Pos, LocationStatus, UseNearbyControlParams } from "../types";
 import { BACKGROUND_LOCATION_TASK } from "../tasks/backgroundLocation";
 
@@ -253,7 +254,7 @@ export function useNearbyControl({
                 } else {
                     // İzin yoksa durumu güncelle ve watch'i durdur
                     setLocationStatus("denied");
-                    setLocationMessage("Konum izni verilmedi.");
+                    setLocationMessage(i18n.t("location.permissionDenied"));
                     watchRef.current?.remove();
                     watchRef.current = null;
                     stopBackgroundLocation();

@@ -6,6 +6,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import React, { useEffect, useState } from 'react'
 import { useFonts } from 'expo-font';
+import { DancingScript_700Bold } from '@expo-google-fonts/dancing-script';
 import '../global.css';
 import { Provider as ReduxProvider } from 'react-redux';
 import { Provider as PaperProvider, DefaultTheme } from "react-native-paper";
@@ -30,6 +31,7 @@ import './tasks/backgroundLocation';
 import './i18n/config';
 import { ThemeProvider } from './context/ThemeContext';
 import { useTheme } from './hook/useTheme';
+import { BrandIntro } from './components/splash/BrandIntro';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -63,34 +65,37 @@ function ThemedStack() {
 }
 
 const RootLayout = () => {
-  const [ready, setReady] = useState(false);
+  const [bootReady, setBootReady] = useState(false);
+  const [brandIntroDone, setBrandIntroDone] = useState(false);
 
-  // Fontları yükle
   const [fontsLoaded] = useFonts({
     'CenturyGothic': require('../assets/fonts/centurygothic.ttf'),
     'CenturyGothic-Bold': require('../assets/fonts/centurygothic_bold.ttf'),
+    DancingScript_700Bold,
   });
 
   useEffect(() => {
+    if (!fontsLoaded) return;
     (async () => {
       try {
         await rehydrateTokens();
       } catch {
         // Ignore token errors
       }
-
-      if (fontsLoaded) {
-        setReady(true);
-        try {
-          await SplashScreen.hideAsync();
-        } catch {
-          // Ignore splash screen errors
-        }
+      setBootReady(true);
+      try {
+        await SplashScreen.hideAsync();
+      } catch {
+        // Ignore splash screen errors
       }
     })();
   }, [fontsLoaded]);
 
-  if (!ready || !fontsLoaded) return null;
+  if (!fontsLoaded || !bootReady) return null;
+
+  if (!brandIntroDone) {
+    return <BrandIntro onFinish={() => setBrandIntroDone(true)} />;
+  }
 
   // Century Gothic fontunu tüm Paper component'lerinde kullan
   const centuryGothicFont = 'CenturyGothic';

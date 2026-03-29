@@ -1,7 +1,8 @@
+import { Icon } from "react-native-paper";
 import React, { useEffect, useRef, useState, memo } from "react";
 import { View, Image } from "react-native";
 import { Marker } from "react-native-maps";
-import { Icon } from "react-native-paper";
+
 import { FreeBarGetDto } from "../../types";
 import { safeCoord } from "../../utils/location/geo";
 

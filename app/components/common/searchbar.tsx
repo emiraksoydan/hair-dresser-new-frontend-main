@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { View, TextInput } from 'react-native';
-import { IconButton, Icon } from 'react-native-paper';
+import { Icon, IconButton } from "react-native-paper";
 import { SearchBarProps } from '../../types';
 import { useLanguage } from '../../hook/useLanguage';
 import { useTheme } from '../../hook/useTheme';
@@ -31,8 +31,8 @@ const SearchBar: React.FC<ExtendedSearchBarProps> = ({
     const { colors } = useTheme();
     const [isFocused, setIsFocused] = useState(false);
 
-    // Butonları gösterip göstermeyeceğimizi belirle
-    const shouldShowButtons = showButtons && setIsList && onFilterPress;
+    const shouldShowLayoutToggle = showButtons && !!setIsList;
+    const shouldShowFilter = showButtons && !!onFilterPress;
 
     const borderColor = forceBorderColor ?? (isFocused ? "#ffb900" : colors.cardBg);
 
@@ -57,22 +57,26 @@ const SearchBar: React.FC<ExtendedSearchBarProps> = ({
                 style={{ flex: 1, marginLeft: 8, fontSize: 15, color: colors.sectionHeaderText, fontFamily: 'CenturyGothic' }}
             />
 
-            {shouldShowButtons && (
+            {(shouldShowLayoutToggle || shouldShowFilter) && (
                 <View className="flex-row items-center">
-                    <IconButton
-                        icon={isList ? "format-list-bulleted" : "view-grid-outline"}
-                        iconColor={'#9aa1ae'}
-                        size={22}
-                        onPress={() => setIsList(!isList)}
-                        style={{ margin: 0 }}
-                    />
-                    <IconButton
-                        icon="filter-variant"
-                        iconColor="#9aa1ae"
-                        size={22}
-                        onPress={onFilterPress}
-                        style={{ margin: 0 }}
-                    />
+                    {shouldShowLayoutToggle && setIsList && (
+                        <IconButton
+                            icon={isList ? "format-list-bulleted" : "view-grid-outline"}
+                            iconColor={'#9aa1ae'}
+                            size={22}
+                            onPress={() => setIsList(!isList)}
+                            style={{ margin: 0 }}
+                        />
+                    )}
+                    {shouldShowFilter && onFilterPress && (
+                        <IconButton
+                            icon="filter-variant"
+                            iconColor="#9aa1ae"
+                            size={22}
+                            onPress={onFilterPress}
+                            style={{ margin: 0 }}
+                        />
+                    )}
                 </View>
             )}
         </View>

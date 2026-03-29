@@ -1,17 +1,18 @@
-import { Stack } from 'expo-router'
-import { StyleSheet, View } from 'react-native'
-import { Text } from '../../components/common/Text'
+import { Stack } from "expo-router";
+import { useTheme } from "../../hook/useTheme";
 
 const StoreAndFreeBarbersLayout = () => {
-    return (
-        <Stack screenOptions={{
-            headerShown: false,
-            contentStyle: { backgroundColor: '#151618' },
-        }}>
-            <Stack.Screen name="index" />
-        </Stack>
-    )
-}
+  const { colors } = useTheme();
+  return (
+    <Stack
+      screenOptions={{
+        headerShown: false,
+        contentStyle: { backgroundColor: colors.screenBg },
+      }}
+    >
+      <Stack.Screen name="index" />
+    </Stack>
+  );
+};
 
-export default StoreAndFreeBarbersLayout
-
+export default StoreAndFreeBarbersLayout;

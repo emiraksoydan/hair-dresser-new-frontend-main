@@ -38,6 +38,8 @@ const messageToKeyMap: Record<string, string> = {
   'Karar zaten verilmiş': 'errors.appointmentDecisionAlreadyGiven',
   'Bu randevu zamanı başka bir kullanıcı tarafından alındı. Lütfen başka bir saat seçin.': 'errors.duplicateSlot',
   'Bu koltuk için seçilen saat aralığında başka bir randevu var.': 'errors.appointmentSlotOverlap',
+  'Bitiş tarihi başlangıçtan önce olamaz.': 'errors.availabilityRangeInvalid',
+  'Müsaitlik aralığı en fazla 7 gün olabilir.': 'errors.availabilityRangeTooLarge',
   'Geçmiş tarih için randevu alınamaz.': 'errors.appointmentPastDate',
   'Geçmiş saat için randevu alınamaz.': 'errors.appointmentPastTime',
   'Randevu süresi dolmuş (yanıtlanmadı).': 'errors.appointmentTimeoutExpired',

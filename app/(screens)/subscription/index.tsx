@@ -1,6 +1,7 @@
+import { Icon } from "react-native-paper";
 import { View, ScrollView, TouchableOpacity, Modal, ActivityIndicator, Alert } from 'react-native';
 import { Text } from '../../components/common/Text';
-import { Icon } from 'react-native-paper';
+
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../../hook/useTheme';
 import { useLanguage } from '../../hook/useLanguage';

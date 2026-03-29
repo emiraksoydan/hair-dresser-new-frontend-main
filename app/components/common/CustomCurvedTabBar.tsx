@@ -1,3 +1,4 @@
+import { Icon } from "react-native-paper";
 import React, { useEffect } from 'react';
 import { View, TouchableOpacity, Dimensions, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -9,7 +10,7 @@ import Animated, {
   interpolate,
   Extrapolation,
 } from 'react-native-reanimated';
-import { Icon } from 'react-native-paper';
+
 import { Text } from './Text';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -44,7 +45,7 @@ const CurvedBackground: React.FC<{
   backgroundColor: string;
 }> = ({ width, height, notchCenterX, notchRadius, backgroundColor }) => {
   // Curve parameters - aşağıya doğru (içe doğru) kavislenme
-  const curveDepth = notchRadius + 4; // Curve'un derinliği
+  const curveDepth = notchRadius + 15; // Curve'un derinliği (aktif sekme daha aşağı “oturur”)
   const curveWidth = notchRadius * 2.2; // Curve'un genişliği
 
   // SVG path - curve goes DOWN (concave from top)
@@ -79,17 +80,17 @@ export const CustomCurvedTabBar: React.FC<CustomCurvedTabBarProps> = ({
 }) => {
   const insets = useSafeAreaInsets();
   const tabWidth = SCREEN_WIDTH / tabs.length;
-  const floatSize = 44; // Daha da küçültüldü
-  const floatOffset = 18; // Float'ın ne kadar yukarı çıkacağı
+  const floatSize = 40;
+  const floatOffset = 16;
 
   // Animasyon değerleri
   const animatedIndex = useSharedValue(activeIndex);
 
   useEffect(() => {
     animatedIndex.value = withSpring(activeIndex, {
-      damping: 18,
-      stiffness: 180,
-      mass: 0.7,
+      damping: 24,
+      stiffness: 140,
+      mass: 0.9,
     });
   }, [activeIndex]);
 
@@ -98,7 +99,7 @@ export const CustomCurvedTabBar: React.FC<CustomCurvedTabBarProps> = ({
     const centerOffset = (tabWidth - floatSize) / 2;
     const translateX = animatedIndex.value * tabWidth + centerOffset;
     return {
-      transform: [{ translateX }],
+      transform: [{ translateX }, { translateY: 9 }],
     };
   });
 
@@ -109,32 +110,56 @@ export const CustomCurvedTabBar: React.FC<CustomCurvedTabBarProps> = ({
   const TabItem = ({ tab, index }: { tab: CustomTabItem; index: number }) => {
     const isActive = index === activeIndex;
 
-    // Her tab için animasyon değerleri
-    const itemAnimatedStyle = useAnimatedStyle(() => {
+    /** Yüzen ana ikon ile sekme ikonu üst üste binmesin */
+    const tabIconAnimatedStyle = useAnimatedStyle(() => {
       const distance = Math.abs(animatedIndex.value - index);
-
-      const scale = interpolate(
-        distance,
-        [0, 0.5, 1],
-        [0, 0.9, 1],
-        Extrapolation.CLAMP
-      );
-      const opacity = interpolate(
-        distance,
-        [0, 0.4, 1],
-        [0, 0.8, 1],
-        Extrapolation.CLAMP
-      );
-      const translateY = interpolate(
-        distance,
-        [0, 0.5, 1],
-        [floatOffset, 3, 0],
-        Extrapolation.CLAMP
-      );
-
       return {
-        opacity,
-        transform: [{ scale }, { translateY }],
+        opacity: interpolate(
+          distance,
+          [0, 0.18, 0.55],
+          [0, 0.45, 1],
+          Extrapolation.CLAMP
+        ),
+        transform: [
+          {
+            translateY: interpolate(
+              distance,
+              [0, 0.5, 1],
+              [8, 4, 0],
+              Extrapolation.CLAMP
+            ),
+          },
+          {
+            scale: interpolate(
+              distance,
+              [0, 0.5, 1],
+              [0.85, 0.92, 1],
+              Extrapolation.CLAMP
+            ),
+          },
+        ],
+      };
+    });
+
+    const tabLabelAnimatedStyle = useAnimatedStyle(() => {
+      const distance = Math.abs(animatedIndex.value - index);
+      return {
+        opacity: interpolate(
+          distance,
+          [0, 0.25, 0.6],
+          [0, 0.35, 1],
+          Extrapolation.CLAMP
+        ),
+        transform: [
+          {
+            translateY: interpolate(
+              distance,
+              [0, 0.5, 1],
+              [13, 6, 0],
+              Extrapolation.CLAMP
+            ),
+          },
+        ],
       };
     });
 
@@ -145,13 +170,15 @@ export const CustomCurvedTabBar: React.FC<CustomCurvedTabBarProps> = ({
         activeOpacity={0.7}
         style={[styles.tabItem, { width: tabWidth }]}
       >
-        <AnimatedView style={itemAnimatedStyle}>
-          <View style={styles.tabContent}>
+        <View style={styles.tabContent}>
+          <AnimatedView style={tabIconAnimatedStyle}>
             <Icon
               source={tab.icon}
               size={24}
               color={isActive ? accentColor : inactiveIconColor}
             />
+          </AnimatedView>
+          <AnimatedView style={tabLabelAnimatedStyle}>
             <Text
               style={[
                 styles.tabLabel,
@@ -161,8 +188,8 @@ export const CustomCurvedTabBar: React.FC<CustomCurvedTabBarProps> = ({
             >
               {tab.label}
             </Text>
-          </View>
-        </AnimatedView>
+          </AnimatedView>
+        </View>
 
         {/* Badge */}
         {tab.badgeCount !== undefined && tab.badgeCount > 0 && (
@@ -216,7 +243,7 @@ export const CustomCurvedTabBar: React.FC<CustomCurvedTabBarProps> = ({
           <AnimatedView style={floatIconAnimatedStyle}>
             <Icon
               source={tabs[activeIndex]?.iconFocused || tabs[activeIndex]?.icon || 'home'}
-              size={22}
+              size={20}
               color={activeIconColor}
             />
           </AnimatedView>

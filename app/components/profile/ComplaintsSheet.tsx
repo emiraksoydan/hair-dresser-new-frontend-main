@@ -1,8 +1,9 @@
+import { Icon } from "react-native-paper";
 import React from "react";
 import { View, ActivityIndicator, TouchableOpacity, Image } from "react-native";
 import { Text } from "../common/Text";
 import { BottomSheetView, BottomSheetFlatList } from "@gorhom/bottom-sheet";
-import { Icon } from "react-native-paper";
+
 import { useGetMyComplaintsQuery, useDeleteComplaintMutation } from "../../store/api";
 import { ComplaintGetDto, UserType } from "../../types";
 import { useLanguage } from "../../hook/useLanguage";

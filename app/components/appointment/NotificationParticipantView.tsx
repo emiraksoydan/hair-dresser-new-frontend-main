@@ -3,16 +3,111 @@
  * Displays participant information in notifications based on recipient role
  */
 
-import React from "react";
-import { View, TouchableOpacity } from "react-native";
-import { Text } from "../common/Text";
 import { Icon } from "react-native-paper";
+import React from "react";
+import { View, StyleSheet } from "react-native";
+import { Text } from "../common/Text";
+
 import type { NotificationPayload } from "../../types";
-import { UserType, BarberType, ImageOwnerType } from "../../types";
+import { ImageOwnerType, BarberType } from "../../types";
 import { getBarberTypeName } from "../../utils/store/barber-type";
 import { OwnerAvatar } from "../common/owneravatar";
 import { useLanguage } from "../../hook/useLanguage";
 import { useTheme } from "../../hook/useTheme";
+import type { ThemeColors } from "../../hook/useTheme";
+
+const ACCENT = "#f05e23";
+
+function ParticipantSurface({
+  isDark,
+  children,
+}: {
+  isDark: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <View
+      style={[
+        styles.surface,
+        {
+          backgroundColor: isDark
+            ? "rgba(255,255,255,0.055)"
+            : "rgba(248, 250, 252, 0.92)",
+          borderColor: isDark
+            ? "rgba(255,255,255,0.08)"
+            : "rgba(148, 163, 184, 0.22)",
+        },
+      ]}
+    >
+      {children}
+    </View>
+  );
+}
+
+function AvatarRing({ children }: { children: React.ReactNode }) {
+  return <View style={styles.avatarRing}>{children}</View>;
+}
+
+function FieldLabel({
+  children,
+  colors,
+}: {
+  children: React.ReactNode;
+  colors: ThemeColors;
+}) {
+  return (
+    <Text
+      style={[
+        styles.fieldLabel,
+        { color: colors.textSecondary },
+      ]}
+    >
+      {children}
+    </Text>
+  );
+}
+
+function MetaChip({
+  icon,
+  text,
+  colors,
+  isDark,
+}: {
+  icon: string;
+  text: string;
+  colors: ThemeColors;
+  isDark: boolean;
+}) {
+  return (
+    <View
+      style={[
+        styles.metaChip,
+        {
+          backgroundColor: isDark
+            ? "rgba(251, 191, 36, 0.12)"
+            : "rgba(254, 243, 199, 0.65)",
+        },
+      ]}
+    >
+      <Icon source={icon as any} size={13} color="#d97706" />
+      <Text
+        style={[styles.metaChipText, { color: colors.sectionHeaderText }]}
+        numberOfLines={2}
+      >
+        {text}
+      </Text>
+    </View>
+  );
+}
+
+function FavoritePill({ children }: { children: React.ReactNode }) {
+  return (
+    <View style={styles.favPill}>
+      <Icon source="heart" size={12} color={ACCENT} />
+      <Text style={styles.favPillText}>{children}</Text>
+    </View>
+  );
+}
 
 interface NotificationParticipantViewProps {
   payload: NotificationPayload;
@@ -36,127 +131,149 @@ export const NotificationParticipantView: React.FC<
   formatRating,
 }) => {
   const { t } = useLanguage();
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
   const hasManuelBarber =
     !!payload?.chair?.manuelBarberId || !!payload?.chair?.manuelBarberName;
 
   if (recipientRole === "store") {
     return (
-      <View className="flex-row gap-3">
+      <View>
         {payload.customer && (
-          <View className="flex-1 flex-row items-start">
-            <OwnerAvatar
-              ownerId={payload.customer.userId}
-              ownerType={ImageOwnerType.User}
-              fallbackUrl={payload.customer.avatarUrl}
-              imageClassName="w-12 h-12 rounded-full mr-2"
-              iconSource="account"
-              iconSize={24}
-            />
-            <View className="flex-1">
-              <Text className="text-[#9ca3af] text-xs">
-                {t("card.customer")}
-              </Text>
-              <Text className="text-sm font-semibold" style={{ color: colors.sectionHeaderText }}>
-                {payload.customer?.displayName || t("card.customer")}
-              </Text>
-              {payload.customer?.customerNumber && (
-                <Text className="text-[#6b7280] text-xs mt-0.5">
-                  {t("card.customerNumber")}: {payload.customer.customerNumber}
+          <ParticipantSurface isDark={isDark}>
+            <View style={styles.row}>
+              <AvatarRing>
+                <OwnerAvatar
+                  ownerId={payload.customer.userId}
+                  ownerType={ImageOwnerType.User}
+                  fallbackUrl={payload.customer.avatarUrl}
+                  imageClassName="w-11 h-11 rounded-full"
+                  iconSource="account"
+                  iconSize={22}
+                />
+              </AvatarRing>
+              <View style={styles.body}>
+                <FieldLabel colors={colors}>{t("card.customer")}</FieldLabel>
+                <Text
+                  style={[styles.name, { color: colors.sectionHeaderText }]}
+                >
+                  {payload.customer?.displayName || t("card.customer")}
                 </Text>
-              )}
-              {isCustomerInFavorites && (
-                <View className="flex-row items-center mt-0.5">
-                  <Icon source="heart" size={12} color="#f05e23" />
-                  <Text className="text-[#f05e23] text-xs ml-1">
-                    {t("appointment.actions.inFavorites")}
-                  </Text>
+                <View style={styles.chipRow}>
+                  {payload.customer?.customerNumber ? (
+                    <MetaChip
+                      icon="identifier"
+                      text={`${t("card.customerNumber")}: ${payload.customer.customerNumber}`}
+                      colors={colors}
+                      isDark={isDark}
+                    />
+                  ) : null}
                 </View>
-              )}
+                {isCustomerInFavorites ? (
+                  <FavoritePill>{t("appointment.actions.inFavorites")}</FavoritePill>
+                ) : null}
+              </View>
             </View>
-          </View>
+          </ParticipantSurface>
         )}
-        <View className="flex-1">
-          {payload.freeBarber ? (
-            <View className="flex-row items-start">
-              <OwnerAvatar
-                ownerId={payload.freeBarber.userId}
-                ownerType={ImageOwnerType.User}
-                fallbackUrl={payload.freeBarber.avatarUrl}
-                imageClassName="w-12 h-12 rounded-full mr-2"
-                iconSource="account-supervisor"
-                iconSize={24}
-              />
-              <View className="flex-1">
-                <Text className="text-[#9ca3af] text-xs">
-                  {t("labels.freeBarber")}
-                </Text>
-                <Text className="text-sm font-semibold" style={{ color: colors.sectionHeaderText }}>
+        {payload.freeBarber ? (
+          <ParticipantSurface isDark={isDark}>
+            <View style={styles.row}>
+              <AvatarRing>
+                <OwnerAvatar
+                  ownerId={payload.freeBarber.userId}
+                  ownerType={ImageOwnerType.User}
+                  fallbackUrl={payload.freeBarber.avatarUrl}
+                  imageClassName="w-11 h-11 rounded-full"
+                  iconSource="account-supervisor"
+                  iconSize={22}
+                />
+              </AvatarRing>
+              <View style={styles.body}>
+                <FieldLabel colors={colors}>{t("labels.freeBarber")}</FieldLabel>
+                <Text
+                  style={[styles.name, { color: colors.sectionHeaderText }]}
+                >
                   {payload.freeBarber?.displayName ||
                     t("labels.freeBarberDefaultName")}
                 </Text>
-                {payload.freeBarber.type !== undefined && (
-                  <Text className="text-[#9ca3af] text-xs mt-0.5">
+                {payload.freeBarber.type !== undefined ? (
+                  <Text
+                    style={[styles.subMuted, { color: colors.textSecondary }]}
+                  >
                     {getBarberTypeName(payload.freeBarber.type as BarberType)}
                   </Text>
-                )}
-                {(payload.freeBarber as any)?.customerNumber && (
-                  <Text className="text-[#6b7280] text-xs mt-0.5">
-                    {t("card.customerNumber")}: {(payload.freeBarber as any).customerNumber}
-                  </Text>
-                )}
-                {isFreeBarberInFavorites && (
-                  <View className="flex-row items-center mt-0.5">
-                    <Icon source="heart" size={12} color="#f05e23" />
-                    <Text className="text-[#f05e23] text-xs ml-1">
-                      {t("appointment.actions.inFavorites")}
-                    </Text>
-                  </View>
-                )}
+                ) : null}
+                <View style={styles.chipRow}>
+                  {(payload.freeBarber as any)?.customerNumber ? (
+                    <MetaChip
+                      icon="identifier"
+                      text={`${t("card.customerNumber")}: ${(payload.freeBarber as any).customerNumber}`}
+                      colors={colors}
+                      isDark={isDark}
+                    />
+                  ) : null}
+                </View>
+                {isFreeBarberInFavorites ? (
+                  <FavoritePill>{t("appointment.actions.inFavorites")}</FavoritePill>
+                ) : null}
               </View>
             </View>
-          ) : hasManuelBarber ? (
-            <View className="flex-row items-start">
-              <OwnerAvatar
-                ownerId={payload?.chair?.manuelBarberId}
-                ownerType={ImageOwnerType.ManuelBarber}
-                fallbackUrl={payload?.chair?.manuelBarberImageUrl}
-                imageClassName="w-12 h-12 rounded-full mr-2"
-                iconSource="account"
-                iconSize={24}
-              />
-              <View className="flex-1">
-                <Text className="text-[#9ca3af] text-xs">
+          </ParticipantSurface>
+        ) : hasManuelBarber ? (
+          <ParticipantSurface isDark={isDark}>
+            <View style={styles.row}>
+              <AvatarRing>
+                <OwnerAvatar
+                  ownerId={payload?.chair?.manuelBarberId}
+                  ownerType={ImageOwnerType.ManuelBarber}
+                  fallbackUrl={payload?.chair?.manuelBarberImageUrl}
+                  imageClassName="w-11 h-11 rounded-full"
+                  iconSource="account"
+                  iconSize={22}
+                />
+              </AvatarRing>
+              <View style={styles.body}>
+                <FieldLabel colors={colors}>
                   {t("appointment.labels.storeBarber")}
-                </Text>
-                <Text className="text-sm font-semibold" style={{ color: colors.sectionHeaderText }}>
+                </FieldLabel>
+                <Text
+                  style={[styles.name, { color: colors.sectionHeaderText }]}
+                >
                   {payload?.chair?.manuelBarberName}
                 </Text>
-                {payload?.chair?.manuelBarberType !== undefined && (
-                  <Text className="text-[#9ca3af] text-xs mt-0.5">
+                {payload?.chair?.manuelBarberType !== undefined ? (
+                  <Text
+                    style={[styles.subMuted, { color: colors.textSecondary }]}
+                  >
                     {getBarberTypeName(
                       payload.chair.manuelBarberType as BarberType,
                     )}
                   </Text>
-                )}
+                ) : null}
               </View>
             </View>
-          ) : (
-            <View className="flex-row items-center">
+          </ParticipantSurface>
+        ) : (
+          <ParticipantSurface isDark={isDark}>
+            <View style={styles.row}>
               <View
-                className="w-12 h-12 rounded-full mr-2 items-center justify-center"
-                style={{ backgroundColor: colors.cardBg2 }}
+                style={[
+                  styles.seatIcon,
+                  { backgroundColor: colors.cardBg2 },
+                ]}
               >
-                <Icon source="seat" size={24} color="#6b7280" />
+                <Icon source="seat" size={22} color="#6b7280" />
               </View>
-              <View className="flex-1">
-                <Text className="text-sm font-semibold" style={{ color: colors.sectionHeaderText }}>
+              <View style={styles.body}>
+                <Text
+                  style={[styles.name, { color: colors.sectionHeaderText }]}
+                >
                   {payload.chair?.chairName}
                 </Text>
               </View>
             </View>
-          )}
-        </View>
+          </ParticipantSurface>
+        )}
       </View>
     );
   }
@@ -165,90 +282,115 @@ export const NotificationParticipantView: React.FC<
     return (
       <View>
         {payload.store && (
-          <View className="flex-row items-start mb-2">
-            <OwnerAvatar
-              ownerId={payload.store.storeId}
-              ownerType={ImageOwnerType.Store}
-              fallbackUrl={payload.store.imageUrl}
-              imageClassName="w-12 h-12 rounded-full mr-2"
-              iconSource="store"
-              iconSize={24}
-            />
-            <View className="flex-1">
-              <Text className="text-[#9ca3af] text-xs">
-                {t("labels.store")}
-              </Text>
-              <Text className="text-sm font-semibold" style={{ color: colors.sectionHeaderText }}>
-                {payload.store.storeName}
-              </Text>
-              {payload.store.type !== undefined && (
-                <Text className="text-[#9ca3af] text-xs mt-0.5">
-                  {getBarberTypeName(payload.store.type as BarberType)}
+          <ParticipantSurface isDark={isDark}>
+            <View style={styles.row}>
+              <AvatarRing>
+                <OwnerAvatar
+                  ownerId={payload.store.storeId}
+                  ownerType={ImageOwnerType.Store}
+                  fallbackUrl={payload.store.imageUrl}
+                  imageClassName="w-11 h-11 rounded-full"
+                  iconSource="store"
+                  iconSize={22}
+                />
+              </AvatarRing>
+              <View style={styles.body}>
+                <FieldLabel colors={colors}>{t("labels.store")}</FieldLabel>
+                <Text
+                  style={[styles.name, { color: colors.sectionHeaderText }]}
+                >
+                  {payload.store.storeName}
                 </Text>
-              )}
-              {(payload.store as any)?.storeNo && (
-                <Text className="text-[#6b7280] text-xs mt-0.5">
-                  {t("card.storeNo")}: {(payload.store as any).storeNo}
-                </Text>
-              )}
-              {payload.store.storeOwnerNumber && (
-                <Text className="text-[#6b7280] text-xs mt-0.5">
-                  {t("card.storeOwnerNumber")}: {payload.store.storeOwnerNumber}
-                </Text>
-              )}
-              {payload.store.addressDescription && (
-                <View className="mt-1 flex-row items-start">
-                  <View className="mt-0.5">
-                    <Icon source="map-marker" size={12} color="#6b7280" />
+                {payload.store.type !== undefined ? (
+                  <Text
+                    style={[styles.subMuted, { color: colors.textSecondary }]}
+                  >
+                    {getBarberTypeName(payload.store.type as BarberType)}
+                  </Text>
+                ) : null}
+                <View style={styles.chipRow}>
+                  {(payload.store as any)?.storeNo ? (
+                    <MetaChip
+                      icon="tag-outline"
+                      text={`${t("card.storeNo")}: ${(payload.store as any).storeNo}`}
+                      colors={colors}
+                      isDark={isDark}
+                    />
+                  ) : null}
+                  {payload.store.storeOwnerNumber ? (
+                    <MetaChip
+                      icon="account-tie"
+                      text={`${t("card.storeOwnerNumber")}: ${payload.store.storeOwnerNumber}`}
+                      colors={colors}
+                      isDark={isDark}
+                    />
+                  ) : null}
+                </View>
+                {payload.store.addressDescription ? (
+                  <View
+                    style={[
+                      styles.addressBox,
+                      {
+                        backgroundColor: isDark
+                          ? "rgba(255,255,255,0.06)"
+                          : "rgba(226, 232, 240, 0.45)",
+                      },
+                    ]}
+                  >
+                    <Icon source="map-marker" size={14} color="#d97706" />
+                    <Text
+                      style={[
+                        styles.addressText,
+                        { color: colors.textSecondary },
+                      ]}
+                    >
+                      {payload.store.addressDescription}
+                    </Text>
                   </View>
-                  <Text className="text-[#6b7280] text-xs ml-1 flex-1">
-                    {payload.store.addressDescription}
-                  </Text>
-                </View>
-              )}
-              {isStoreInFavorites && (
-                <View className="flex-row items-center mt-0.5">
-                  <Icon source="heart" size={12} color="#f05e23" />
-                  <Text className="text-[#f05e23] text-xs ml-1">
-                    {t("appointment.actions.inFavorites")}
-                  </Text>
-                </View>
-              )}
+                ) : null}
+                {isStoreInFavorites ? (
+                  <FavoritePill>{t("appointment.actions.inFavorites")}</FavoritePill>
+                ) : null}
+              </View>
             </View>
-          </View>
+          </ParticipantSurface>
         )}
         {payload.customer && (
-          <View className="flex-row items-start">
-            <OwnerAvatar
-              ownerId={payload.customer.userId}
-              ownerType={ImageOwnerType.User}
-              fallbackUrl={payload.customer.avatarUrl}
-              imageClassName="w-10 h-10 rounded-full mr-2"
-              iconSource="account"
-              iconSize={20}
-            />
-            <View className="flex-1">
-              <Text className="text-[#9ca3af] text-xs">
-                {t("card.customer")}
-              </Text>
-              <Text className="text-sm font-semibold" style={{ color: colors.sectionHeaderText }}>
-                {payload.customer?.displayName || t("card.customer")}
-              </Text>
-              {payload.customer?.customerNumber && (
-                <Text className="text-[#6b7280] text-xs mt-0.5">
-                  {t("card.customerNumber")}: {payload.customer.customerNumber}
+          <ParticipantSurface isDark={isDark}>
+            <View style={styles.row}>
+              <AvatarRing>
+                <OwnerAvatar
+                  ownerId={payload.customer.userId}
+                  ownerType={ImageOwnerType.User}
+                  fallbackUrl={payload.customer.avatarUrl}
+                  imageClassName="w-11 h-11 rounded-full"
+                  iconSource="account"
+                  iconSize={22}
+                />
+              </AvatarRing>
+              <View style={styles.body}>
+                <FieldLabel colors={colors}>{t("card.customer")}</FieldLabel>
+                <Text
+                  style={[styles.name, { color: colors.sectionHeaderText }]}
+                >
+                  {payload.customer?.displayName || t("card.customer")}
                 </Text>
-              )}
-              {isCustomerInFavorites && (
-                <View className="flex-row items-center mt-0.5">
-                  <Icon source="heart" size={12} color="#f05e23" />
-                  <Text className="text-[#f05e23] text-xs ml-1">
-                    {t("appointment.actions.inFavorites")}
-                  </Text>
+                <View style={styles.chipRow}>
+                  {payload.customer?.customerNumber ? (
+                    <MetaChip
+                      icon="identifier"
+                      text={`${t("card.customerNumber")}: ${payload.customer.customerNumber}`}
+                      colors={colors}
+                      isDark={isDark}
+                    />
+                  ) : null}
                 </View>
-              )}
+                {isCustomerInFavorites ? (
+                  <FavoritePill>{t("appointment.actions.inFavorites")}</FavoritePill>
+                ) : null}
+              </View>
             </View>
-          </View>
+          </ParticipantSurface>
         )}
       </View>
     );
@@ -256,169 +398,317 @@ export const NotificationParticipantView: React.FC<
 
   if (recipientRole === "customer") {
     return (
-      <View className="flex-row gap-3">
+      <View>
         {payload.store && (
-          <View className="flex-1 flex-row items-start">
-            <OwnerAvatar
-              ownerId={payload.store.storeId}
-              ownerType={ImageOwnerType.Store}
-              fallbackUrl={payload.store.imageUrl}
-              imageClassName="w-12 h-12 rounded-full mr-2"
-              iconSource="store"
-              iconSize={24}
-            />
-            <View className="flex-1">
-              <Text className="text-[#9ca3af] text-xs">
-                {t("labels.store")}
-              </Text>
-              <Text className="text-sm font-semibold" style={{ color: colors.sectionHeaderText }}>
-                {payload.store.storeName}
-              </Text>
-              {payload.store.type !== undefined && (
-                <Text className="text-[#9ca3af] text-xs mt-0.5">
-                  {getBarberTypeName(payload.store.type as BarberType)}
+          <ParticipantSurface isDark={isDark}>
+            <View style={styles.row}>
+              <AvatarRing>
+                <OwnerAvatar
+                  ownerId={payload.store.storeId}
+                  ownerType={ImageOwnerType.Store}
+                  fallbackUrl={payload.store.imageUrl}
+                  imageClassName="w-11 h-11 rounded-full"
+                  iconSource="store"
+                  iconSize={22}
+                />
+              </AvatarRing>
+              <View style={styles.body}>
+                <FieldLabel colors={colors}>{t("labels.store")}</FieldLabel>
+                <Text
+                  style={[styles.name, { color: colors.sectionHeaderText }]}
+                >
+                  {payload.store.storeName}
                 </Text>
-              )}
-              {(payload.store as any)?.storeNo && (
-                <Text className="text-[#6b7280] text-xs mt-0.5">
-                  {t("card.storeNo")}: {(payload.store as any).storeNo}
-                </Text>
-              )}
-              {payload.store.storeOwnerNumber && (
-                <Text className="text-[#6b7280] text-xs mt-0.5">
-                  {t("card.storeOwnerNumber")}: {payload.store.storeOwnerNumber}
-                </Text>
-              )}
-              {payload.store.addressDescription && (
-                <View className="mt-1 flex-row items-start">
-                  <View className="mt-0.5">
-                    <Icon source="map-marker" size={12} color="#6b7280" />
+                {payload.store.type !== undefined ? (
+                  <Text
+                    style={[styles.subMuted, { color: colors.textSecondary }]}
+                  >
+                    {getBarberTypeName(payload.store.type as BarberType)}
+                  </Text>
+                ) : null}
+                <View style={styles.chipRow}>
+                  {(payload.store as any)?.storeNo ? (
+                    <MetaChip
+                      icon="tag-outline"
+                      text={`${t("card.storeNo")}: ${(payload.store as any).storeNo}`}
+                      colors={colors}
+                      isDark={isDark}
+                    />
+                  ) : null}
+                  {payload.store.storeOwnerNumber ? (
+                    <MetaChip
+                      icon="account-tie"
+                      text={`${t("card.storeOwnerNumber")}: ${payload.store.storeOwnerNumber}`}
+                      colors={colors}
+                      isDark={isDark}
+                    />
+                  ) : null}
+                </View>
+                {payload.store.addressDescription ? (
+                  <View
+                    style={[
+                      styles.addressBox,
+                      {
+                        backgroundColor: isDark
+                          ? "rgba(255,255,255,0.06)"
+                          : "rgba(226, 232, 240, 0.45)",
+                      },
+                    ]}
+                  >
+                    <Icon source="map-marker" size={14} color="#d97706" />
+                    <Text
+                      style={[
+                        styles.addressText,
+                        { color: colors.textSecondary },
+                      ]}
+                    >
+                      {payload.store.addressDescription}
+                    </Text>
                   </View>
-                  <Text className="text-[#6b7280] text-xs ml-1 flex-1">
-                    {payload.store.addressDescription}
-                  </Text>
-                </View>
-              )}
-              {payload.store.rating !== undefined && (
-                <View className="flex-row items-center mt-0.5">
-                  <Icon source="star" size={12} color="#fbbf24" />
-                  <Text className="text-[#fbbf24] text-xs ml-1">
-                    {formatRating(payload.store.rating)}
-                  </Text>
-                </View>
-              )}
-              {isStoreInFavorites && (
-                <View className="flex-row items-center mt-0.5">
-                  <Icon source="heart" size={12} color="#f05e23" />
-                  <Text className="text-[#f05e23] text-xs ml-1">
-                    {t("appointment.actions.inFavorites")}
-                  </Text>
-                </View>
-              )}
+                ) : null}
+                {payload.store.rating !== undefined ? (
+                  <View style={styles.ratingRow}>
+                    <Icon source="star" size={14} color="#fbbf24" />
+                    <Text style={styles.ratingText}>
+                      {formatRating(payload.store.rating)}
+                    </Text>
+                  </View>
+                ) : null}
+                {isStoreInFavorites ? (
+                  <FavoritePill>{t("appointment.actions.inFavorites")}</FavoritePill>
+                ) : null}
+              </View>
             </View>
-          </View>
+          </ParticipantSurface>
         )}
 
-        <View className="flex-1">
-          {payload.freeBarber ? (
-            <View className="flex-row items-start">
-              <OwnerAvatar
-                ownerId={payload.freeBarber.userId}
-                ownerType={ImageOwnerType.User}
-                fallbackUrl={payload.freeBarber.avatarUrl}
-                imageClassName="w-12 h-12 rounded-full mr-2"
-                iconSource="account-supervisor"
-                iconSize={24}
-              />
-              <View className="flex-1">
-                <Text className="text-[#9ca3af] text-xs">
-                  {t("labels.freeBarber")}
-                </Text>
-                <Text className="text-sm font-semibold" style={{ color: colors.sectionHeaderText }}>
+        {payload.freeBarber ? (
+          <ParticipantSurface isDark={isDark}>
+            <View style={styles.row}>
+              <AvatarRing>
+                <OwnerAvatar
+                  ownerId={payload.freeBarber.userId}
+                  ownerType={ImageOwnerType.User}
+                  fallbackUrl={payload.freeBarber.avatarUrl}
+                  imageClassName="w-11 h-11 rounded-full"
+                  iconSource="account-supervisor"
+                  iconSize={22}
+                />
+              </AvatarRing>
+              <View style={styles.body}>
+                <FieldLabel colors={colors}>{t("labels.freeBarber")}</FieldLabel>
+                <Text
+                  style={[styles.name, { color: colors.sectionHeaderText }]}
+                >
                   {payload.freeBarber?.displayName ||
                     t("labels.freeBarberDefaultName")}
                 </Text>
-                {payload.freeBarber?.type !== undefined && (
-                  <Text className="text-[#9ca3af] text-xs mt-0.5">
+                {payload.freeBarber?.type !== undefined ? (
+                  <Text
+                    style={[styles.subMuted, { color: colors.textSecondary }]}
+                  >
                     {getBarberTypeName(payload.freeBarber.type as BarberType)}
                   </Text>
-                )}
-                {(payload.freeBarber as any)?.customerNumber && (
-                  <Text className="text-[#6b7280] text-xs mt-0.5">
-                    {t("card.customerNumber")}: {(payload.freeBarber as any).customerNumber}
-                  </Text>
-                )}
-                {payload.freeBarber?.rating !== undefined && (
-                  <View className="flex-row items-center mt-0.5">
-                    <Icon source="star" size={12} color="#fbbf24" />
-                    <Text className="text-[#fbbf24] text-xs ml-1">
+                ) : null}
+                <View style={styles.chipRow}>
+                  {(payload.freeBarber as any)?.customerNumber ? (
+                    <MetaChip
+                      icon="identifier"
+                      text={`${t("card.customerNumber")}: ${(payload.freeBarber as any).customerNumber}`}
+                      colors={colors}
+                      isDark={isDark}
+                    />
+                  ) : null}
+                </View>
+                {payload.freeBarber?.rating !== undefined ? (
+                  <View style={styles.ratingRow}>
+                    <Icon source="star" size={14} color="#fbbf24" />
+                    <Text style={styles.ratingText}>
                       {formatRating(payload.freeBarber.rating)}
                     </Text>
                   </View>
-                )}
-                {isFreeBarberInFavorites && (
-                  <View className="flex-row items-center mt-0.5">
-                    <Icon source="heart" size={12} color="#f05e23" />
-                    <Text className="text-[#f05e23] text-xs ml-1">
-                      {t("appointment.actions.inFavorites")}
-                    </Text>
-                  </View>
-                )}
+                ) : null}
+                {isFreeBarberInFavorites ? (
+                  <FavoritePill>{t("appointment.actions.inFavorites")}</FavoritePill>
+                ) : null}
               </View>
             </View>
-          ) : hasManuelBarber ? (
-            <View className="flex-row items-start">
-              <OwnerAvatar
-                ownerId={payload?.chair?.manuelBarberId}
-                ownerType={ImageOwnerType.ManuelBarber}
-                fallbackUrl={payload?.chair?.manuelBarberImageUrl}
-                imageClassName="w-12 h-12 rounded-full mr-2"
-                iconSource="account"
-                iconSize={24}
-              />
-              <View className="flex-1">
-                <Text className="text-[#9ca3af] text-xs">
+          </ParticipantSurface>
+        ) : hasManuelBarber ? (
+          <ParticipantSurface isDark={isDark}>
+            <View style={styles.row}>
+              <AvatarRing>
+                <OwnerAvatar
+                  ownerId={payload?.chair?.manuelBarberId}
+                  ownerType={ImageOwnerType.ManuelBarber}
+                  fallbackUrl={payload?.chair?.manuelBarberImageUrl}
+                  imageClassName="w-11 h-11 rounded-full"
+                  iconSource="account"
+                  iconSize={22}
+                />
+              </AvatarRing>
+              <View style={styles.body}>
+                <FieldLabel colors={colors}>
                   {t("appointment.labels.storeBarber")}
-                </Text>
-                <Text className="text-sm font-semibold" style={{ color: colors.sectionHeaderText }}>
+                </FieldLabel>
+                <Text
+                  style={[styles.name, { color: colors.sectionHeaderText }]}
+                >
                   {payload?.chair?.manuelBarberName}
                 </Text>
-                {payload?.chair?.manuelBarberType !== undefined && (
-                  <Text className="text-[#9ca3af] text-xs mt-0.5">
+                {payload?.chair?.manuelBarberType !== undefined ? (
+                  <Text
+                    style={[styles.subMuted, { color: colors.textSecondary }]}
+                  >
                     {getBarberTypeName(
                       payload.chair.manuelBarberType as BarberType,
                     )}
                   </Text>
-                )}
-                {payload?.chair?.manuelBarberRating !== undefined && (
-                  <View className="flex-row items-center mt-0.5">
-                    <Icon source="star" size={12} color="#fbbf24" />
-                    <Text className="text-[#fbbf24] text-xs ml-1">
+                ) : null}
+                {payload?.chair?.manuelBarberRating !== undefined ? (
+                  <View style={styles.ratingRow}>
+                    <Icon source="star" size={14} color="#fbbf24" />
+                    <Text style={styles.ratingText}>
                       {formatRating(payload.chair.manuelBarberRating)}
                     </Text>
                   </View>
-                )}
+                ) : null}
               </View>
             </View>
-          ) : (
-            <View className="flex-row items-center">
+          </ParticipantSurface>
+        ) : (
+          <ParticipantSurface isDark={isDark}>
+            <View style={styles.row}>
               <View
-                className="w-12 h-12 rounded-full mr-2 items-center justify-center"
-                style={{ backgroundColor: colors.cardBg2 }}
+                style={[
+                  styles.seatIcon,
+                  { backgroundColor: colors.cardBg2 },
+                ]}
               >
-                <Icon source="seat" size={24} color="#6b7280" />
+                <Icon source="seat" size={22} color="#6b7280" />
               </View>
-              <View className="flex-1">
-                <Text className="text-sm font-semibold" style={{ color: colors.sectionHeaderText }}>
+              <View style={styles.body}>
+                <Text
+                  style={[styles.name, { color: colors.sectionHeaderText }]}
+                >
                   {payload.chair?.chairName}
                 </Text>
               </View>
             </View>
-          )}
-        </View>
+          </ParticipantSurface>
+        )}
       </View>
     );
   }
 
   return null;
 };
+
+const styles = StyleSheet.create({
+  surface: {
+    borderRadius: 14,
+    padding: 12,
+    marginBottom: 10,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  row: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+  },
+  avatarRing: {
+    borderRadius: 999,
+    borderWidth: 2,
+    borderColor: "rgba(240, 94, 35, 0.32)",
+    padding: 2,
+    marginRight: 12,
+  },
+  seatIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    marginRight: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  body: {
+    flex: 1,
+    minWidth: 0,
+  },
+  fieldLabel: {
+    fontSize: 10,
+    fontFamily: "CenturyGothic-Bold",
+    letterSpacing: 0.8,
+    textTransform: "uppercase",
+    marginBottom: 4,
+    opacity: 0.95,
+  },
+  name: {
+    fontSize: 15,
+    fontFamily: "CenturyGothic-Bold",
+  },
+  subMuted: {
+    fontSize: 12,
+    marginTop: 4,
+  },
+  chipRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginTop: 8,
+  },
+  metaChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 10,
+    maxWidth: "100%",
+  },
+  metaChipText: {
+    fontSize: 11,
+    flexShrink: 1,
+    fontFamily: "CenturyGothic",
+  },
+  addressBox: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 8,
+    marginTop: 10,
+    padding: 10,
+    borderRadius: 10,
+  },
+  addressText: {
+    flex: 1,
+    fontSize: 12,
+    lineHeight: 17,
+    fontFamily: "CenturyGothic",
+  },
+  ratingRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginTop: 8,
+  },
+  ratingText: {
+    fontSize: 12,
+    color: "#fbbf24",
+    fontFamily: "CenturyGothic-Bold",
+  },
+  favPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    alignSelf: "flex-start",
+    gap: 6,
+    marginTop: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 999,
+    backgroundColor: "rgba(254, 243, 199, 0.7)",
+  },
+  favPillText: {
+    fontSize: 11,
+    color: "#c2410c",
+    fontFamily: "CenturyGothic-Bold",
+  },
+});

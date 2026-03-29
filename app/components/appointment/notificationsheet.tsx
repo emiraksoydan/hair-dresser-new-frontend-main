@@ -1,3 +1,4 @@
+import { Icon } from "react-native-paper";
 import { PricingType } from "../../types/store";
 import { useAuth } from "../../hook/useAuth";
 import {
@@ -23,7 +24,7 @@ import {
 } from "../../types";
 import { TouchableOpacity, View, ActivityIndicator } from "react-native";
 import { Text } from "../common/Text";
-import { Icon } from "react-native-paper";
+
 import { NotificationItemOptimized } from "./NotificationItemOptimized";
 import { useSafeNavigation } from "../../hook/useSafeNavigation";
 import { useAlert } from "../../hook/useAlert";

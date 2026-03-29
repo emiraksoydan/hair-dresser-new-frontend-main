@@ -1,6 +1,7 @@
 import { InteractionManager, View, ScrollView, RefreshControl, TouchableOpacity } from 'react-native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Text } from '../../components/common/Text'
-import { Avatar, IconButton, TextInput, HelperText, Switch, Icon, Portal, Modal as PaperModal } from 'react-native-paper';
+import { Avatar, HelperText, Icon, IconButton, Modal as PaperModal, Portal, Switch, TextInput } from "react-native-paper";
 import { OtpInput } from 'react-native-otp-entry';
 import { Button } from '../../components/common/Button';
 import { useRevokeMutation, useGetMeQuery, useUpdateProfileMutation, useUploadImageMutation, useUpdateImageBlobMutation, useGetSettingQuery, useUpdateSettingMutation, useGetSubscriptionStatusQuery, useSendPhoneChangeOtpMutation, useUpdatePhoneMutation, useGetMineStoresQuery } from '../../store/api';
@@ -27,6 +28,7 @@ import { useTheme } from '../../hook/useTheme';
 import { DEFAULT_AVATAR } from '../../constants/images';
 import { useSafeNavigation } from '../../hook/useSafeNavigation';
 import { useActionGuard } from '../../hook/useActionGuard';
+import { getTabFabScrollPadding } from '../../components/layout/panelBottomOverlays';
 
 const createProfileSchema = (t: (key: string) => string) => z.object({
     firstName: z.string({ required_error: t('auth.firstName') + ' ' + t('common.required') })
@@ -51,6 +53,8 @@ const Index = () => {
     const resolver = useMemo(() => zodResolver(profileSchema), [profileSchema]);
     const router = useSafeNavigation();
     const guard = useActionGuard();
+    const insets = useSafeAreaInsets();
+    const scrollBottomPad = useMemo(() => getTabFabScrollPadding(insets.bottom), [insets.bottom]);
     const [logout, { isLoading: isLoggingOut }] = useRevokeMutation();
     const { data: userData, isLoading: isLoadingUser, refetch, isFetching, error: userError, isError: isUserError } = useGetMeQuery();
     const [isLoggingOutState, setIsLoggingOutState] = useState(false);
@@ -351,6 +355,7 @@ const Index = () => {
         <ScrollView
             className='flex-1 pl-0 pt-4'
             style={{ backgroundColor: colors.screenBg }}
+            contentContainerStyle={{ paddingBottom: scrollBottomPad }}
             refreshControl={
                 <RefreshControl
                     refreshing={refreshing}
@@ -402,7 +407,6 @@ const Index = () => {
 
             <View className='px-6 pt-6'>
                 <Text className='text-lg mb-4 font-century-gothic-bold' style={{ color: colors.sectionHeaderText }}>{t('profile.title')}</Text>
-
 
                 <View className='rounded-xl p-4 mb-6' style={{ backgroundColor: colors.cardBg }}>
                     <View className='flex-row gap-3'>
@@ -513,13 +517,28 @@ const Index = () => {
                 <Text className='text-lg mb-4 font-century-gothic-bold' style={{ color: colors.sectionHeaderText }}>{t('profile.informationSection')}</Text>
                 <View className='rounded-xl mb-6' style={{ backgroundColor: colors.cardBg }}>
                     <TouchableOpacity
+                        onPress={() => router.push('/(screens)/profile/barber-store-businesses')}
+                        activeOpacity={0.7}
+                        className='flex-row items-center justify-between p-4'
+                        style={{ borderBottomColor: colors.borderColor, borderBottomWidth: 1 }}
+                    >
+                        <View className='flex-row items-center flex-1'>
+                            <Icon source="store-outline" size={24} color="#ffb900" />
+                            <View className='ml-3 flex-1'>
+                                <Text className='text-base' style={{ color: colors.sectionHeaderText }}>{t('panel.viewMyBusinesses')}</Text>
+                                <Text className='text-xs mt-0.5' style={{ color: colors.textSecondary }}>{t('panel.myStores')}</Text>
+                            </View>
+                        </View>
+                        <Icon source="chevron-right" size={24} color="#6b7280" />
+                    </TouchableOpacity>
+                    <TouchableOpacity
                         onPress={() => router.push('/(screens)/profile/shop-insights')}
                         activeOpacity={0.7}
                         className='flex-row items-center justify-between p-4'
                         style={{ borderBottomColor: colors.borderColor, borderBottomWidth: 1 }}
                     >
                         <View className='flex-row items-center flex-1'>
-                            <Icon source="chart-line" size={24} color="#3b82f6" />
+                            <Icon source="chart-line" size={24} color="#7dd3fc" />
                             <View className='ml-3 flex-1'>
                                 <Text className='text-base' style={{ color: colors.sectionHeaderText }}>{t('profile.storeEarningsTitle')}</Text>
                                 <Text className='text-xs mt-0.5' style={{ color: colors.textSecondary }}>{t('profile.storeEarningsSubtitle')}</Text>

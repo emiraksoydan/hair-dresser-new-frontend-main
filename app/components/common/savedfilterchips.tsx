@@ -1,6 +1,7 @@
+import { Icon } from "react-native-paper";
 import React, { memo } from 'react';
-import { FlatList, TouchableOpacity, View } from 'react-native';
-import { Icon } from 'react-native-paper';
+import { FlatList, StyleProp, TouchableOpacity, View, ViewStyle } from 'react-native';
+
 import { Text } from './Text';
 import { useTheme } from '../../hook/useTheme';
 import { SavedFilterGetDto } from '../../types/filter';
@@ -19,8 +20,8 @@ export const SavedFilterChips = memo(({ savedFilters, activeFilterId, onLoad }: 
     if (!savedFilters || savedFilters.length === 0) return null;
 
     return (
-        <View style={{ marginTop: 6, marginBottom: 2 }}>
-            <Text style={{ color: colors.sectionHeaderText, fontSize: 11, fontFamily: 'CenturyGothic', marginBottom: 4, opacity: 0.7 }}>
+        <View style={{ marginTop: 0, marginBottom: 0 }}>
+            <Text style={{ color: colors.sectionHeaderText, fontSize: 12, fontFamily: 'CenturyGothic-Bold', marginBottom: 8, opacity: 0.85 }}>
                 {t('filters.savedFilters')}
             </Text>
             <FlatList
@@ -28,7 +29,7 @@ export const SavedFilterChips = memo(({ savedFilters, activeFilterId, onLoad }: 
                 data={savedFilters}
                 keyExtractor={(item) => item.id}
                 showsHorizontalScrollIndicator={false}
-                contentContainerStyle={{ gap: 6, paddingHorizontal: 2 }}
+                contentContainerStyle={{ gap: 8, paddingVertical: 2, paddingRight: 4 }}
                 renderItem={({ item }) => {
                     const isActive = item.id === activeFilterId;
                     return (
@@ -38,17 +39,17 @@ export const SavedFilterChips = memo(({ savedFilters, activeFilterId, onLoad }: 
                             style={{
                                 flexDirection: 'row',
                                 alignItems: 'center',
-                                gap: 4,
+                                gap: 5,
                                 backgroundColor: isActive ? '#ffb900' : colors.cardBg2,
-                                borderRadius: 20,
+                                borderRadius: 22,
                                 borderWidth: 1,
                                 borderColor: '#ffb900',
-                                paddingHorizontal: 10,
-                                paddingVertical: 5,
+                                paddingHorizontal: 12,
+                                paddingVertical: 8,
                             }}
                         >
-                            <Icon source="bookmark" size={12} color={isActive ? colors.cardBg2 : '#ffb900'} />
-                            <Text style={{ color: isActive ? colors.cardBg2 : colors.sectionHeaderText, fontSize: 12, fontFamily: 'CenturyGothic' }}>
+                            <Icon source="bookmark" size={14} color={isActive ? colors.cardBg2 : '#ffb900'} />
+                            <Text style={{ color: isActive ? colors.cardBg2 : colors.sectionHeaderText, fontSize: 13, fontFamily: 'CenturyGothic' }} numberOfLines={1}>
                                 {item.name}
                             </Text>
                         </TouchableOpacity>

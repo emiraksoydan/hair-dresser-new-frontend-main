@@ -1,7 +1,8 @@
+import { Icon } from "react-native-paper";
 import React, { useState } from 'react';
 import { TouchableOpacity, View, StyleSheet } from 'react-native';
 import { Text } from './Text';
-import { Icon } from 'react-native-paper';
+
 import { MotiView } from 'moti';
 import { useTheme } from '../../hook/useTheme';
 

@@ -15,7 +15,7 @@ import { Text } from "../common/Text";
 import { ActivityIndicator, Icon } from "react-native-paper";
 import { useLanguage } from "../../hook/useLanguage";
 import {
-  useGetAvailabilityQuery,
+  useGetAvailabilityRangeQuery,
   useGetStoreForUsersQuery,
   useGetWorkingHoursByTargetQuery,
   useCreateCustomerAppointmentMutation,
@@ -48,6 +48,8 @@ import { ImageCarousel } from "../common/imagecarousel";
 import { useCanPerformAction } from "../../hook/useCanPerformAction";
 import { useAlert } from "../../hook/useAlert";
 import { useTheme } from "../../hook/useTheme";
+import { OwnerAvatar } from "../common/owneravatar";
+import { ImageOwnerType } from "../../types";
 
 const toLocalIso = (dateStr: string, hhmm: string) =>
   `${dateStr}T${normalizeTime(hhmm)}:00`;
@@ -101,8 +103,10 @@ const StoreBookingContent = ({
 
   // FreeBarber seçimi artık koltuk seçiminde gösteriliyor (barberId koltuğa atanmışsa)
 
-  // day selection
+  // day selection (önümüzdeki 7 gün — müsaitlik batch ile tek istek)
   const days = useMemo(() => build7Days(), []);
+  const rangeFromDate = useMemo(() => fmtDateOnly(days[0]), [days]);
+  const rangeToDate = useMemo(() => fmtDateOnly(days[6]), [days]);
   const [selectedDateOnly, setSelectedDateOnly] = useState(() =>
     fmtDateOnly(days[0]),
   );
@@ -127,18 +131,19 @@ const StoreBookingContent = ({
   };
 
   const {
-    data,
+    data: availabilityByDay,
     isFetching,
     isLoading,
     refetch,
     error: availabilityError,
-  } = useGetAvailabilityQuery(
+  } = useGetAvailabilityRangeQuery(
     {
       storeId,
-      dateOnly: selectedDateOnly,
+      fromDate: rangeFromDate,
+      toDate: rangeToDate,
     },
     {
-      skip: !storeId || !selectedDateOnly,
+      skip: !storeId || !rangeFromDate || !rangeToDate,
     },
   );
 
@@ -150,14 +155,10 @@ const StoreBookingContent = ({
   );
 
   const chairs: ChairSlotDto[] = useMemo(() => {
-    if (!data) {
-      return [];
-    }
-    if (Array.isArray(data)) {
-      return data;
-    }
-    return [];
-  }, [data]);
+    if (!availabilityByDay || !Array.isArray(availabilityByDay)) return [];
+    const row = availabilityByDay.find((d) => d.date === selectedDateOnly);
+    return row?.chairs ?? [];
+  }, [availabilityByDay, selectedDateOnly]);
 
   // Use custom hooks for booking logic
   const {
@@ -186,14 +187,12 @@ const StoreBookingContent = ({
     }
   }, [chairs, selectedDateOnly, selectedChairId, setSelectedChairId]);
 
-  // Day change handler
   const onChangeDay = useCallback(
-    (d: string) => {
-      setSelectedDateOnly(d);
-      setSelectedChairId(null);
+    (key: string) => {
+      setSelectedDateOnly(key);
       setSelectedSlotKeys([]);
     },
-    [setSelectedChairId, setSelectedSlotKeys],
+    [setSelectedSlotKeys],
   );
 
   // Use custom hook for pricing calculations
@@ -314,13 +313,20 @@ const StoreBookingContent = ({
             </Text>
           </View>
 
-          {/* DAYS */}
+          {availabilityError ? (
+            <View className="rounded-xl p-3" style={{ backgroundColor: isDark ? "rgba(239,68,68,0.12)" : "rgba(254,202,202,0.35)" }}>
+              <Text className="text-sm font-century-gothic" style={{ color: "#b91c1c" }}>
+                {getErrorMessage(availabilityError)}
+              </Text>
+            </View>
+          ) : null}
+
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
             nestedScrollEnabled
           >
-            <View className="flex-row gap-2 items-center">
+            <View className="flex-row gap-2 items-center pb-1">
               {days.map((d) => {
                 const key = fmtDateOnly(d);
                 const active = key === selectedDateOnly;
@@ -332,30 +338,30 @@ const StoreBookingContent = ({
                     disabled={disabled}
                     onPress={() => onChangeDay(key)}
                     activeOpacity={0.7}
-                    className="items-center rounded-2xl px-3 py-2.5 min-w-[68px]"
+                    className="items-center rounded-2xl px-3.5 py-2.5 min-w-[76px]"
                     style={
                       disabled
-                        ? { backgroundColor: isDark ? '#1a1a2e' : '#fef2f2', borderColor: '#ef4444', borderWidth: 1.5 }
+                        ? { backgroundColor: isDark ? "#1a1a2e" : "#fef2f2", borderColor: "#ef4444", borderWidth: 1.5 }
                         : active
-                          ? { backgroundColor: isDark ? 'rgba(254,166,14,0.25)' : 'rgba(254,166,14,0.15)', borderColor: '#fea60e', borderWidth: 1.5 }
+                          ? { backgroundColor: isDark ? "rgba(254,166,14,0.25)" : "rgba(254,166,14,0.15)", borderColor: "#fea60e", borderWidth: 1.5 }
                           : { backgroundColor: colors.cardBg2, borderColor: colors.borderColor, borderWidth: 1 }
                     }
                   >
                     <Text
                       className="text-xs font-century-gothic"
-                      style={{ color: disabled ? '#ef4444' : active ? '#fea60e' : colors.textSecondary }}
+                      style={{ color: disabled ? "#ef4444" : active ? "#fea60e" : colors.textSecondary }}
                     >
-                      {info.isToday ? "Bugün" : info.dayShort}
+                      {info.isToday ? t("booking.today") : info.dayShort}
                     </Text>
                     <Text
                       className="text-2xl font-century-gothic-bold my-0.5"
-                      style={{ color: disabled ? '#ef4444' : active ? colors.sectionHeaderText : colors.sectionHeaderText }}
+                      style={{ color: disabled ? "#ef4444" : colors.sectionHeaderText }}
                     >
                       {info.dayNum}
                     </Text>
                     <Text
                       className="text-xs font-century-gothic"
-                      style={{ color: disabled ? '#ef4444' : active ? '#fea60e' : colors.textSecondary }}
+                      style={{ color: disabled ? "#ef4444" : active ? "#fea60e" : colors.textSecondary }}
                     >
                       {info.monthShort}
                     </Text>
@@ -368,7 +374,7 @@ const StoreBookingContent = ({
                     </View>
                     {disabled && (
                       <View className="mt-1 bg-red-500 px-1.5 py-0.5 rounded">
-                        <Text className="text-white text-[10px] font-semibold">Kapalı</Text>
+                        <Text className="text-white text-[10px] font-semibold">{t("booking.weekGridClosed")}</Text>
                       </View>
                     )}
                   </TouchableOpacity>
@@ -376,7 +382,8 @@ const StoreBookingContent = ({
               })}
             </View>
           </ScrollView>
-          {(isLoading || (isFetching && !data)) && (
+
+          {(isLoading || (isFetching && !availabilityByDay)) && (
             <View className="py-10">
               <ActivityIndicator />
             </View>
@@ -390,7 +397,7 @@ const StoreBookingContent = ({
             </View>
           ) : chairs.length > 0 ? (
             <View>
-              <Text className="text-sm font-century-gothic-bold mb-2" style={{ color: colors.sectionHeaderText }}>
+              <Text className="text-sm font-century-gothic-bold mb-2 mt-2" style={{ color: colors.sectionHeaderText }}>
                 {t("form.selectChair")}
               </Text>
               <ScrollView
@@ -417,19 +424,29 @@ const StoreBookingContent = ({
                         className="items-center min-w-[110px] px-3 py-3 rounded-2xl"
                         style={
                           isSelected
-                            ? { backgroundColor: isDark ? 'rgba(254,166,14,0.25)' : 'rgba(254,166,14,0.15)', borderColor: '#fea60e', borderWidth: 1.5 }
+                            ? { backgroundColor: isDark ? "rgba(254,166,14,0.25)" : "rgba(254,166,14,0.15)", borderColor: "#fea60e", borderWidth: 1.5 }
                             : { backgroundColor: colors.cardBg2, borderColor: colors.borderColor, borderWidth: 1 }
                         }
                       >
-                        <View
-                          className="rounded-full p-2 mb-1.5"
-                          style={isSelected ? { backgroundColor: 'rgba(254,166,14,0.2)' } : { backgroundColor: isDark ? '#334155' : '#e2e8f0' }}
-                        >
-                          <Icon source="seat" size={22} color={isSelected ? "#fea60e" : "#94a3b8"} />
-                        </View>
+                        {hasBarber ? (
+                          <OwnerAvatar
+                            ownerId={c.barberId!}
+                            ownerType={ImageOwnerType.ManuelBarber}
+                            imageClassName="w-12 h-12 rounded-full"
+                            iconSource="account"
+                            wrapperStyle={{ marginBottom: 6, borderWidth: isSelected ? 2 : 1, borderColor: isSelected ? "#fea60e" : "transparent", borderRadius: 9999 }}
+                          />
+                        ) : (
+                          <View
+                            className="rounded-full p-2 mb-1.5"
+                            style={isSelected ? { backgroundColor: "rgba(254,166,14,0.2)" } : { backgroundColor: isDark ? "#334155" : "#e2e8f0" }}
+                          >
+                            <Icon source="seat" size={22} color={isSelected ? "#fea60e" : "#94a3b8"} />
+                          </View>
+                        )}
                         <Text
                           className="font-century-gothic-bold text-sm"
-                          style={{ color: isSelected ? '#fea60e' : colors.sectionHeaderText }}
+                          style={{ color: isSelected ? "#fea60e" : colors.sectionHeaderText }}
                           numberOfLines={1}
                         >
                           {chairName}
@@ -437,7 +454,7 @@ const StoreBookingContent = ({
                         {hasBarber && (
                           <Text
                             className="font-century-gothic text-xs mt-0.5"
-                            style={{ color: isSelected ? '#fea60e' : colors.textSecondary }}
+                            style={{ color: isSelected ? "#fea60e" : colors.textSecondary }}
                             numberOfLines={1}
                           >
                             {barberName}
@@ -460,95 +477,202 @@ const StoreBookingContent = ({
                   })}
                 </View>
               </ScrollView>
+
+              {selectedChair ? (() => {
+                const availableCount = selectedChair.slots.filter(s => !s.isBooked && !s.isPast).length;
+                const bookedCount = selectedChair.slots.filter(s => s.isBooked).length;
+                return (
+                  <View style={{ marginTop: 14 }}>
+                    {/* Saat başlığı + istatistik */}
+                    <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+                      <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                        <Icon source="clock-time-four-outline" size={16} color="#fea60e" />
+                        <Text style={{ fontFamily: "CenturyGothic-Bold", fontSize: 14, color: colors.sectionHeaderText }}>
+                          {t("form.selectTime")}
+                        </Text>
+                      </View>
+                      <View style={{ flexDirection: "row", gap: 8 }}>
+                        <View style={{ flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10, backgroundColor: isDark ? "rgba(52,211,153,0.12)" : "rgba(52,211,153,0.1)" }}>
+                          <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: "#34d399" }} />
+                          <Text style={{ fontSize: 11, fontFamily: "CenturyGothic-Bold", color: "#34d399" }}>{availableCount}</Text>
+                        </View>
+                        {bookedCount > 0 && (
+                          <View style={{ flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10, backgroundColor: isDark ? "rgba(239,68,68,0.12)" : "rgba(239,68,68,0.08)" }}>
+                            <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: "#ef4444" }} />
+                            <Text style={{ fontSize: 11, fontFamily: "CenturyGothic-Bold", color: "#ef4444" }}>{bookedCount}</Text>
+                          </View>
+                        )}
+                      </View>
+                    </View>
+
+                    {/* Slot grid — 4 sütun */}
+                    <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 7 }}>
+                      {selectedChair.slots.map((s) => {
+                        const isBooked = s.isBooked;
+                        const isPast = s.isPast;
+                        const key = normalizeTime(s.start);
+                        const isSelected = selectedSlotKeys.includes(key);
+                        const isDisabled = isBooked || isPast;
+                        const slotW = "22.5%";
+
+                        return (
+                          <TouchableOpacity
+                            key={String(s.slotId)}
+                            disabled={isDisabled}
+                            onPress={() => onToggleSlot(s, isBooked, isPast)}
+                            activeOpacity={0.75}
+                            style={{
+                              width: slotW,
+                              borderRadius: 12,
+                              overflow: "hidden",
+                              borderWidth: isSelected ? 1.5 : 1,
+                              borderColor: isBooked
+                                ? "rgba(153,27,27,0.4)"
+                                : isPast
+                                  ? isDark ? "#1f2937" : "#e5e7eb"
+                                  : isSelected
+                                    ? "#fea60e"
+                                    : colors.borderColor,
+                              backgroundColor: isBooked
+                                ? isDark ? "rgba(127,29,29,0.3)" : "rgba(254,202,202,0.4)"
+                                : isPast
+                                  ? isDark ? "#111827" : "#f9fafb"
+                                  : isSelected
+                                    ? isDark ? "rgba(254,166,14,0.18)" : "rgba(254,166,14,0.12)"
+                                    : colors.cardBg2,
+                              opacity: isPast ? 0.45 : 1,
+                            }}
+                          >
+                            {/* Colored top strip */}
+                            <View style={{
+                              height: 3,
+                              backgroundColor: isBooked
+                                ? "#ef4444"
+                                : isPast
+                                  ? isDark ? "#374151" : "#d1d5db"
+                                  : isSelected
+                                    ? "#fea60e"
+                                    : isDark ? "#1f2937" : "#e5e7eb",
+                            }} />
+
+                            <View style={{ paddingVertical: 8, paddingHorizontal: 4, alignItems: "center" }}>
+                              <Text
+                                style={{
+                                  fontFamily: "CenturyGothic-Bold",
+                                  fontSize: 14,
+                                  color: isBooked || isPast
+                                    ? isDark ? "#4b5563" : "#9ca3af"
+                                    : isSelected ? "#fea60e" : colors.sectionHeaderText,
+                                }}
+                              >
+                                {normalizeTime(s.start)}
+                              </Text>
+                              <Text
+                                style={{
+                                  fontFamily: "CenturyGothic",
+                                  fontSize: 10,
+                                  marginTop: 1,
+                                  color: isBooked || isPast
+                                    ? isDark ? "#374151" : "#9ca3af"
+                                    : isSelected ? "rgba(254,166,14,0.7)" : colors.textSecondary,
+                                }}
+                              >
+                                {normalizeTime(s.end)}
+                              </Text>
+                              <View style={{ marginTop: 4, height: 14, justifyContent: "center" }}>
+                                {isBooked ? (
+                                  <Icon source="lock" size={11} color="#ef4444" />
+                                ) : isPast ? (
+                                  <Icon source="clock-remove-outline" size={11} color="#6b7280" />
+                                ) : isSelected ? (
+                                  <Icon source="check-circle" size={13} color="#fea60e" />
+                                ) : (
+                                  <View style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: "#34d399" }} />
+                                )}
+                              </View>
+                            </View>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+
+                    {/* Legend */}
+                    <View style={{ flexDirection: "row", gap: 14, marginTop: 10, flexWrap: "wrap" }}>
+                      {[
+                        { color: "#34d399", label: t("booking.weekGridFree") },
+                        { color: "#fea60e", label: t("booking.selectedTime") ?? "Seçili" },
+                        { color: "#ef4444", label: t("booking.weekGridBooked") },
+                        { color: isDark ? "#374151" : "#d1d5db", label: t("booking.weekGridPast") },
+                      ].map((item) => (
+                        <View key={item.label} style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
+                          <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: item.color }} />
+                          <Text style={{ fontSize: 10, fontFamily: "CenturyGothic", color: colors.textSecondary }}>{item.label}</Text>
+                        </View>
+                      ))}
+                    </View>
+                  </View>
+                );
+              })() : (
+                <View style={{ borderRadius: 14, padding: 20, alignItems: "center", marginTop: 10, backgroundColor: colors.cardBg2, borderWidth: 1, borderColor: colors.borderColor, borderStyle: "dashed" }}>
+                  <Icon source="gesture-tap" size={28} color="#6b7280" />
+                  <Text style={{ color: "#6b7280", marginTop: 8, fontFamily: "CenturyGothic", fontSize: 13 }}>{t("form.selectChairFirst")}</Text>
+                </View>
+              )}
             </View>
           ) : null}
-
-          {!selectedChair ? (
-            <View className="rounded-xl p-4 items-center" style={{ backgroundColor: colors.cardBg2 }}>
-              <Icon source="clock-outline" size={28} color="#6b7280" />
-              <Text className="text-gray-400 mt-2">{t("form.selectChairFirst")}</Text>
-            </View>
-          ) : (
-            <View>
-              <Text className="text-sm font-century-gothic-bold mb-2" style={{ color: colors.sectionHeaderText }}>
-                {t("form.selectTime")}
-              </Text>
-              <View className="flex-row flex-wrap gap-2">
-                {selectedChair.slots.map((s) => {
-                  const isBooked = s.isBooked;
-                  const isPast = s.isPast;
-                  const key = normalizeTime(s.start);
-                  const isSelected = selectedSlotKeys.includes(key);
-                  const isDisabled = isBooked || isPast;
-                  return (
-                    <TouchableOpacity
-                      key={String(s.slotId)}
-                      disabled={isDisabled}
-                      onPress={() => onToggleSlot(s, isBooked, isPast)}
-                      activeOpacity={0.7}
-                      className="items-center px-3 py-2.5 rounded-xl"
-                      style={
-                        isBooked
-                          ? { backgroundColor: 'rgba(127,29,29,0.4)', borderColor: 'rgba(153,27,27,0.5)', borderWidth: 1, opacity: 0.6 }
-                          : isPast
-                            ? { backgroundColor: isDark ? '#1e1e1e' : '#f3f4f6', borderColor: isDark ? '#2a2a2a' : '#d1d5db', borderWidth: 1, opacity: 0.5 }
-                            : isSelected
-                              ? { backgroundColor: isDark ? 'rgba(254,166,14,0.25)' : 'rgba(254,166,14,0.15)', borderColor: '#fea60e', borderWidth: 1.5 }
-                              : { backgroundColor: colors.cardBg2, borderColor: colors.borderColor, borderWidth: 1 }
-                      }
-                    >
-                      <Text
-                        className="text-sm font-century-gothic-bold"
-                        style={{ color: isBooked || isPast ? (isDark ? '#6b7280' : '#9ca3af') : isSelected ? '#fea60e' : colors.sectionHeaderText }}
-                      >
-                        {normalizeTime(s.start)}
-                      </Text>
-                      <Text
-                        className="text-[10px] font-century-gothic"
-                        style={{ color: isBooked || isPast ? (isDark ? '#4b5563' : '#9ca3af') : isSelected ? '#fea60e' : colors.textSecondary }}
-                      >
-                        {normalizeTime(s.end)}
-                      </Text>
-                      {isBooked && (
-                        <View className="mt-0.5">
-                          <Icon source="close-circle" size={12} color="#ef4444" />
-                        </View>
-                      )}
-                      {isPast && (
-                        <View className="mt-0.5">
-                          <Icon source="clock-alert" size={12} color="#6b7280" />
-                        </View>
-                      )}
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-            </View>
-          )}
           {!!startHHmm && !!endHHmm && (
-            <View className="rounded-2xl p-4 flex-row items-center justify-between" style={{ backgroundColor: colors.cardBg3, borderColor: isDark ? '#1e3a5f' : '#e2e8f0', borderWidth: 1 }}>
-              <View className="flex-row items-center gap-3">
-                <View className="rounded-full p-2" style={{ backgroundColor: '#fea60e' }}>
-                  <Icon source="clock-check" size={20} color="white" />
+            <View style={{
+              borderRadius: 16,
+              overflow: "hidden",
+              borderWidth: 1,
+              borderColor: isDark ? "rgba(254,166,14,0.3)" : "rgba(254,166,14,0.25)",
+              backgroundColor: isDark ? "rgba(254,166,14,0.08)" : "rgba(254,166,14,0.06)",
+            }}>
+              {/* Gold top bar */}
+              <View style={{ height: 3, backgroundColor: "#fea60e" }} />
+              <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", padding: 12 }}>
+                {/* Left: time range */}
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+                  <View style={{ width: 38, height: 38, borderRadius: 10, backgroundColor: "#fea60e", alignItems: "center", justifyContent: "center" }}>
+                    <Icon source="clock-check-outline" size={20} color="white" />
+                  </View>
+                  <View>
+                    <Text style={{ fontFamily: "CenturyGothic", fontSize: 11, color: colors.textSecondary }}>
+                      {t("form.selectedTime")}
+                    </Text>
+                    <Text style={{ fontFamily: "CenturyGothic-Bold", fontSize: 17, color: colors.sectionHeaderText, letterSpacing: 0.3 }}>
+                      {startHHmm}
+                      <Text style={{ color: "#fea60e" }}> → </Text>
+                      {endHHmm}
+                    </Text>
+                  </View>
                 </View>
-                <View>
-                  <Text className="text-xs font-century-gothic" style={{ color: colors.textSecondary }}>{t("form.selectedTime")}</Text>
-                  <Text className="font-century-gothic-bold text-base" style={{ color: colors.sectionHeaderText }}>
-                    {startHHmm} - {endHHmm}
-                  </Text>
+
+                {/* Right: slots + price */}
+                <View style={{ alignItems: "flex-end", gap: 4 }}>
+                  <View style={{
+                    paddingHorizontal: 10,
+                    paddingVertical: 4,
+                    borderRadius: 10,
+                    backgroundColor: isDark ? "rgba(254,166,14,0.2)" : "rgba(254,166,14,0.15)",
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: 4,
+                  }}>
+                    <Icon source="timer-outline" size={13} color="#fea60e" />
+                    <Text style={{ fontFamily: "CenturyGothic-Bold", fontSize: 13, color: "#fea60e" }}>
+                      {selectedSlotKeys.length} {t("form.hours")}
+                    </Text>
+                  </View>
+                  {isHourlyFree && slotPriceTotal > 0 && (
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 3 }}>
+                      <Icon source="currency-try" size={13} color="#34d399" />
+                      <Text style={{ fontFamily: "CenturyGothic-Bold", fontSize: 13, color: "#34d399" }}>
+                        {slotPriceTotal} {t("card.currencySymbol")}
+                      </Text>
+                    </View>
+                  )}
                 </View>
-              </View>
-              <View className="items-end gap-1">
-                <View className="px-3 py-1.5 rounded-lg" style={{ backgroundColor: colors.cardBg2 }}>
-                  <Text className="font-century-gothic-bold text-sm" style={{ color: '#FFB900' }}>
-                    {selectedSlotKeys.length} {t("form.hours")}
-                  </Text>
-                </View>
-                {isHourlyFree && slotPriceTotal > 0 && (
-                  <Text className="font-century-gothic-bold text-sm" style={{ color: '#fea60e' }}>
-                    {slotPriceTotal} {t("card.currencySymbol")}
-                  </Text>
-                )}
               </View>
             </View>
           )}

@@ -60,3 +60,10 @@ export interface EarningsDto {
   changePercent: number;
   dailyBreakdown: DailyEarningDto[];
 }
+
+export interface AIAssistantResponseDto {
+  response: string;
+  intent: string;
+  actionTaken: boolean;
+  affectedAppointmentId?: string | null;
+}

@@ -1,7 +1,7 @@
 {
   "expo": {
     "scheme": "hairdresser",
-    "name": "Gumus Makas",
+    "name": "Gümüş Makas",
     "slug": "HairDresser",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -9,9 +9,8 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": false,
     "splash": {
-      "image": "./assets/icon.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#ffffff",
+      "resizeMode": "cover"
     },
     "ios": {
       "supportsTablet": false,

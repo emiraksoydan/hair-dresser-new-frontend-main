@@ -15,6 +15,7 @@
     "login": "تسجيل الدخول",
     "register": "إنشاء حساب",
     "verifyPhone": "تحقق من هاتفك",
+    "otpAccessHint": "أدخل رمز الوصول للبدء.",
     "enterCode": "أدخل الرمز المكون من 6 أرقام المرسل إلى {{phone}}",
     "timeRemaining": "الوقت: {{time}}",
     "resendCode": "إعادة إرسال الرمز",
@@ -116,12 +117,15 @@
     "customStart": "البداية",
     "customEnd": "النهاية",
     "profitRate": "إجمالي معدل الربح",
+    "allTimeTotalLabel": "الإجمالي الكلي منذ بداية الحساب",
     "exportExcel": "تصدير Excel",
     "exportPdf": "تصدير PDF",
     "exportError": "فشل التصدير.",
     "earningsEmptyTitle": "لا توجد أرباح في هذه الفترة",
     "earningsEmptySubtitle": "جرّب نطاق تاريخ آخر أو انتظر اكتمال المواعيد.",
     "chartScrollHint": "مرّر أفقياً إذا كانت التسميات كثيرة.",
+    "chartPeriodTotal": "إجمالي الفترة:",
+    "chartLoading": "جاري تحميل الرسم…",
     "pickDateHint": "اختر التاريخ من التقويم ثم اضغط موافق."
   },
   "subscription": {
@@ -267,7 +271,8 @@
       "myServices": "خدماتي",
       "services": "الخدمات",
       "scheduleDate": "التاريخ",
-      "scheduleTime": "الوقت"
+      "scheduleTime": "الوقت",
+      "chair": "الكرسي"
     }
   },
   "time": {
@@ -417,6 +422,8 @@
     "storeNoWorkingHours": "المتجر لم يحدد ساعات العمل لهذا اليوم (مغلق).",
     "storeHasActiveAppointments": "هذا المتجر لديه مواعيد نشطة أو قيد الانتظار. يجب أن تكون متاحاً أولاً.",
     "appointmentSlotOverlap": "الفترة الزمنية المحددة تتداخل مع موعد آخر.",
+    "availabilityRangeInvalid": "لا يمكن أن يكون تاريخ الانتهاء قبل تاريخ البداية.",
+    "availabilityRangeTooLarge": "لا يمكن أن يتجاوز نطاق التوفر 7 أيام في طلب واحد.",
     "appointmentSlotTaken": "تم أخذ وقت الموعد هذا من قبل.",
     "freebarberNotAvailable": "الحلاق المستقل غير متاح الآن.",
     "freebarberNotFound": "لم يتم العثور على الحلاق المستقل.",
@@ -635,6 +642,11 @@
     "chairPricing": "تحديد أسعار الكراسي",
     "rentPriceHourly": "سعر الإيجار بالساعة",
     "workingHours": "ساعات العمل",
+    "startTimeShort": "البداية",
+    "endTimeShort": "النهاية",
+    "closed": "مغلق",
+    "closedDays": "الأيام المغلقة",
+    "closedDaysHint": "اضغط على يوم مغلق لفتحه",
     "setAddress": "تحديد العنوان",
     "addressDescription": "وصف العنوان",
     "storeNameLabel": "اسم الشركة",
@@ -704,7 +716,14 @@
     "freebarberUserNotFound": "لم يتم العثور على مستخدم الحلاق المستقل.",
     "barberCallFailed": "فشل استدعاء الحلاق.",
     "appointmentNotePlaceholder": "يمكنك كتابة الخدمات والأسعار ومعلومات الوقت...",
-    "appointmentNotePlaceholderAlt": "يمكنك كتابة الخدمات والأسعار ومعلومات الوقت، إلخ..."
+    "appointmentNotePlaceholderAlt": "يمكنك كتابة الخدمات والأسعار ومعلومات الوقت، إلخ...",
+    "today": "اليوم",
+    "weekGridTitle": "التوفر الأسبوعي",
+    "weekGridFree": "متاح",
+    "weekGridBooked": "محجوز",
+    "weekGridPast": "منتهٍ",
+    "weekGridClosed": "مغلق",
+    "selectedTime": "محدد"
   },
   "complaint": {
     "title": "تقديم شكوى",
@@ -750,7 +769,45 @@
     "threadNotFound": "المحادثة غير موجودة",
     "today": "اليوم",
     "yesterday": "أمس",
-    "newMessage": "رسالة جديدة"
+    "newMessage": "رسالة جديدة",
+    "reply": "رد",
+    "delete": "حذف",
+    "deleteMessage": "حذف الرسالة",
+    "deleteMessageConfirm": "هل أنت متأكد من حذف هذه الرسالة؟",
+    "replyTo": "رداً على:",
+    "replyingTo": "رداً على:",
+    "galleryPermission": "مطلوب إذن الوصول للمعرض لإرسال الصور.",
+    "microphonePermission": "مطلوب إذن الميكروفون لإرسال الرسائل الصوتية.",
+    "locationPermission": "مطلوب إذن الموقع لمشاركة الموقع.",
+    "imageUploadFailed": "فشل تحميل الصورة. حاول مجدداً.",
+    "locationFailed": "تعذر الحصول على الموقع.",
+    "recordingFailed": "تعذر بدء التسجيل الصوتي.",
+    "transcriptionFailed": "تعذر تحويل الصوت إلى نص.",
+    "uploadingMedia": "جاري رفع الوسائط...",
+    "locationShared": "تمت مشاركة الموقع",
+    "photo": "صورة",
+    "location": "موقع",
+    "deleteThread": "حذف المحادثة",
+    "deleteThreadConfirm": "حذف هذه المحادثة لك فقط؟ سيظل المشاركون الآخرون يرونها.",
+    "fileUploadFailed": "فشل تحميل الملف. حاول مجدداً.",
+    "tapToOpen": "اضغط للفتح",
+    "file": "ملف"
+  },
+  "ai": {
+    "assistantTitle": "المساعد الذكي",
+    "tapToSpeak": "تحدث عن مواعيدك",
+    "recording": "أستمع...",
+    "transcribing": "جارٍ تحويل الصوت...",
+    "thinking": "أفكر...",
+    "tapToStop": "اضغط للإيقاف",
+    "retry": "حاول مجدداً",
+    "actionTaken": "تم تنفيذ الإجراء",
+    "error_recording_permission_denied": "مطلوب إذن الميكروفون.",
+    "error_recording_failed": "تعذّر بدء التسجيل.",
+    "error_transcription_empty": "لم يُكتشف كلام. حاول مجدداً.",
+    "error_whisper_failed": "تعذّر تحويل الصوت إلى نص.",
+    "error_ai_error": "تعذّر على المساعد الذكي الرد.",
+    "error_unknown": "حدث خطأ غير متوقع."
   },
   "rating": {
     "selectRating": "يرجى اختيار التقييم.",
@@ -983,7 +1040,14 @@
     "topSectionExpandedHint": "اضغط لإخفاء البحث والملخص",
     "topSectionCollapsedHint": "اضغط لإظهار البحث والملخص",
     "collapseTopSection": "طي القسم العلوي",
-    "expandTopSection": "توسيع القسم العلوي"
+    "expandTopSection": "توسيع القسم العلوي",
+    "viewMyPanel": "عرض لوحتي",
+    "viewMyBusinesses": "عرض أعمالي",
+    "layoutToggleHint": "قائمة أو شبكة",
+    "overflowCompare": "مقارنة",
+    "overflowPhotos": "عرض الصور",
+    "overflowMenuA11y": "إجراءات اللوحة",
+    "locationDeniedShort": "الموقع معطّل؛ الاستكشاف غير متاح، وستُحمّل بيانات لوحتك."
   },
   "moderation": {
     "inappropriateText": "رسالتك تحتوي على محتوى غير لائق. يرجى عدم استخدام الألفاظ النابية أو الإهانات.",
@@ -1000,5 +1064,10 @@
     "consentAgreement": "أمنح موافقتي الصريحة على معالجة بياناتي الشخصية.",
     "mustAgree": "يجب قبول الاتفاقيات للمتابعة.",
     "close": "إغلاق"
+  },
+  "nativePermissions": {
+    "locationWhenInUse": "نستخدم موقعك لعرض الصالونات والحلاقين القريبين.",
+    "locationAlways": "يُستخدم الموقع لتحديث مواقع الحلاقين الأحرار حتى عندما يكون التطبيق في الخلفية.",
+    "microphone": "يُستخدم الميكروفون لإرسال الرسائل الصوتية."
   }
 }

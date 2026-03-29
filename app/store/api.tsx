@@ -3,7 +3,7 @@ import { baseQueryWithReauth } from './baseQuery';
 import {
     AccessTokenDto, ApiResponse, BarberChairCreateDto, BarberChairUpdateDto,
     BarberStoreCreateDto, BarberStoreDetail, BarberStoreGetDto, BarberStoreMineDto,
-    BarberStoreUpdateDto, ChairSlotDto, CreateAppointmentRequestDto, FreeBarberCreateDto,
+    BarberStoreUpdateDto, ChairSlotDto, StoreDayAvailabilityDto, CreateAppointmentRequestDto, FreeBarberCreateDto,
     FreeBarberMinePanelDetailDto, FreeBarberPanelDto, FreeBarberUpdateDto, FreeBarGetDto,
     ManuelBarberCreateDto, ManuelBarberUpdateDto, NearbyRequest, NotificationDto,
     OtpPurpose, UpdateLocationDto, UserType, VerifyOtpRequest, WorkingHourGetDto,
@@ -17,7 +17,7 @@ import {
     ComplaintGetDto, CreateComplaintDto,
     RequestGetDto, CreateRequestDto,
     BlockedGetDto, CreateBlockedDto, UnblockDto, BlockStatusDto,
-    CategoryHierarchyDto, EarningsDto
+    CategoryHierarchyDto, EarningsDto, AIAssistantResponseDto
 } from '../types';
 import { FilterRequestDto, SavedFilterGetDto, SavedFilterCreateDto, SavedFilterUpdateDto } from '../types/filter';
 import { transformArrayResponse, transformObjectResponse, transformBooleanResponse, transformApiResponse } from '../utils/api/transform-response';
@@ -267,6 +267,18 @@ export const api = createApi({
             keepUnusedDataFor: CACHE_DURATIONS.REAL_TIME,
         }),
 
+        /** Tek istekte çok günlük müsaitlik (ör. önümüzdeki 7 gün); günlük endpoint ile aynı koltuk şekli. */
+        getAvailabilityRange: builder.query<StoreDayAvailabilityDto[], { storeId: string; fromDate: string; toDate: string }>({
+            query: ({ storeId, fromDate, toDate }) =>
+                `Appointment/availability-range?storeId=${storeId}&fromDate=${fromDate}&toDate=${toDate}`,
+            transformResponse: transformArrayResponse<StoreDayAvailabilityDto>,
+            providesTags: (result, error, { storeId, fromDate, toDate }) => [
+                { type: 'Appointment' as const, id: `availability-range-${storeId}-${fromDate}-${toDate}` },
+                { type: 'Appointment' as const, id: 'availability' },
+            ],
+            keepUnusedDataFor: CACHE_DURATIONS.REAL_TIME,
+        }),
+
         // 2. YENİ EKLENEN: Filtreli Randevu Listesi (Active/Completed/Cancelled)
         getAllAppointmentByFilter: builder.query<AppointmentGetDto[], AppointmentFilter>({
             query: (filter) => ({
@@ -470,11 +482,14 @@ export const api = createApi({
         }),
         deleteNotification: builder.mutation<ApiResponse<boolean>, string>({
             query: (id) => ({ url: `Notification/${id}`, method: 'DELETE' }),
+            invalidatesTags: (_result, error) => (error ? [] : [{ type: 'Notification' as const, id: 'LIST' }]),
             async onQueryStarted(id, { dispatch, queryFulfilled }) {
+                const norm = (s: string) => s.replace(/-/g, '').toLowerCase();
+                const idN = norm(id);
                 let wasUnread = false;
                 const listPatch = dispatch(
                     api.util.updateQueryData('getAllNotifications', undefined, (draft) => {
-                        const index = draft.findIndex((n) => n.id === id);
+                        const index = draft.findIndex((n) => norm(n.id) === idN);
                         if (index >= 0) { wasUnread = !draft[index].isRead; draft.splice(index, 1); }
                     }),
                 );
@@ -531,20 +546,17 @@ export const api = createApi({
             keepUnusedDataFor: CACHE_DURATIONS.LIST,
             transformResponse: transformArrayResponse<ChatMessageItemDto>,
         }),
-        sendChatMessage: builder.mutation<ApiResponse<ChatMessageDto>, { appointmentId: string; text: string }>({
-            query: ({ appointmentId, text }) => ({
+        sendChatMessage: builder.mutation<ApiResponse<ChatMessageDto>, { appointmentId: string; text: string; replyToMessageId?: string | null }>({
+            query: ({ appointmentId, text, replyToMessageId }) => ({
                 url: `Chat/${appointmentId}/message`,
                 method: 'POST',
-                body: { text },
+                body: { text, replyToMessageId: replyToMessageId ?? null },
             }),
-            // Optimistic update: Add message to cache immediately when sent
             async onQueryStarted({ appointmentId, text }, { dispatch, queryFulfilled }) {
                 try {
                     const result = await queryFulfilled;
                     const messageDto = result.data?.data;
                     if (messageDto) {
-                        // Update cache with the message from backend response
-                        // This ensures user sees their message immediately
                         dispatch(
                             api.util.updateQueryData("getChatMessages", { appointmentId }, (draft) => {
                                 if (!draft) return;
@@ -554,12 +566,15 @@ export const api = createApi({
                                         senderUserId: messageDto.senderUserId,
                                         text: messageDto.text,
                                         createdAt: messageDto.createdAt,
+                                        messageType: messageDto.messageType,
+                                        mediaUrl: messageDto.mediaUrl,
+                                        replyToMessageId: messageDto.replyToMessageId,
+                                        replyToTextPreview: messageDto.replyToTextPreview,
                                     });
                                     draft.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
                                 }
                             }),
                         );
-                        // Also update by thread
                         if (messageDto.threadId) {
                             dispatch(
                                 api.util.updateQueryData("getChatMessagesByThread", { threadId: messageDto.threadId }, (draft) => {
@@ -570,6 +585,10 @@ export const api = createApi({
                                             senderUserId: messageDto.senderUserId,
                                             text: messageDto.text,
                                             createdAt: messageDto.createdAt,
+                                            messageType: messageDto.messageType,
+                                            mediaUrl: messageDto.mediaUrl,
+                                            replyToMessageId: messageDto.replyToMessageId,
+                                            replyToTextPreview: messageDto.replyToTextPreview,
                                         });
                                         draft.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
                                     }
@@ -578,26 +597,22 @@ export const api = createApi({
                         }
                     }
                 } catch {
-                    // Error handling - SignalR will update cache anyway
+                    // SignalR will update cache anyway
                 }
             },
-            // SignalR handles real-time updates, no need for full invalidation
             invalidatesTags: [],
         }),
-        sendChatMessageByThread: builder.mutation<ApiResponse<ChatMessageDto>, { threadId: string; text: string }>({
-            query: ({ threadId, text }) => ({
+        sendChatMessageByThread: builder.mutation<ApiResponse<ChatMessageDto>, { threadId: string; text: string; replyToMessageId?: string | null }>({
+            query: ({ threadId, text, replyToMessageId }) => ({
                 url: `Chat/thread/${threadId}/message`,
                 method: 'POST',
-                body: { text },
+                body: { text, replyToMessageId: replyToMessageId ?? null },
             }),
-            // Optimistic update: Add message to cache immediately when sent
-            async onQueryStarted({ threadId, text }, { dispatch, queryFulfilled }) {
+            async onQueryStarted({ threadId }, { dispatch, queryFulfilled }) {
                 try {
                     const result = await queryFulfilled;
                     const messageDto = result.data?.data;
                     if (messageDto) {
-                        // Update cache with the message from backend response
-                        // This ensures user sees their message immediately
                         dispatch(
                             api.util.updateQueryData("getChatMessagesByThread", { threadId }, (draft) => {
                                 if (!draft) return;
@@ -607,19 +622,85 @@ export const api = createApi({
                                         senderUserId: messageDto.senderUserId,
                                         text: messageDto.text,
                                         createdAt: messageDto.createdAt,
+                                        messageType: messageDto.messageType,
+                                        mediaUrl: messageDto.mediaUrl,
+                                        replyToMessageId: messageDto.replyToMessageId,
+                                        replyToTextPreview: messageDto.replyToTextPreview,
                                     });
                                     draft.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
                                 }
                             }),
                         );
-                        // Also update by appointment if exists
                     }
                 } catch {
-                    // Error handling - SignalR will update cache anyway
+                    // SignalR will update cache anyway
                 }
             },
-            // SignalR handles real-time updates, no need for full invalidation
             invalidatesTags: [],
+        }),
+        sendChatMediaMessage: builder.mutation<ApiResponse<ChatMessageDto>, { threadId: string; messageType: number; mediaUrl: string; replyToMessageId?: string | null; fileName?: string | null }>({
+            query: ({ threadId, messageType, mediaUrl, replyToMessageId, fileName }) => ({
+                url: `Chat/thread/${threadId}/media`,
+                method: 'POST',
+                body: { messageType, mediaUrl, replyToMessageId: replyToMessageId ?? null, fileName: fileName ?? null },
+            }),
+            async onQueryStarted({ threadId }, { dispatch, queryFulfilled }) {
+                try {
+                    const result = await queryFulfilled;
+                    const messageDto = result.data?.data;
+                    if (messageDto) {
+                        dispatch(
+                            api.util.updateQueryData("getChatMessagesByThread", { threadId }, (draft) => {
+                                if (!draft) return;
+                                if (!draft.find((m) => m.messageId === messageDto.messageId)) {
+                                    draft.push({
+                                        messageId: messageDto.messageId,
+                                        senderUserId: messageDto.senderUserId,
+                                        text: messageDto.text,
+                                        createdAt: messageDto.createdAt,
+                                        messageType: messageDto.messageType,
+                                        mediaUrl: messageDto.mediaUrl,
+                                        replyToMessageId: messageDto.replyToMessageId,
+                                        replyToTextPreview: messageDto.replyToTextPreview,
+                                    });
+                                    draft.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+                                }
+                            }),
+                        );
+                    }
+                } catch {
+                    // SignalR will update cache anyway
+                }
+            },
+            invalidatesTags: [],
+        }),
+        deleteChatMessage: builder.mutation<ApiResponse<boolean>, { messageId: string; threadId: string }>({
+            query: ({ messageId }) => ({
+                url: `Chat/message/${messageId}`,
+                method: 'DELETE',
+            }),
+            async onQueryStarted({ messageId, threadId }, { dispatch, queryFulfilled }) {
+                // Optimistic removal from cache
+                const patch = dispatch(
+                    api.util.updateQueryData("getChatMessagesByThread", { threadId }, (draft) => {
+                        const idx = draft.findIndex((m) => m.messageId === messageId);
+                        if (idx !== -1) draft.splice(idx, 1);
+                    }),
+                );
+                try {
+                    await queryFulfilled;
+                } catch {
+                    patch.undo();
+                }
+            },
+            invalidatesTags: [],
+        }),
+        deleteChatThread: builder.mutation<ApiResponse<boolean>, { threadId: string }>({
+            query: ({ threadId }) => ({
+                url: `Chat/thread/${threadId}`,
+                method: 'DELETE',
+            }),
+            invalidatesTags: [{ type: 'Chat' as const, id: 'LIST' }],
         }),
         markChatThreadRead: builder.mutation<ApiResponse<boolean>, string>({
             query: (threadId) => ({
@@ -1338,6 +1419,16 @@ export const api = createApi({
             keepUnusedDataFor: CACHE_DURATIONS.DYNAMIC,
             transformResponse: (response: any) => transformObjectResponse<EarningsDto>(response),
         }),
+        /** Birden fazla mağaza kazancını tek DTO’da birleştirir (backend). */
+        getBarberStoreEarningsAggregated: builder.query<EarningsDto, { storeIds: string[]; startDate?: string; endDate?: string }>({
+            query: ({ storeIds, startDate, endDate }) => ({
+                url: 'BarberStore/earnings-aggregated',
+                method: 'GET',
+                params: { storeIds: storeIds.join(','), startDate, endDate },
+            }),
+            keepUnusedDataFor: CACHE_DURATIONS.DYNAMIC,
+            transformResponse: (response: any) => transformObjectResponse<EarningsDto>(response),
+        }),
         getFreeBarberEarnings: builder.query<EarningsDto, { startDate?: string; endDate?: string }>({
             query: ({ startDate, endDate }) => ({
                 url: 'FreeBarber/earnings',
@@ -1346,6 +1437,15 @@ export const api = createApi({
             }),
             keepUnusedDataFor: CACHE_DURATIONS.DYNAMIC,
             transformResponse: (response: any) => transformObjectResponse<EarningsDto>(response),
+        }),
+
+        // --- AI ASSISTANT API ---
+        aiAssistant: builder.mutation<ApiResponse<AIAssistantResponseDto>, { message: string; language?: string; latitude?: number; longitude?: number }>({
+            query: ({ message, language = 'tr', latitude, longitude }) => ({
+                url: 'AI/assistant',
+                method: 'POST',
+                body: { message, language, latitude, longitude },
+            }),
         }),
 
     }),
@@ -1374,6 +1474,7 @@ export const {
     useAddFreeBarberPanelMutation,
     useUpdateFreeBarberPanelMutation,
     useGetAvailabilityQuery,
+    useGetAvailabilityRangeQuery,
     useGetAllAppointmentByFilterQuery,
     useGetStoreForUsersQuery,
     useGetWorkingHoursByTargetQuery,
@@ -1404,6 +1505,9 @@ export const {
     useGetChatMessagesByThreadQuery,
     useSendChatMessageMutation,
     useSendChatMessageByThreadMutation,
+    useSendChatMediaMessageMutation,
+    useDeleteChatMessageMutation,
+    useDeleteChatThreadMutation,
     useMarkChatThreadReadMutation,
     useMarkChatThreadReadByThreadMutation,
     useNotifyTypingMutation,
@@ -1466,6 +1570,10 @@ export const {
     // Earnings
     useGetBarberStoreEarningsQuery,
     useLazyGetBarberStoreEarningsQuery,
+    useGetBarberStoreEarningsAggregatedQuery,
+    useLazyGetBarberStoreEarningsAggregatedQuery,
     useGetFreeBarberEarningsQuery,
     useLazyGetFreeBarberEarningsQuery,
+    // AI Assistant
+    useAiAssistantMutation,
 } = api;

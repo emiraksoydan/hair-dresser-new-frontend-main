@@ -1,3 +1,4 @@
+import { Icon } from "react-native-paper";
 import React, { useEffect, useRef, useCallback } from "react";
 import {
   View,
@@ -8,7 +9,7 @@ import {
   LayoutChangeEvent,
 } from "react-native";
 import { Text } from "./Text";
-import { Icon } from "react-native-paper";
+
 import { useTheme } from "../../hook/useTheme";
 
 export type StepConfig = {

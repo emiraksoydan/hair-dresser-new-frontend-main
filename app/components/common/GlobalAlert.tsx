@@ -1,11 +1,11 @@
 import React, { useCallback } from 'react';
 import { View } from 'react-native';
-import { Dialog, Portal, Button } from 'react-native-paper';
+import { Button, Dialog, Icon, Portal } from "react-native-paper";
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState } from '../../store/redux-store';
 import { hideAlert, AlertButton } from '../../store/alertSlice';
 import { Text } from './Text';
-import { Icon } from 'react-native-paper';
+
 import { useTheme } from '../../hook/useTheme';
 
 /**

@@ -1,10 +1,12 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { Icon } from "react-native-paper";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
   Dimensions,
   Platform,
   ScrollView,
+  StyleSheet,
   Switch,
   TouchableOpacity,
   View,
@@ -12,7 +14,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { BottomSheetModal, BottomSheetScrollView } from "@gorhom/bottom-sheet";
-import { Icon } from "react-native-paper";
+
 import { BarChart, LineChart, PieChart } from "react-native-chart-kit";
 import { MultiSelect } from "react-native-element-dropdown";
 import { Text } from "../../components/common/Text";
@@ -29,16 +31,19 @@ import {
   useGetMeQuery,
   useGetMineStoresQuery,
   useGetSettingQuery,
-  useLazyGetBarberStoreEarningsQuery,
+  useLazyGetBarberStoreEarningsAggregatedQuery,
   useGetFreeBarberEarningsQuery,
 } from "../../store/api";
 import { EarningsDto, UserType } from "../../types";
-import { mergeEarnings } from "../../utils/earnings/merge-earnings";
 import LottieView from "lottie-react-native";
 import { AnimatedMoneyText } from "../../components/common/AnimatedMoneyText";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const CURRENCY = "₺";
+
+const LOTTIE_EARNINGS_COIN = require("../../../assets/animations/coin.json");
+const LOTTIE_EARNINGS_TREASURE = require("../../../assets/animations/treasurercoin.json");
+const LOTTIE_EARNINGS_GROWTH = require("../../../assets/animations/profitgrowth.json");
 
 type DateFilterType = "daily" | "weekly" | "monthly" | "yearly" | "custom";
 type ChartType = "line" | "bar" | "pie";
@@ -150,6 +155,7 @@ function aggregateBreakdown(
 const EarningsCard = ({
   label,
   value,
+  valueOverride,
   subText,
   icon,
   accentColor,
@@ -157,9 +163,12 @@ const EarningsCard = ({
   showLottie,
   lottieSource,
   animateNumbers,
+  valueSuffix,
 }: {
   label: string;
   value: number;
+  /** Yüzde vb. metin göstermek için (ör. kar oranı) */
+  valueOverride?: string;
   subText?: string;
   icon: string;
   accentColor: string;
@@ -167,44 +176,66 @@ const EarningsCard = ({
   showLottie?: boolean;
   lottieSource?: number;
   animateNumbers?: boolean;
+  /** Varsayılan ₺ yerine özel sonek (örn. %) */
+  valueSuffix?: string;
 }) => {
-  const bgColor = isDark ? `${accentColor}22` : `${accentColor}18`;
+  /** #RRGGBB + AA: kartları biraz daha belirgin (önceki 0f/16 çok soluktu) */
+  const bgColor = isDark ? `${accentColor}3a` : `${accentColor}26`;
+  const borderColor = `${accentColor}5a`;
+  const suffix = valueSuffix ?? CURRENCY;
   return (
     <View
       style={{
         flex: 1,
-        borderRadius: 16,
-        padding: 14,
+        minWidth: 0,
+        borderRadius: 18,
+        padding: 12,
         backgroundColor: bgColor,
-        borderWidth: 1,
-        borderColor: `${accentColor}44`,
+        borderWidth: 1.5,
+        borderColor,
         overflow: "hidden",
       }}
     >
-      <View style={{ flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between" }}>
-        <View style={{ flex: 1, paddingRight: showLottie ? 4 : 0 }}>
-          <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 4 }}>
+      <View style={{ flexDirection: "row", alignItems: "flex-start" }}>
+        <View style={{ flex: 1, minWidth: 0, paddingRight: showLottie && lottieSource != null ? 6 : 0 }}>
+          <View style={{ flexDirection: "row", alignItems: "flex-start", marginBottom: 6 }}>
             <Icon source={icon} size={16} color={accentColor} />
             <Text
               style={{
                 color: accentColor,
                 fontFamily: "CenturyGothic-Bold",
-                fontSize: 12,
-                marginLeft: 5,
+                fontSize: 11,
+                marginLeft: 6,
+                flex: 1,
               }}
+              numberOfLines={3}
             >
               {label}
             </Text>
           </View>
-          {animateNumbers ? (
-            <AnimatedMoneyText
-              value={value}
-              suffix={CURRENCY}
+          {valueOverride != null ? (
+            <Text
               style={{
                 color: accentColor,
                 fontFamily: "CenturyGothic-Bold",
-                fontSize: 22,
-                marginTop: 2,
+                fontSize: 18,
+                marginTop: 0,
+              }}
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.85}
+            >
+              {valueOverride}
+            </Text>
+          ) : animateNumbers ? (
+            <AnimatedMoneyText
+              value={value}
+              suffix={suffix}
+              style={{
+                color: accentColor,
+                fontFamily: "CenturyGothic-Bold",
+                fontSize: 18,
+                marginTop: 0,
               }}
               enabled={animateNumbers}
             />
@@ -213,16 +244,21 @@ const EarningsCard = ({
               style={{
                 color: accentColor,
                 fontFamily: "CenturyGothic-Bold",
-                fontSize: 22,
-                marginTop: 2,
+                fontSize: 18,
+                marginTop: 0,
               }}
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.8}
             >
               {value.toLocaleString("tr-TR", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}{" "}
-              {CURRENCY}
+              {suffix}
             </Text>
           )}
           {!!subText && (
-            <Text style={{ color: accentColor, fontSize: 11, marginTop: 3, opacity: 0.8 }}>{subText}</Text>
+            <Text style={{ color: accentColor, fontSize: 9, marginTop: 4, opacity: 0.95 }} numberOfLines={2}>
+              {subText}
+            </Text>
           )}
         </View>
         {showLottie && lottieSource != null ? (
@@ -230,7 +266,7 @@ const EarningsCard = ({
             source={lottieSource as any}
             autoPlay
             loop
-            style={{ width: 52, height: 52, marginTop: -4 }}
+            style={{ width: 40, height: 40, flexShrink: 0 }}
           />
         ) : null}
       </View>
@@ -301,8 +337,8 @@ export default function ShopInsightsPage() {
     skip: !isBarberStore,
   });
   const stores = useMemo(
-    () => myStoresRaw.map((s: any) => ({ id: s.id, name: s.storeName || "Dükkan" })),
-    [myStoresRaw]
+    () => (myStoresRaw ?? []).map((s: any) => ({ id: s.id, name: s.storeName || "Dükkan" })),
+    [myStoresRaw],
   );
   const storeSelectOptions = useMemo(
     () => stores.map((s) => ({ label: s.name, value: s.id })),
@@ -312,12 +348,17 @@ export default function ShopInsightsPage() {
   const [selectedStoreIds, setSelectedStoreIds] = useState<string[]>([]);
   useEffect(() => {
     if (!stores.length) {
-      setSelectedStoreIds([]);
+      setSelectedStoreIds((prev) => (prev.length === 0 ? prev : []));
       return;
     }
+    const allIds = stores.map((s) => s.id);
     setSelectedStoreIds((prev) => {
-      const valid = prev.filter((id) => stores.some((s) => s.id === id));
-      return valid.length > 0 ? valid : stores.map((s) => s.id);
+      const valid = prev.filter((id) => allIds.includes(id));
+      const next = valid.length > 0 ? valid : allIds;
+      const a = [...next].sort().join(",");
+      const b = [...prev].sort().join(",");
+      if (a === b) return prev;
+      return next;
     });
   }, [stores]);
 
@@ -336,73 +377,78 @@ export default function ShopInsightsPage() {
   const [showChart, setShowChart] = useState(true);
   const [chartType, setChartType] = useState<ChartType>("line");
 
-  const [fetchStoreEarnings] = useLazyGetBarberStoreEarningsQuery();
+  const [fetchStoreEarningsAggregated] = useLazyGetBarberStoreEarningsAggregatedQuery();
+  const fetchEarningsRef = useRef(fetchStoreEarningsAggregated);
+  fetchEarningsRef.current = fetchStoreEarningsAggregated;
+
   const [storeEarnings, setStoreEarnings] = useState<EarningsDto | null>(null);
   const [storeAllTimeEarnings, setStoreAllTimeEarnings] = useState<EarningsDto | null>(null);
   const [loadingStore, setLoadingStore] = useState(false);
 
-  const loadBarberStoreEarnings = useCallback(async () => {
-    if (!isBarberStore || selectedStoreIds.length === 0) return;
-    setLoadingStore(true);
-    try {
-      const start = toDateStr(rangeStart);
-      const end = toDateStr(rangeEnd);
-      if (selectedStoreIds.length > 1) {
-        const results = await Promise.all(selectedStoreIds.map((id) =>
-          fetchStoreEarnings({ storeId: id, startDate: start, endDate: end }).unwrap()
-        ));
-        setStoreEarnings(mergeEarnings(results));
-      } else {
-        const data = await fetchStoreEarnings({
-          storeId: selectedStoreIds[0],
-          startDate: start,
-          endDate: end,
-        }).unwrap();
-        setStoreEarnings(data);
-      }
-    } catch {
-      setStoreEarnings(null);
-    } finally {
-      setLoadingStore(false);
-    }
-  }, [isBarberStore, selectedStoreIds, rangeStart, rangeEnd, fetchStoreEarnings]);
+  const selectedStoreIdsKey = useMemo(() => [...selectedStoreIds].sort().join(","), [selectedStoreIds]);
+  const rangeStartStr = useMemo(() => toDateStr(rangeStart), [rangeStart]);
+  const rangeEndStr = useMemo(() => toDateStr(rangeEnd), [rangeEnd]);
+
+  const selectedStoreIdsRef = useRef(selectedStoreIds);
+  selectedStoreIdsRef.current = selectedStoreIds;
 
   useEffect(() => {
-    loadBarberStoreEarnings();
-  }, [loadBarberStoreEarnings]);
+    const ids = selectedStoreIdsRef.current;
+    if (!isBarberStore || ids.length === 0) {
+      setStoreEarnings(null);
+      setLoadingStore(false);
+      return;
+    }
+    let cancelled = false;
+    setLoadingStore(true);
+    fetchEarningsRef
+      .current({
+        storeIds: ids,
+        startDate: rangeStartStr,
+        endDate: rangeEndStr,
+      })
+      .unwrap()
+      .then((data) => {
+        if (!cancelled) setStoreEarnings(data);
+      })
+      .catch(() => {
+        if (!cancelled) setStoreEarnings(null);
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingStore(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isBarberStore, selectedStoreIdsKey, rangeStartStr, rangeEndStr]);
 
-  const loadBarberStoreAllTimeEarnings = useCallback(async () => {
-    if (!isBarberStore || selectedStoreIds.length === 0) {
+  useEffect(() => {
+    const ids = selectedStoreIdsRef.current;
+    if (!isBarberStore || ids.length === 0) {
       setStoreAllTimeEarnings(null);
       return;
     }
-    try {
-      const end = toDateStr(new Date());
-      if (selectedStoreIds.length > 1) {
-        const results = await Promise.all(
-          selectedStoreIds.map((id) =>
-            fetchStoreEarnings({ storeId: id, startDate: ALL_TIME_START, endDate: end }).unwrap()
-          )
-        );
-        setStoreAllTimeEarnings(mergeEarnings(results));
-      } else {
-        const data = await fetchStoreEarnings({
-          storeId: selectedStoreIds[0],
-          startDate: ALL_TIME_START,
-          endDate: end,
-        }).unwrap();
-        setStoreAllTimeEarnings(data);
-      }
-    } catch {
-      setStoreAllTimeEarnings(null);
-    }
-  }, [isBarberStore, selectedStoreIds, fetchStoreEarnings]);
+    let cancelled = false;
+    const end = toDateStr(new Date());
+    fetchEarningsRef
+      .current({
+        storeIds: ids,
+        startDate: ALL_TIME_START,
+        endDate: end,
+      })
+      .unwrap()
+      .then((data) => {
+        if (!cancelled) setStoreAllTimeEarnings(data);
+      })
+      .catch(() => {
+        if (!cancelled) setStoreAllTimeEarnings(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isBarberStore, selectedStoreIdsKey]);
 
-  useEffect(() => {
-    loadBarberStoreAllTimeEarnings();
-  }, [loadBarberStoreAllTimeEarnings]);
-
-  const { data: fbEarnings } = useGetFreeBarberEarningsQuery(
+  const { data: fbEarnings, isFetching: fbEarningsFetching } = useGetFreeBarberEarningsQuery(
     { startDate: toDateStr(rangeStart), endDate: toDateStr(rangeEnd) },
     { skip: !isFreeBarber }
   );
@@ -423,28 +469,31 @@ export default function ShopInsightsPage() {
   const rawValues = chartValues.map((v) => (isNaN(v) || !isFinite(v) ? 0 : v));
   const safeValues = rawValues.length > 0 ? rawValues : [0];
   const safeLabels = chartLabels.length > 0 ? chartLabels : [""];
-  const chartLineColor = isDark ? "rgba(251,191,36,0.75)" : "rgba(245,158,11,0.85)";
+  const chartLineColor = isDark ? "rgba(251,191,36,0.78)" : "rgba(245,158,11,0.88)";
   const chartData = {
     labels: safeLabels,
-    datasets: [{ data: safeValues, color: () => chartLineColor, strokeWidth: 2 }],
+    datasets: [{ data: safeValues, color: () => chartLineColor, strokeWidth: 2.5 }],
   };
-  const chartConfig = {
-    backgroundGradientFrom: isDark ? "#1e1e2e" : "#f8fafc",
-    backgroundGradientTo: isDark ? "#1e1e2e" : "#f8fafc",
-    decimalPlaces: 0,
-    color: (opacity = 1) => `rgba(251,191,36,${0.35 + opacity * 0.45})`,
-    labelColor: (opacity = 1) =>
-      isDark ? `rgba(203,213,225,${opacity})` : `rgba(71,85,105,${opacity})`,
-    propsForDots: { r: "3", strokeWidth: "1", stroke: chartLineColor },
-    propsForBackgroundLines: {
-      stroke: isDark ? "rgba(255,255,255,0.05)" : "rgba(15,23,42,0.06)",
-    },
-    propsForLabels: {
-      fontSize: safeLabels.length > 10 ? 9 : 10,
-    },
-    fillShadowGradient: "rgba(251,191,36,0.9)",
-    fillShadowGradientOpacity: 0.12,
-  };
+  const chartConfig = useMemo(
+    () => ({
+      backgroundGradientFrom: isDark ? colors.cardBg3 : colors.cardBg3,
+      backgroundGradientTo: isDark ? colors.cardBg : "#f8fafc",
+      decimalPlaces: 0,
+      color: (opacity = 1) => `rgba(251,191,36,${0.32 + opacity * 0.48})`,
+      labelColor: (opacity = 1) =>
+        isDark ? `rgba(203,213,225,${opacity})` : `rgba(71,85,105,${opacity})`,
+      propsForDots: { r: "4", strokeWidth: "1.5", stroke: chartLineColor },
+      propsForBackgroundLines: {
+        stroke: isDark ? "rgba(255,255,255,0.07)" : "rgba(15,23,42,0.07)",
+      },
+      propsForLabels: {
+        fontSize: safeLabels.length > 10 ? 9 : 10,
+      },
+      fillShadowGradient: "rgba(251,191,36,0.95)",
+      fillShadowGradientOpacity: isDark ? 0.1 : 0.14,
+    }),
+    [isDark, colors.cardBg, colors.cardBg3, chartLineColor, safeLabels.length],
+  );
 
   const horizontalLabelRotation =
     safeLabels.length > 10 ? -55 : safeLabels.length > 6 ? -40 : 0;
@@ -458,6 +507,10 @@ export default function ShopInsightsPage() {
 
   const hasChartActivity = rawValues.some((v) => v > 0);
 
+  const chartAwaitingEarnings =
+    (isBarberStore && loadingStore && !storeEarnings) ||
+    (isFreeBarber && fbEarningsFetching && fbEarnings === undefined);
+
   const datePickerSheet = useBottomSheet({
     snapPoints: Platform.OS === "ios" ? ["62%", "88%"] : ["58%", "78%"],
     enablePanDownToClose: true,
@@ -466,9 +519,7 @@ export default function ShopInsightsPage() {
   const pct = earnings?.changePercent ?? 0;
   const pctText = `${pct >= 0 ? "+" : ""}${pct.toFixed(1)}%`;
   const prevText = `${t("profile.previousPeriod")}: ${(earnings?.previousPeriodEarnings ?? 0).toLocaleString("tr-TR")} ${CURRENCY}`;
-  const softPositive = pct >= 0;
-  const profitBg = softPositive ? (isDark ? "rgba(16,185,129,0.22)" : "rgba(187,247,208,0.95)") : (isDark ? "rgba(248,113,113,0.18)" : "rgba(254,202,202,0.95)");
-  const profitFg = softPositive ? "#059669" : "#dc2626";
+  const profitFg = pct >= 0 ? "#4ade80" : "#fb923c";
 
   const pieSlices = useMemo(() => {
     const pairs = safeLabels.map((label, i) => ({
@@ -496,13 +547,16 @@ export default function ShopInsightsPage() {
     return data;
   }, [safeLabels, safeValues, isDark]);
 
-  const filterLabels: Record<DateFilterType, string> = {
-    daily: t("profile.filterDaily") || "Günlük",
-    weekly: t("profile.filterWeekly") || "Haftalık",
-    monthly: t("profile.filterMonthly") || "Aylık",
-    yearly: t("profile.filterYearly") || "Yıllık",
-    custom: t("profile.filterCustom") || "Tarih Aralığı",
-  };
+  const filterLabels: Record<DateFilterType, string> = useMemo(
+    () => ({
+      daily: t("profile.filterDaily") || "Günlük",
+      weekly: t("profile.filterWeekly") || "Haftalık",
+      monthly: t("profile.filterMonthly") || "Aylık",
+      yearly: t("profile.filterYearly") || "Yıllık",
+      custom: t("profile.filterCustom") || "Tarih Aralığı",
+    }),
+    [t],
+  );
 
   const pageTitle = isFreeBarber
     ? t("profile.panelEarningsTitle")
@@ -637,210 +691,19 @@ export default function ShopInsightsPage() {
       </View>
 
       <ScrollView
-        contentContainerStyle={{ paddingHorizontal: 12, paddingTop: 12, paddingBottom: 60 }}
+        contentContainerStyle={{ paddingBottom: 60 }}
         showsVerticalScrollIndicator={false}
       >
-        {loadingStore && (
-          <View style={{ alignItems: "center", marginBottom: 12 }}>
-            <ActivityIndicator color="#ffb900" />
-          </View>
-        )}
-
-        <View style={{ flexDirection: "row", gap: 10, marginBottom: 10 }}>
-          <EarningsCard
-            label={t("profile.dailyEarnings") || "Günlük Kazanç"}
-            value={earnings?.dailyEarnings ?? 0}
-            icon="cash-multiple"
-            accentColor="#0d9488"
-            isDark={isDark}
-            showLottie={showImageAnimationSetting}
-            lottieSource={require("../../../assets/animations/earnings-empty.json") as any}
-            animateNumbers={showPriceAnimationSetting}
-          />
-          <EarningsCard
-            label={t("profile.totalEarnings") || "Toplam Kazanç"}
-            value={earnings?.totalEarnings ?? 0}
-            subText={prevText}
-            icon="finance"
-            accentColor="#3b82f6"
-            isDark={isDark}
-            showLottie={showImageAnimationSetting}
-            lottieSource={require("../../../assets/animations/earnings-empty.json") as any}
-            animateNumbers={showPriceAnimationSetting}
-          />
-        </View>
         <View
           style={{
-            borderRadius: 14,
-            paddingVertical: 10,
             paddingHorizontal: 12,
-            marginBottom: 10,
-            backgroundColor: isDark ? "rgba(251,191,36,0.14)" : "rgba(255,185,0,0.14)",
-            borderWidth: 1,
-            borderColor: "rgba(255,185,0,0.42)",
+            paddingTop: 10,
+            paddingBottom: 10,
+            backgroundColor: isDark ? "#0f0f1a" : "#f1f5f9",
+            borderBottomWidth: 1,
+            borderBottomColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.07)",
           }}
         >
-          <Text style={{ color: colors.textSecondary, fontSize: 11 }}>
-            {t("profile.allTimeTotalLabel") || "Hesap açılışından bugüne genel toplam"}
-          </Text>
-          <AnimatedMoneyText
-            value={allTimeTotalEarnings}
-            suffix={CURRENCY}
-            style={{
-              color: "#ffb900",
-              fontFamily: "CenturyGothic-Bold",
-              fontSize: 20,
-              marginTop: 4,
-            }}
-            enabled={showPriceAnimationSetting}
-          />
-        </View>
-
-        <View
-          style={{
-            borderRadius: 16,
-            padding: 14,
-            marginBottom: 14,
-            backgroundColor: profitBg,
-            borderWidth: 1,
-            borderColor: softPositive ? "rgba(5,150,105,0.35)" : "rgba(220,38,38,0.35)",
-            flexDirection: "row",
-            alignItems: "center",
-            justifyContent: "space-between",
-          }}
-        >
-          <View style={{ flexDirection: "row", alignItems: "center", flex: 1 }}>
-            <Icon source={pct >= 0 ? "trending-up" : "trending-down"} size={18} color={profitFg} />
-            <Text
-              style={{
-                color: profitFg,
-                fontFamily: "CenturyGothic-Bold",
-                fontSize: 13,
-                marginLeft: 7,
-                flexShrink: 1,
-              }}
-            >
-              {t("profile.profitRate") || "Toplam Kar Oranı"}
-            </Text>
-          </View>
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-            {showImageAnimationSetting ? (
-              <LottieView
-                source={require("../../../assets/animations/earnings-empty.json") as any}
-                autoPlay
-                loop
-                style={{ width: 36, height: 36 }}
-              />
-            ) : null}
-            <Text style={{ color: profitFg, fontFamily: "CenturyGothic-Bold", fontSize: 20 }}>{pctText}</Text>
-          </View>
-        </View>
-
-        {isBarberStore && stores.length > 0 && (
-          <View
-            style={{
-              backgroundColor: isDark ? "#1a1a2e" : "#ffffff",
-              borderRadius: 16,
-              padding: 14,
-              marginBottom: 12,
-              borderWidth: 1,
-              borderColor: isDark ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.06)",
-            }}
-          >
-            <Text
-              style={{
-                color: colors.sectionHeaderText,
-                fontFamily: "CenturyGothic-Bold",
-                marginBottom: 10,
-                fontSize: 13,
-              }}
-            >
-              {t("profile.selectStore")}
-            </Text>
-            <MultiSelect
-              data={storeSelectOptions}
-              labelField="label"
-              valueField="value"
-              value={selectedStoreIds}
-              onChange={(values: string[]) => {
-                // Keep at least one selected store to avoid empty earnings state.
-                if (!values || values.length === 0) return;
-                setSelectedStoreIds(values);
-              }}
-              placeholder={t("profile.selectStore")}
-              search
-              searchPlaceholder={t("common.search")}
-              dropdownPosition="auto"
-              inside
-              alwaysRenderSelectedItem
-              visibleSelectedItem
-              activeColor="#ffb900"
-              style={{
-                borderWidth: 1,
-                borderColor: isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.1)",
-                borderRadius: 10,
-                paddingHorizontal: 10,
-                minHeight: 44,
-                backgroundColor: isDark ? "rgba(255,255,255,0.03)" : "#f8fafc",
-              }}
-              containerStyle={{
-                borderRadius: 12,
-                borderWidth: 1,
-                borderColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)",
-                backgroundColor: isDark ? "#121522" : "#ffffff",
-              }}
-              inputSearchStyle={{
-                color: colors.sectionHeaderText,
-                borderRadius: 8,
-                borderColor: isDark ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.12)",
-              }}
-              placeholderStyle={{
-                color: colors.textSecondary,
-                fontSize: 12,
-              }}
-              selectedTextStyle={{
-                color: colors.sectionHeaderText,
-                fontSize: 12,
-                fontFamily: "CenturyGothic-Bold",
-              }}
-              itemTextStyle={{
-                color: colors.sectionHeaderText,
-                fontSize: 12,
-              }}
-              selectedStyle={{
-                borderRadius: 14,
-                backgroundColor: isDark ? "rgba(255,185,0,0.22)" : "rgba(255,185,0,0.2)",
-                borderColor: "#ffb900",
-              }}
-              selectedTextProps={{ numberOfLines: 1 }}
-            />
-          </View>
-        )}
-
-        <View
-          style={{
-            backgroundColor: isDark ? "#1a1a2e" : "#ffffff",
-            borderRadius: 16,
-            padding: 14,
-            borderWidth: 1,
-            borderColor: isDark ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.06)",
-          }}
-        >
-          <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
-            <Text style={{ color: colors.sectionHeaderText, fontFamily: "CenturyGothic-Bold", fontSize: 13 }}>
-              {t("profile.earningsChart") || "Kazanç Grafiği"}
-            </Text>
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-              <Text style={{ color: colors.textSecondary, fontSize: 12 }}>{showChart ? t("profile.viewChart") : t("profile.viewTable")}</Text>
-              <Switch
-                value={showChart}
-                onValueChange={setShowChart}
-                trackColor={{ false: isDark ? "#333" : "#d1d5db", true: "#0d9488" }}
-                thumbColor={showChart ? "#ffffff" : "#9ca3af"}
-              />
-            </View>
-          </View>
-
           <Text
             style={{
               color: colors.sectionHeaderText,
@@ -906,12 +769,194 @@ export default function ShopInsightsPage() {
             </View>
           )}
 
+          {isBarberStore && stores.length > 0 && (
+            <View style={{ marginTop: 10 }}>
+              <Text
+                style={{
+                  color: colors.sectionHeaderText,
+                  fontFamily: "CenturyGothic-Bold",
+                  marginBottom: 8,
+                  fontSize: 12,
+                }}
+              >
+                {t("profile.selectStore")}
+              </Text>
+              <MultiSelect
+                data={storeSelectOptions}
+                labelField="label"
+                valueField="value"
+                value={selectedStoreIds}
+                onChange={(values: string[]) => {
+                  if (!values || values.length === 0) return;
+                  setSelectedStoreIds(values);
+                }}
+                placeholder={t("profile.selectStore")}
+                search
+                searchPlaceholder={t("common.search")}
+                dropdownPosition="auto"
+                inside
+                alwaysRenderSelectedItem
+                visibleSelectedItem
+                activeColor="#ffb900"
+                style={{
+                  borderWidth: 1,
+                  borderColor: isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.1)",
+                  borderRadius: 10,
+                  paddingHorizontal: 10,
+                  minHeight: 44,
+                  backgroundColor: isDark ? "rgba(255,255,255,0.03)" : "#f8fafc",
+                }}
+                containerStyle={{
+                  borderRadius: 12,
+                  borderWidth: 1,
+                  borderColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)",
+                  backgroundColor: isDark ? "#121522" : "#ffffff",
+                }}
+                inputSearchStyle={{
+                  color: colors.sectionHeaderText,
+                  borderRadius: 8,
+                  borderColor: isDark ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.12)",
+                }}
+                placeholderStyle={{
+                  color: colors.textSecondary,
+                  fontSize: 12,
+                }}
+                selectedTextStyle={{
+                  color: colors.sectionHeaderText,
+                  fontSize: 12,
+                  fontFamily: "CenturyGothic-Bold",
+                }}
+                itemTextStyle={{
+                  color: colors.sectionHeaderText,
+                  fontSize: 12,
+                }}
+                selectedStyle={{
+                  borderRadius: 14,
+                  backgroundColor: isDark ? "rgba(255,185,0,0.22)" : "rgba(255,185,0,0.2)",
+                  borderColor: "#ffb900",
+                }}
+                selectedTextProps={{ numberOfLines: 1 }}
+              />
+            </View>
+          )}
+        </View>
+
+        <View style={{ paddingHorizontal: 12, paddingTop: 12 }}>
+          {loadingStore && (
+            <View style={{ alignItems: "center", marginBottom: 12 }}>
+              <ActivityIndicator color="#ffb900" />
+            </View>
+          )}
+
+          <View style={{ gap: 10 }}>
+            <View style={{ flexDirection: "row", gap: 10 }}>
+              <EarningsCard
+                label={t("profile.dailyEarnings")}
+                value={earnings?.dailyEarnings ?? 0}
+                icon="cash-multiple"
+                accentColor="#5eead4"
+                isDark={isDark}
+                showLottie={showImageAnimationSetting}
+                lottieSource={LOTTIE_EARNINGS_COIN}
+                animateNumbers={showPriceAnimationSetting}
+              />
+              <EarningsCard
+                label={t("profile.totalEarnings")}
+                value={earnings?.totalEarnings ?? 0}
+                subText={prevText}
+                icon="finance"
+                accentColor="#7dd3fc"
+                isDark={isDark}
+                showLottie={showImageAnimationSetting}
+                lottieSource={LOTTIE_EARNINGS_TREASURE}
+                animateNumbers={showPriceAnimationSetting}
+              />
+            </View>
+            <View style={{ flexDirection: "row", gap: 10 }}>
+              <EarningsCard
+                label={t("profile.profitRate")}
+                value={0}
+                valueOverride={pctText}
+                icon={pct >= 0 ? "trending-up" : "trending-down"}
+                accentColor={profitFg}
+                isDark={isDark}
+                showLottie={showImageAnimationSetting}
+                lottieSource={LOTTIE_EARNINGS_GROWTH}
+                animateNumbers={false}
+              />
+              <EarningsCard
+                label={t("profile.allTimeTotalLabel")}
+                value={allTimeTotalEarnings}
+                icon="chart-timeline-variant"
+                accentColor="#fcd34d"
+                isDark={isDark}
+                showLottie={showImageAnimationSetting}
+                lottieSource={LOTTIE_EARNINGS_TREASURE}
+                animateNumbers={showPriceAnimationSetting}
+              />
+            </View>
+          </View>
+        </View>
+
+        <View
+          style={{
+            backgroundColor: colors.cardBg,
+            borderRadius: 18,
+            padding: 14,
+            marginHorizontal: 12,
+            marginTop: 14,
+            borderWidth: StyleSheet.hairlineWidth,
+            borderColor: colors.borderColor2,
+            ...(Platform.OS === "ios"
+              ? {
+                  shadowColor: "#000",
+                  shadowOffset: { width: 0, height: 3 },
+                  shadowOpacity: isDark ? 0.32 : 0.07,
+                  shadowRadius: 10,
+                }
+              : { elevation: 3 }),
+          }}
+        >
+          <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+            <View style={{ flexDirection: "row", alignItems: "center", flex: 1, gap: 10, marginRight: 8 }}>
+              <View
+                style={{
+                  width: 38,
+                  height: 38,
+                  borderRadius: 12,
+                  backgroundColor: isDark ? "rgba(255,185,0,0.12)" : "rgba(255,185,0,0.2)",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <Icon source="chart-areaspline" size={22} color="#ffb900" />
+              </View>
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text
+                  style={{ color: colors.sectionHeaderText, fontFamily: "CenturyGothic-Bold", fontSize: 14 }}
+                  numberOfLines={1}
+                >
+                  {t("profile.earningsChart") || "Kazanç Grafiği"}
+                </Text>
+                <Text style={{ color: colors.textTertiary, fontSize: 10, marginTop: 2 }} numberOfLines={2}>
+                  {t("profile.earningsBreakdownHint")}
+                </Text>
+              </View>
+            </View>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+              <Text style={{ color: colors.textSecondary, fontSize: 11 }}>{showChart ? t("profile.viewChart") : t("profile.viewTable")}</Text>
+              <Switch
+                value={showChart}
+                onValueChange={setShowChart}
+                trackColor={{ false: isDark ? "#333" : "#d1d5db", true: "#0d9488" }}
+                thumbColor={showChart ? "#ffffff" : "#9ca3af"}
+              />
+            </View>
+          </View>
+
           {showChart ? (
             <>
-              <Text style={{ color: colors.textSecondary, fontSize: 13, marginBottom: 10, marginTop: 16 }}>
-                {t("profile.earningsBreakdownHint")}
-              </Text>
-              <View style={{ flexDirection: "row", gap: 6, marginBottom: 12, flexWrap: "wrap" }}>
+              <View style={{ flexDirection: "row", gap: 6, marginBottom: 10, flexWrap: "wrap" }}>
                 {(["line", "bar", "pie"] as ChartType[]).map((ct) => (
                   <TouchableOpacity
                     key={ct}
@@ -920,11 +965,9 @@ export default function ShopInsightsPage() {
                       paddingHorizontal: 12,
                       paddingVertical: 6,
                       borderRadius: 10,
-                      backgroundColor:
-                        chartType === ct ? "#ffb900" : isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)",
+                      backgroundColor: chartType === ct ? "#ffb900" : colors.cardBg3,
                       borderWidth: 1,
-                      borderColor:
-                        chartType === ct ? "#ffb900" : isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.08)",
+                      borderColor: chartType === ct ? "#ffb900" : colors.borderColor2,
                     }}
                   >
                     <Text
@@ -940,7 +983,58 @@ export default function ShopInsightsPage() {
                 ))}
               </View>
 
-              {!hasChartActivity ? (
+              {!chartAwaitingEarnings && earnings != null && (
+                <View
+                  style={{
+                    marginBottom: 12,
+                    paddingVertical: 10,
+                    paddingHorizontal: 12,
+                    borderRadius: 12,
+                    backgroundColor: colors.cardBg3,
+                    borderWidth: StyleSheet.hairlineWidth,
+                    borderColor: colors.borderColor2,
+                  }}
+                >
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                    <Icon source="calendar-range" size={18} color="#ffb900" />
+                    <Text style={{ color: colors.textSecondary, fontSize: 11, flex: 1 }} numberOfLines={2}>
+                      {filterLabels[dateFilter]} · {toDateStr(rangeStart)} — {toDateStr(rangeEnd)}
+                    </Text>
+                  </View>
+                  <Text
+                    style={{
+                      marginTop: 8,
+                      color: colors.sectionHeaderText,
+                      fontFamily: "CenturyGothic-Bold",
+                      fontSize: 16,
+                    }}
+                  >
+                    {t("profile.chartPeriodTotal")}{" "}
+                    {(earnings.totalEarnings ?? 0).toLocaleString("tr-TR", {
+                      minimumFractionDigits: 0,
+                      maximumFractionDigits: 2,
+                    })}{" "}
+                    {CURRENCY}
+                  </Text>
+                </View>
+              )}
+
+              {chartAwaitingEarnings ? (
+                <View
+                  style={{
+                    minHeight: 210,
+                    alignItems: "center",
+                    justifyContent: "center",
+                    borderRadius: 14,
+                    backgroundColor: colors.cardBg3,
+                    borderWidth: StyleSheet.hairlineWidth,
+                    borderColor: colors.borderColor2,
+                  }}
+                >
+                  <ActivityIndicator color="#ffb900" size="large" />
+                  <Text style={{ color: colors.textSecondary, fontSize: 12, marginTop: 12 }}>{t("profile.chartLoading")}</Text>
+                </View>
+              ) : !hasChartActivity ? (
                 <View
                   style={{
                     alignItems: "center",
@@ -980,7 +1074,17 @@ export default function ShopInsightsPage() {
                   </Text>
                 </View>
               ) : chartType === "pie" ? (
-                <View style={{ alignItems: "center", overflow: "hidden" }}>
+                <View
+                  style={{
+                    alignItems: "center",
+                    overflow: "hidden",
+                    borderRadius: 14,
+                    backgroundColor: isDark ? "rgba(0,0,0,0.2)" : colors.cardBg3,
+                    borderWidth: StyleSheet.hairlineWidth,
+                    borderColor: colors.borderColor2,
+                    paddingVertical: 8,
+                  }}
+                >
                   <PieChart
                     data={pieSlices as any}
                     width={Math.min(SCREEN_WIDTH - 56, 360)}
@@ -993,7 +1097,7 @@ export default function ShopInsightsPage() {
                     absolute
                     style={{ marginVertical: 4 }}
                   />
-                  <View style={{ width: "100%", marginTop: 8, gap: 6 }}>
+                  <View style={{ width: "100%", marginTop: 8, gap: 6, paddingHorizontal: 4 }}>
                     {pieSlices.map((s, idx) => (
                       <View key={`${s.name}-${idx}`} style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
                         <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
@@ -1010,8 +1114,19 @@ export default function ShopInsightsPage() {
                   </View>
                 </View>
               ) : (
-                <View style={{ overflow: "hidden", alignItems: "flex-start" }}>
-                  <Text style={{ color: colors.textTertiary, fontSize: 10, marginBottom: 4 }}>
+                <View
+                  style={{
+                    overflow: "hidden",
+                    alignItems: "flex-start",
+                    borderRadius: 14,
+                    backgroundColor: isDark ? "rgba(0,0,0,0.2)" : colors.cardBg3,
+                    borderWidth: StyleSheet.hairlineWidth,
+                    borderColor: colors.borderColor2,
+                    paddingTop: 6,
+                    paddingBottom: 4,
+                  }}
+                >
+                  <Text style={{ color: colors.textTertiary, fontSize: 10, marginBottom: 6, marginHorizontal: 8 }}>
                     {t("profile.chartScrollHint")}
                   </Text>
                   <ScrollView horizontal showsHorizontalScrollIndicator={safeLabels.length > 6}>

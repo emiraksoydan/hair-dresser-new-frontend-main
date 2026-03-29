@@ -5,6 +5,8 @@ import { MESSAGES } from '../../constants/messages';
 import { LegalModal } from './LegalModal';
 import { LegalDocumentType } from '../../constants/legal';
 import { useLanguage } from '../../hook/useLanguage';
+import { useTheme } from '../../hook/useTheme';
+import { COLORS } from '../../constants/colors';
 
 interface Props {
     children: ReactNode;
@@ -19,6 +21,7 @@ interface State {
 /** Legal links shown in error fallback so users can always access KVKK/legal docs */
 const ErrorLegalLinks: React.FC = () => {
     const { t } = useLanguage();
+    const { colors } = useTheme();
     const [modalDoc, setModalDoc] = useState<LegalDocumentType | null>(null);
 
     const links: { type: LegalDocumentType; labelKey: string }[] = [
@@ -37,7 +40,7 @@ const ErrorLegalLinks: React.FC = () => {
                         onPress={() => setModalDoc(link.type)}
                         activeOpacity={0.6}
                     >
-                        <Text style={{ color: '#60a5fa', fontSize: 11, textDecorationLine: 'underline' }}>
+                        <Text style={{ color: colors.tagline, fontSize: 11, textDecorationLine: 'underline' }}>
                             {t(link.labelKey)}
                         </Text>
                     </TouchableOpacity>
@@ -48,6 +51,72 @@ const ErrorLegalLinks: React.FC = () => {
                 onClose={() => setModalDoc(null)}
                 documentType={modalDoc || 'kvkk'}
             />
+        </View>
+    );
+};
+
+const ErrorBoundaryFallback: React.FC<{
+    error?: Error;
+    onRetry: () => void;
+}> = ({ error, onRetry }) => {
+    const { colors } = useTheme();
+    return (
+        <View
+            style={{
+                flex: 1,
+                backgroundColor: colors.screenBg,
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: 16,
+            }}
+        >
+            <View
+                style={{
+                    backgroundColor: colors.cardBg,
+                    borderRadius: 16,
+                    padding: 24,
+                    alignItems: 'center',
+                    width: '100%',
+                    maxWidth: 384,
+                    borderWidth: 1,
+                    borderColor: colors.borderColor,
+                }}
+            >
+                <Text
+                    style={{
+                        color: colors.headerText,
+                        fontSize: 20,
+                        fontWeight: '700',
+                        marginBottom: 16,
+                        textAlign: 'center',
+                    }}
+                >
+                    {MESSAGES.ALERTS.ERROR}
+                </Text>
+                <Text
+                    style={{
+                        color: colors.textSecondary,
+                        textAlign: 'center',
+                        marginBottom: 16,
+                    }}
+                >
+                    {error?.message || MESSAGES.ERRORS.UNEXPECTED}
+                </Text>
+                <TouchableOpacity
+                    onPress={onRetry}
+                    style={{
+                        backgroundColor: COLORS.UI.ACCENT_GOLD,
+                        paddingHorizontal: 24,
+                        paddingVertical: 12,
+                        borderRadius: 8,
+                    }}
+                >
+                    <Text style={{ color: COLORS.UI.TEXT_ON_GOLD, fontWeight: '600' }}>
+                        {MESSAGES.ACTIONS.RETRY}
+                    </Text>
+                </TouchableOpacity>
+                <ErrorLegalLinks />
+            </View>
         </View>
     );
 };
@@ -82,23 +151,10 @@ export class ErrorBoundary extends Component<Props, State> {
             }
 
             return (
-                <View className="flex-1 bg-[#151618] items-center justify-center p-4">
-                    <View className="bg-[#1a1b25] rounded-2xl p-6 items-center w-full max-w-sm border border-[#2a2c30]">
-                        <Text className="text-white text-xl font-bold mb-4">
-                            {MESSAGES.ALERTS.ERROR}
-                        </Text>
-                        <Text className="text-gray-400 text-center mb-4">
-                            {this.state.error?.message || MESSAGES.ERRORS.UNEXPECTED}
-                        </Text>
-                        <TouchableOpacity
-                            onPress={this.handleReset}
-                            className="bg-[#c2a523] px-6 py-3 rounded-lg"
-                        >
-                            <Text className="text-white font-semibold">{MESSAGES.ACTIONS.RETRY}</Text>
-                        </TouchableOpacity>
-                        <ErrorLegalLinks />
-                    </View>
-                </View>
+                <ErrorBoundaryFallback
+                    error={this.state.error}
+                    onRetry={this.handleReset}
+                />
             );
         }
 

@@ -10,9 +10,11 @@ type Props = {
   expanded: boolean;
   onToggle: () => void;
   /** Search bar + optional chips */
-  children: React.ReactNode;
+  children?: React.ReactNode;
   /** Shown when collapsed (e.g. earnings summary line) */
   collapsedHint?: string;
+  /** Sağ uç: liste/ızgara vb. (ör. dokun satırı) */
+  trailingAccessory?: React.ReactNode;
 };
 
 export function PanelCollapsibleTop({
@@ -20,15 +22,14 @@ export function PanelCollapsibleTop({
   onToggle,
   children,
   collapsedHint,
+  trailingAccessory,
 }: Props) {
   const { colors } = useTheme();
   const { t } = useLanguage();
 
   return (
     <View style={{ marginTop: 8 }}>
-      <TouchableOpacity
-        onPress={onToggle}
-        activeOpacity={0.85}
+      <View
         style={{
           flexDirection: "row",
           alignItems: "center",
@@ -36,37 +37,51 @@ export function PanelCollapsibleTop({
           paddingVertical: 4,
           marginBottom: expanded ? 6 : 0,
         }}
-        accessibilityRole="button"
-        accessibilityLabel={
-          expanded
-            ? t("panel.collapseTopSection")
-            : t("panel.expandTopSection")
-        }
       >
-        <MotiView
-          animate={{ rotateZ: expanded ? "90deg" : "0deg" }}
-          transition={{ type: "timing", duration: 220 }}
-        >
-          <MaterialCommunityIcons
-            name="chevron-right"
-            size={22}
-            color={colors.sectionHeaderText}
-          />
-        </MotiView>
-        <Text
+        <TouchableOpacity
+          onPress={onToggle}
+          activeOpacity={0.85}
           style={{
             flex: 1,
-            color: colors.textSecondary,
-            fontSize: 12,
-            marginLeft: 2,
+            flexDirection: "row",
+            alignItems: "center",
+            minHeight: 32,
           }}
-          numberOfLines={1}
+          accessibilityRole="button"
+          accessibilityLabel={
+            expanded
+              ? t("panel.collapseTopSection")
+              : t("panel.expandTopSection")
+          }
         >
-          {expanded
-            ? t("panel.topSectionExpandedHint")
-            : collapsedHint ?? t("panel.topSectionCollapsedHint")}
-        </Text>
-      </TouchableOpacity>
+          <MotiView
+            animate={{ rotateZ: expanded ? "90deg" : "0deg" }}
+            transition={{ type: "timing", duration: 220 }}
+          >
+            <MaterialCommunityIcons
+              name="chevron-right"
+              size={22}
+              color={colors.sectionHeaderText}
+            />
+          </MotiView>
+          <Text
+            style={{
+              flex: 1,
+              color: colors.textSecondary,
+              fontSize: 12,
+              marginLeft: 2,
+            }}
+            numberOfLines={1}
+          >
+            {expanded
+              ? t("panel.topSectionExpandedHint")
+              : collapsedHint ?? t("panel.topSectionCollapsedHint")}
+          </Text>
+        </TouchableOpacity>
+        {trailingAccessory ? (
+          <View style={{ marginLeft: 2 }}>{trailingAccessory}</View>
+        ) : null}
+      </View>
 
       <MotiView
         animate={{

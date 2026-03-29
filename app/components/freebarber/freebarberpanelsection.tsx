@@ -1,16 +1,15 @@
 import React, { useState, useMemo, memo } from "react";
 import { View, Dimensions } from "react-native";
+import { IconButton } from "react-native-paper";
 import { Text } from "../common/Text";
 import { Button } from "../common/Button";
 import { SkeletonComponent } from "../common/skeleton";
 import { LottieViewComponent } from "../common/lottieview";
 import MotiViewExpand from "../common/motiviewexpand";
 import { FreeBarberMineCardComp } from "./freebarberminecard";
-import { useGetFreeBarberMinePanelQuery } from "../../store/api";
 import { toggleExpand } from "../../utils/common/expand-toggle";
 import { getErrorMessage } from "../../utils/errorHandler";
 import { FreeBarberPanelDto } from "../../types";
-import { useTrackFreeBarberLocation } from "../../hook/useTrackFreeBarberLocation";
 import { useLanguage } from "../../hook/useLanguage";
 import { useTheme } from "../../hook/useTheme";
 
@@ -31,6 +30,8 @@ interface Props {
   categoryNameById?: Map<string, string>;
   showImageAnimation?: boolean;
   onRetry?: () => void;
+  /** Liste/grid geçişi; verilirse başlık satırında chevron’un solunda gösterilir */
+  onToggleLayout?: () => void;
 }
 
 // React.memo ile sarmaladık. Sadece props değişirse render olur.
@@ -52,6 +53,7 @@ export const FreeBarberPanelSection = memo(
     categoryNameById,
     showImageAnimation = true,
     onRetry,
+    onToggleLayout,
   }: Props) => {
     const { t } = useLanguage();
     const { colors } = useTheme();
@@ -80,8 +82,8 @@ export const FreeBarberPanelSection = memo(
 
     return (
       <>
-        <View className="flex flex-row justify-between items-center mt-4">
-          <View className="flex-row items-center gap-2">
+        <View className="flex flex-row justify-between items-center mt-1">
+          <View className="flex-row items-center gap-2 flex-1 mr-2">
             <Text style={{ color: colors.sectionHeaderText }} className="font-century-gothic-sans-regular text-xl">
               {t("panel.myPanel")}
             </Text>
@@ -93,12 +95,23 @@ export const FreeBarberPanelSection = memo(
           </View>
 
           {hasMineFreeBarber && (
-            <MotiViewExpand
-              expanded={expandedMineStore}
-              onPress={() =>
-                toggleExpand(expandedMineStore, setExpandedMineStore)
-              }
-            />
+            <View className="flex-row items-center shrink-0">
+              {onToggleLayout && (
+                <IconButton
+                  icon={isList ? "format-list-bulleted" : "view-grid-outline"}
+                  iconColor="#ffb900"
+                  size={22}
+                  onPress={onToggleLayout}
+                  style={{ margin: 0 }}
+                />
+              )}
+              <MotiViewExpand
+                expanded={expandedMineStore}
+                onPress={() =>
+                  toggleExpand(expandedMineStore, setExpandedMineStore)
+                }
+              />
+            </View>
           )}
         </View>
         {isLoading ? (

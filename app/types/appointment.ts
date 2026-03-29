@@ -100,6 +100,7 @@ export type AppointmentGetDto = {
   storeName?: string;
   storeImage?: string;
   storeOwnerNumber?: string; // Dükkan sahibi numarası
+  storeNo?: string; // Dükkanın benzersiz numarası
   isStoreFavorite: boolean;
   storeType: BarberType;
   myRatingForStore?: number;
@@ -166,4 +167,10 @@ export type ChairSlotDto = {
   barberName?: string | null;
   barberRating?: number | null;
   slots: SlotDto[];
+};
+
+/** Backend: GET Appointment/availability-range — günlük koltuk listesi (batch). */
+export type StoreDayAvailabilityDto = {
+  date: string;
+  chairs: ChairSlotDto[];
 };

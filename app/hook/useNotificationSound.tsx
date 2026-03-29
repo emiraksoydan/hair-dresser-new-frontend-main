@@ -166,6 +166,8 @@ export const useNotificationSound = (badgeCount: number) => {
             const timeSinceLastSound = now - lastSoundPlayTimeRef.current;
             const isSoundCurrentlyPlaying = soundRef.current !== null || isPlayingRef.current;
 
+            // hasPlayedOnMountRef'i her zaman true yap - count artışında backup check tetiklenmesin
+            hasPlayedOnMountRef.current = true;
 
             // Eğer bir ses zaten çalıyorsa veya cooldown süresi geçmediyse, yeni ses çalma
             if (!isSoundCurrentlyPlaying && timeSinceLastSound >= SOUND_COOLDOWN_MS) {

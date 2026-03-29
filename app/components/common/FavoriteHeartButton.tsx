@@ -1,6 +1,7 @@
+import { Icon } from "react-native-paper";
 import React, { useCallback } from "react";
 import { Pressable, StyleProp, ViewStyle } from "react-native";
-import { Icon } from "react-native-paper";
+
 import Animated from "react-native-reanimated";
 import { useLanguage } from "../../hook/useLanguage";
 import { useFavoriteHeartPulse } from "./useFavoriteHeartPulse";

@@ -1,15 +1,18 @@
-import { Stack } from 'expo-router'
+import { Stack } from "expo-router";
+import { useTheme } from "../../hook/useTheme";
 
 const ProfileLayout = () => {
-    return (
-        <Stack screenOptions={{
-            headerShown: false,
-            contentStyle: { backgroundColor: '#0d0d12' },
-        }}>
-            <Stack.Screen name="index" />
-        </Stack>
-    )
-}
+  const { colors } = useTheme();
+  return (
+    <Stack
+      screenOptions={{
+        headerShown: false,
+        contentStyle: { backgroundColor: colors.screenBg },
+      }}
+    >
+      <Stack.Screen name="index" />
+    </Stack>
+  );
+};
 
-export default ProfileLayout
-
+export default ProfileLayout;

@@ -1,7 +1,8 @@
+import { Icon } from "react-native-paper";
 import React, { useState } from 'react';
 import { View, TouchableOpacity } from 'react-native';
 import { Text } from '../common/Text';
-import { Icon } from 'react-native-paper';
+
 import { useLanguage } from '../../hook/useLanguage';
 import { LegalModal } from '../common/LegalModal';
 import { LegalDocumentType } from '../../constants/legal';

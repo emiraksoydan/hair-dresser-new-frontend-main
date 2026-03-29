@@ -1,18 +1,19 @@
-import { StyleSheet, View } from 'react-native'
-import { Text } from '../../components/common/Text'
-import React from 'react'
-import { Stack } from 'expo-router'
+import React from "react";
+import { Stack } from "expo-router";
+import { useTheme } from "../../hook/useTheme";
 
 const FreeBarberLayout = () => {
-    return (
-        <Stack screenOptions={{
-            headerShown: false,
-            contentStyle: { backgroundColor: '#f5f7fa' },
-        }}>
-            <Stack.Screen name="index" />
-        </Stack>
-    )
-}
+  const { colors } = useTheme();
+  return (
+    <Stack
+      screenOptions={{
+        headerShown: false,
+        contentStyle: { backgroundColor: colors.screenBg },
+      }}
+    >
+      <Stack.Screen name="index" />
+    </Stack>
+  );
+};
 
-export default FreeBarberLayout
-
+export default FreeBarberLayout;

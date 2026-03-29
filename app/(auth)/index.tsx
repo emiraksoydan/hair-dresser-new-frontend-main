@@ -5,10 +5,19 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  Pressable,
+  useWindowDimensions,
 } from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
 import { Text } from "../components/common/Text";
 import React, { useEffect, useMemo, useState } from "react";
-import { TextInput, HelperText, Portal, Modal, Icon } from "react-native-paper";
+import {
+  HelperText,
+  Icon,
+  TextInput,
+  Portal,
+  Modal,
+} from "react-native-paper";
 import { showSnack } from "../store/snackbarSlice";
 import { useForm, Controller } from "react-hook-form";
 import { z } from "zod";
@@ -32,7 +41,7 @@ import { LanguageSelector } from "../components/common/LanguageSelector";
 import { LegalAgreementCheckbox } from "../components/auth/LegalAgreementCheckbox";
 import { useSafeNavigation } from "../hook/useSafeNavigation";
 
-const OTP_COUNTDOWN_SECONDS = 600;
+const OTP_COUNTDOWN_SECONDS = 120;
 
 // Schema'yı dinamik olarak oluşturmak için fonksiyon
 const createSchemas = (t: (key: string) => string) => {
@@ -161,6 +170,7 @@ const Index = () => {
 
   const route = useSafeNavigation();
   const [modalVisible, setModalVisible] = useState(false);
+  const [otpResetSignal, setOtpResetSignal] = useState(0);
   const [phone, setPhone] = useState("");
   const [left, setLeft] = useState(0);
   const isRegister = watch("mode") === "register";
@@ -183,6 +193,7 @@ const Index = () => {
   useEffect(() => {
     if (modalVisible) {
       setLeft(OTP_COUNTDOWN_SECONDS);
+      setOtpResetSignal((s) => s + 1);
     }
   }, [modalVisible]);
 
@@ -263,6 +274,27 @@ const Index = () => {
     return `${m}:${s}`;
   }, [left]);
 
+  const maskedPhoneForOtp = useMemo(() => {
+    if (!phone) return "";
+    const digits = phone.replace(/\D/g, "");
+    if (digits.length < 4) return phone;
+    const last4 = digits.slice(-4);
+    return `+90 ··· ${last4.slice(0, 2)} ${last4.slice(2)}`;
+  }, [phone]);
+
+  const otpAccentPrimary = isDark ? "#ffb900" : "#d97706";
+  const otpAccentSecondary = isDark ? "#c2a523" : "#f59e0b";
+
+  const { width: screenWidth } = useWindowDimensions();
+  // Modal inner width: screen - 40 (modal outer padding) - 44 (card inner padding)
+  // 6 boxes with 6px gap between = 5 * 6 = 30px total gap
+  const otpBoxSize = Math.floor((Math.min(screenWidth, 380) - 40 - 44 - 30) / 6);
+
+  const closeOtpModal = () => {
+    setModalVisible(false);
+    setOtpResetSignal((s) => s + 1);
+  };
+
   const doVerify = async (code: string, phoneNumber?: string) => {
     try {
       const f = getValues();
@@ -305,6 +337,7 @@ const Index = () => {
             isError: true,
           }),
         );
+        setOtpResetSignal((s) => s + 1);
         return;
       }
 
@@ -341,6 +374,7 @@ const Index = () => {
             isError: true,
           }),
         );
+        setOtpResetSignal((s) => s + 1);
       }
     } catch (err: any) {
       const raw = err?.data;
@@ -354,6 +388,7 @@ const Index = () => {
           isError: true,
         }),
       );
+      setOtpResetSignal((s) => s + 1);
     }
   };
 
@@ -823,78 +858,177 @@ const Index = () => {
             </View>
           </View>
 
-          {/* OTP Modal */}
           <Portal>
             <Modal
               visible={modalVisible}
               dismissable={false}
               contentContainerStyle={{
-                padding: 20,
-                margin: 20,
-                borderRadius: 16,
-                backgroundColor: colors.card,
+                alignItems: "center",
+                paddingHorizontal: 20,
+                margin: 0,
+                backgroundColor: isDark
+                  ? "rgba(0,0,0,0.78)"
+                  : "rgba(17,24,39,0.48)",
               }}
             >
-              <Text
-                className="text-xl font-bold mb-2"
-                style={{ color: colors.text }}
-              >
-                {t("auth.verifyPhone")}
-              </Text>
-              <Text
-                className="text-sm mb-5 font-century-gothic-bold"
-                style={{ color: colors.textSecondary }}
-              >
-                {t("auth.enterCode", { phone })}
-              </Text>
-
-              <OtpInput
-                numberOfDigits={6}
-                onFilled={(code: any) => doVerify(code, phone)}
-                focusColor={colors.primary}
-                theme={{
-                  containerStyle: { marginBottom: 12 },
-                  pinCodeContainerStyle: {
-                    width: 48,
-                    height: 56,
-                    borderRadius: 12,
-                    borderWidth: 1,
-                    borderColor: colors.inputBorder,
-                    backgroundColor: colors.inputBackground,
-                  },
-                  pinCodeTextStyle: {
-                    fontSize: 22,
-                    color: colors.text,
-                  },
+              <View
+                style={{
+                  width: "100%",
+                  maxWidth: 380,
+                  borderRadius: 20,
+                  overflow: "hidden",
+                  backgroundColor: colors.card,
+                  borderWidth: 1,
+                  borderColor: colors.border,
+                  shadowColor: "#000",
+                  shadowOffset: { width: 0, height: 10 },
+                  shadowOpacity: isDark ? 0.45 : 0.15,
+                  shadowRadius: 20,
+                  elevation: 16,
                 }}
-                type="numeric"
-              />
+              >
+                <LinearGradient
+                  colors={[otpAccentSecondary, otpAccentPrimary]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={{ height: 3, width: "100%" }}
+                />
+                <View style={{ paddingHorizontal: 22, paddingTop: 16, paddingBottom: 18 }}>
 
-              <View className="flex-row justify-between items-center">
-                <Text
-                  className="text-sm font-century-gothic-bold"
-                  style={{ color: colors.textSecondary }}
-                >
-                  {t("auth.timeRemaining", { time: mmss })}
-                </Text>
-                <TouchableOpacity
-                  onPress={onResend}
-                  disabled={!canResend || isLoading}
-                  style={{ opacity: canResend && !isLoading ? 1 : 0.5 }}
-                >
-                  {isLoading ? (
-                    <ActivityIndicator color={colors.primary} size="small" />
-                  ) : (
-                    <Text
+                  {/* Header — icon + close */}
+                  <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+                      <View
+                        style={{
+                          width: 36,
+                          height: 36,
+                          borderRadius: 10,
+                          alignItems: "center",
+                          justifyContent: "center",
+                          backgroundColor: isDark ? "rgba(255,185,0,0.12)" : "rgba(217,119,6,0.1)",
+                        }}
+                      >
+                        <Icon source="shield-key" size={20} color={otpAccentPrimary} />
+                      </View>
+                      <View>
+                        <Text style={{ fontFamily: "CenturyGothic-Bold", fontSize: 16, color: colors.text }}>
+                          {t("auth.verifyPhone")}
+                        </Text>
+                        <Text style={{ fontFamily: "CenturyGothic", fontSize: 11, color: colors.textSecondary, marginTop: 1 }}>
+                          {maskedPhoneForOtp || phone}
+                        </Text>
+                      </View>
+                    </View>
+                    <Pressable
+                      onPress={closeOtpModal}
+                      hitSlop={12}
+                      accessibilityRole="button"
+                      accessibilityLabel={t("common.cancel")}
+                      style={({ pressed }) => ({
+                        width: 32,
+                        height: 32,
+                        borderRadius: 16,
+                        alignItems: "center",
+                        justifyContent: "center",
+                        backgroundColor: pressed ? colors.inputBackground : "transparent",
+                      })}
+                    >
+                      <Icon source="close" size={18} color={colors.textSecondary} />
+                    </Pressable>
+                  </View>
+
+                  {/* Hint text */}
+                  <Text style={{ fontFamily: "CenturyGothic", fontSize: 12, color: colors.textSecondary, marginBottom: 14 }}>
+                    {t("auth.enterCode", { phone: maskedPhoneForOtp || phone })}
+                  </Text>
+
+                  {/* OTP boxes — dynamic width */}
+                  <OtpInput
+                    key={`otp-${otpResetSignal}`}
+                    numberOfDigits={6}
+                    onFilled={(code) => doVerify(code, phone)}
+                    focusColor={otpAccentPrimary}
+                    theme={{
+                      containerStyle: {
+                        marginBottom: 16,
+                        gap: 6,
+                      },
+                      pinCodeContainerStyle: {
+                        width: otpBoxSize,
+                        height: otpBoxSize + 6,
+                        borderRadius: 12,
+                        borderWidth: 1.5,
+                        borderColor: colors.inputBorder,
+                        backgroundColor: colors.inputBackground,
+                      },
+                      focusedPinCodeContainerStyle: {
+                        borderColor: otpAccentPrimary,
+                        borderWidth: 2,
+                        backgroundColor: isDark ? "rgba(255,185,0,0.08)" : "rgba(217,119,6,0.06)",
+                      },
+                      pinCodeTextStyle: {
+                        fontSize: Math.min(otpBoxSize * 0.44, 22),
+                        fontWeight: "700",
+                        color: colors.text,
+                        fontFamily: "CenturyGothic-Bold",
+                      },
+                    }}
+                    type="numeric"
+                    autoFocus
+                  />
+
+                  {/* Timer + Resend */}
+                  <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
+                      <Icon
+                        source="clock-outline"
+                        size={15}
+                        color={left > 0 ? otpAccentPrimary : colors.textSecondary}
+                      />
+                      <Text
+                        style={{
+                          fontFamily: "CenturyGothic-Bold",
+                          fontSize: 13,
+                          color: left > 0 ? colors.text : colors.textSecondary,
+                          fontVariant: ["tabular-nums"],
+                        }}
+                      >
+                        {mmss}
+                      </Text>
+                    </View>
+
+                    <TouchableOpacity
+                      onPress={onResend}
+                      disabled={!canResend || isLoading}
+                      activeOpacity={0.8}
                       style={{
-                        color: colors.primary,
-                        textDecorationLine: "underline",
+                        paddingHorizontal: 14,
+                        paddingVertical: 7,
+                        borderRadius: 10,
+                        borderWidth: 1.5,
+                        borderColor: canResend && !isLoading ? otpAccentPrimary : colors.inputBorder,
+                        backgroundColor: canResend && !isLoading
+                          ? isDark ? "rgba(255,185,0,0.1)" : "rgba(217,119,6,0.08)"
+                          : "transparent",
+                        opacity: canResend && !isLoading ? 1 : 0.45,
+                        flexDirection: "row",
+                        alignItems: "center",
+                        gap: 5,
                       }}
                     >
-                      {t("auth.resendCode")}
-                    </Text>
-                  )}
-                </TouchableOpacity>
+                      {isLoading ? (
+                        <ActivityIndicator color={otpAccentPrimary} size="small" />
+                      ) : (
+                        <>
+                          <Icon source="refresh" size={14} color={otpAccentPrimary} />
+                          <Text style={{ fontFamily: "CenturyGothic-Bold", fontSize: 13, color: otpAccentPrimary }}>
+                            {t("auth.resendCode")}
+                          </Text>
+                        </>
+                      )}
+                    </TouchableOpacity>
+                  </View>
+                </View>
               </View>
             </Modal>
           </Portal>

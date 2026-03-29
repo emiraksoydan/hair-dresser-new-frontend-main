@@ -15,6 +15,7 @@
     "login": "Log in",
     "register": "Sign up",
     "verifyPhone": "Verify your phone",
+    "otpAccessHint": "Enter the access code to get started.",
     "enterCode": "Enter the 6-digit code sent to {{phone}}",
     "timeRemaining": "Time: {{time}}",
     "resendCode": "Resend code",
@@ -116,12 +117,15 @@
     "customStart": "Start",
     "customEnd": "End",
     "profitRate": "Total Profit Rate",
+    "allTimeTotalLabel": "All-time total (since account start)",
     "exportExcel": "Export as Excel",
     "exportPdf": "Export as PDF",
     "exportError": "Export failed.",
     "earningsEmptyTitle": "No earnings in this period",
     "earningsEmptySubtitle": "Try another date range, or wait for completed appointments to appear here.",
     "chartScrollHint": "Swipe horizontally if labels are dense.",
+    "chartPeriodTotal": "Period total:",
+    "chartLoading": "Loading chart…",
     "pickDateHint": "Pick a date from the calendar, then tap OK."
   },
   "subscription": {
@@ -267,7 +271,8 @@
       "myServices": "My Services",
       "services": "Services",
       "scheduleDate": "Date",
-      "scheduleTime": "Time"
+      "scheduleTime": "Time",
+      "chair": "Chair"
     }
   },
   "time": {
@@ -394,7 +399,14 @@
     "topSectionExpandedHint": "Tap to hide search and summary",
     "topSectionCollapsedHint": "Tap to show search and summary",
     "collapseTopSection": "Collapse top section",
-    "expandTopSection": "Expand top section"
+    "expandTopSection": "Expand top section",
+    "viewMyPanel": "View my panel",
+    "viewMyBusinesses": "View my businesses",
+    "layoutToggleHint": "List or grid",
+    "overflowCompare": "Compare",
+    "overflowPhotos": "View photos",
+    "overflowMenuA11y": "Panel actions",
+    "locationDeniedShort": "Location is off; discovery is disabled, your panel data still loads."
   },
   "labels": {
     "freeBarber": "Free Barber",
@@ -428,6 +440,8 @@
     "storeNoWorkingHours": "The store has not defined working hours for this day (closed).",
     "storeHasActiveAppointments": "This store has active or pending appointments. You must be available first.",
     "appointmentSlotOverlap": "The selected time slot overlaps with another appointment.",
+    "availabilityRangeInvalid": "End date cannot be before start date.",
+    "availabilityRangeTooLarge": "Availability range cannot exceed 7 days per request.",
     "appointmentSlotTaken": "This appointment time has been taken before.",
     "freebarberNotAvailable": "The free barber is not available right now.",
     "freebarberNotFound": "Free barber not found.",
@@ -646,6 +660,11 @@
     "chairPricing": "Determine Chair Pricing",
     "rentPriceHourly": "Rent Price - Hourly",
     "workingHours": "Working Hours",
+    "startTimeShort": "Start",
+    "endTimeShort": "End",
+    "closed": "Closed",
+    "closedDays": "Closed Days",
+    "closedDaysHint": "Tap a closed day to reopen it",
     "setAddress": "Set Address",
     "addressDescription": "Address description",
     "storeNameLabel": "Business Name",
@@ -715,7 +734,14 @@
     "freebarberUserNotFound": "Free barber user not found.",
     "barberCallFailed": "Barber call failed.",
     "appointmentNotePlaceholder": "You can write services, prices, time information...",
-    "appointmentNotePlaceholderAlt": "You can write services, prices, time information, etc..."
+    "appointmentNotePlaceholderAlt": "You can write services, prices, time information, etc...",
+    "today": "Today",
+    "weekGridTitle": "Weekly availability",
+    "weekGridFree": "Available",
+    "weekGridBooked": "Booked",
+    "weekGridPast": "Past",
+    "weekGridClosed": "Closed",
+    "selectedTime": "Selected"
   },
   "complaint": {
     "title": "Make a Complaint",
@@ -761,7 +787,45 @@
     "threadNotFound": "Chat not found",
     "today": "Today",
     "yesterday": "Yesterday",
-    "newMessage": "New Message"
+    "newMessage": "New Message",
+    "reply": "Reply",
+    "delete": "Delete",
+    "deleteMessage": "Delete Message",
+    "deleteMessageConfirm": "Are you sure you want to delete this message?",
+    "replyTo": "Replying to:",
+    "replyingTo": "Replying to:",
+    "galleryPermission": "Gallery permission is required to send photos.",
+    "microphonePermission": "Microphone permission is required to send voice messages.",
+    "locationPermission": "Location permission is required to share location.",
+    "imageUploadFailed": "Photo upload failed. Please try again.",
+    "locationFailed": "Could not get location. Please try again.",
+    "recordingFailed": "Could not start voice recording.",
+    "transcriptionFailed": "Could not convert voice to text.",
+    "uploadingMedia": "Uploading media...",
+    "locationShared": "Location shared",
+    "photo": "Photo",
+    "location": "Location",
+    "deleteThread": "Delete Conversation",
+    "deleteThreadConfirm": "Delete this conversation for yourself? Other participants will still see it.",
+    "fileUploadFailed": "File upload failed. Please try again.",
+    "tapToOpen": "Tap to open",
+    "file": "File"
+  },
+  "ai": {
+    "assistantTitle": "AI Assistant",
+    "tapToSpeak": "Speak about your appointments",
+    "recording": "Listening...",
+    "transcribing": "Converting speech...",
+    "thinking": "Thinking...",
+    "tapToStop": "Tap to stop",
+    "retry": "Try again",
+    "actionTaken": "Action completed",
+    "error_recording_permission_denied": "Microphone permission is required.",
+    "error_recording_failed": "Could not start recording.",
+    "error_transcription_empty": "No speech detected. Please try again.",
+    "error_whisper_failed": "Could not convert speech to text.",
+    "error_ai_error": "AI assistant could not respond.",
+    "error_unknown": "An unexpected error occurred."
   },
   "rating": {
     "selectRating": "Please select a rating.",
@@ -1000,5 +1064,10 @@
     "consentAgreement": "I give my explicit consent for the processing of my personal data.",
     "mustAgree": "You must accept the agreements to continue.",
     "close": "Close"
+  },
+  "nativePermissions": {
+    "locationWhenInUse": "We use your location to show nearby barbershops and barbers.",
+    "locationAlways": "Location is used to keep free barbers' positions updated even when the app is in the background.",
+    "microphone": "The microphone is used so you can send voice messages."
   }
 }

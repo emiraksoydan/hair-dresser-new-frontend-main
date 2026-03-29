@@ -1,6 +1,7 @@
+import { Icon } from "react-native-paper";
 import React, { memo } from "react";
 import { Image, StyleProp, View, ViewStyle } from "react-native";
-import { Icon } from "react-native-paper";
+
 import { useGetImagesByOwnerQuery } from "../../store/api";
 import { ImageOwnerType } from "../../types";
 import { useTheme } from "../../hook/useTheme";

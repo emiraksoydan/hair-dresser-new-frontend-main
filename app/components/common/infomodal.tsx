@@ -1,7 +1,8 @@
+import { Icon } from "react-native-paper";
 import React, { useState, useMemo } from 'react';
 import { View, ScrollView, TouchableOpacity, Modal } from 'react-native';
 import { Text } from './Text';
-import { Icon } from 'react-native-paper';
+
 import { BlurView } from 'expo-blur';
 import SearchBar from './searchbar';
 import { useLanguage } from '../../hook/useLanguage';

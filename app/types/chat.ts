@@ -26,12 +26,23 @@ export type ChatThreadParticipantDto = {
   barberType?: BarberType | null; // Store veya FreeBarber için
 };
 
+export enum ChatMessageType {
+  Text = 0,
+  Image = 1,
+  Location = 2,
+  File = 3,
+}
+
 export type ChatMessageItemDto = {
   messageId: string;
   senderUserId: string;
   text: string;
   createdAt: string;
   isFullyRead?: boolean; // optional: yeni/optimistic mesajlarda henüz set edilmez (default false)
+  messageType?: ChatMessageType;
+  mediaUrl?: string | null;
+  replyToMessageId?: string | null;
+  replyToTextPreview?: string | null;
 };
 
 export type ChatMessagesReadEvent = {
@@ -46,4 +57,8 @@ export type ChatMessageDto = {
   senderUserId: string;
   text: string;
   createdAt: string;
+  messageType?: ChatMessageType;
+  mediaUrl?: string | null;
+  replyToMessageId?: string | null;
+  replyToTextPreview?: string | null;
 };

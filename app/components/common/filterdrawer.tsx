@@ -14,7 +14,7 @@ import Animated, {
     runOnJS,
 } from 'react-native-reanimated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import { Divider, Icon, TextInput } from 'react-native-paper';
+import { Divider, Icon, TextInput } from "react-native-paper";
 import { MultiSelect } from 'react-native-element-dropdown';
 import { useCategoryHierarchy } from '../../hook/useCategoryHierarchy';
 import { useLanguage } from '../../hook/useLanguage';
@@ -113,7 +113,6 @@ const FilterChipItem = ({ label, selected, onPress }: { label: string; selected:
         </TouchableOpacity>
     );
 };
-
 
 export const FilterDrawer: React.FC<FilterDrawerProps> = ({
     visible,

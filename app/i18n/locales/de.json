@@ -15,6 +15,7 @@
     "login": "Anmelden",
     "register": "Registrieren",
     "verifyPhone": "Bestätige deine Telefonnummer",
+    "otpAccessHint": "Gib den Zugangscode ein, um zu starten.",
     "enterCode": "Gib den 6-stelligen Code ein, der an {{phone}} gesendet wurde",
     "timeRemaining": "Zeit: {{time}}",
     "resendCode": "Code erneut senden",
@@ -116,12 +117,15 @@
     "customStart": "Start",
     "customEnd": "Ende",
     "profitRate": "Gesamtprofitrate",
+    "allTimeTotalLabel": "Gesamtsumme seit Kontobeginn",
     "exportExcel": "Als Excel exportieren",
     "exportPdf": "Als PDF exportieren",
     "exportError": "Export fehlgeschlagen.",
     "earningsEmptyTitle": "Keine Einnahmen in diesem Zeitraum",
     "earningsEmptySubtitle": "Wählen Sie einen anderen Zeitraum oder warten Sie auf abgeschlossene Termine.",
     "chartScrollHint": "Bei vielen Labels horizontal wischen.",
+    "chartPeriodTotal": "Zeitraum gesamt:",
+    "chartLoading": "Diagramm wird geladen…",
     "pickDateHint": "Datum wählen und auf OK tippen."
   },
   "subscription": {
@@ -267,7 +271,8 @@
       "myServices": "Meine Dienstleistungen",
       "services": "Dienstleistungen",
       "scheduleDate": "Datum",
-      "scheduleTime": "Uhrzeit"
+      "scheduleTime": "Uhrzeit",
+      "chair": "Stuhl"
     }
   },
   "time": {
@@ -417,6 +422,8 @@
     "storeNoWorkingHours": "Das Geschäft hat keine Arbeitszeiten für diesen Tag definiert (geschlossen).",
     "storeHasActiveAppointments": "Dieses Geschäft hat aktive oder ausstehende Termine. Du musst zuerst verfügbar sein.",
     "appointmentSlotOverlap": "Der ausgewählte Zeitraum überschneidet sich mit einem anderen Termin.",
+    "availabilityRangeInvalid": "Das Enddatum darf nicht vor dem Startdatum liegen.",
+    "availabilityRangeTooLarge": "Die Verfügbarkeitsspanne darf pro Anfrage höchstens 7 Tage betragen.",
     "appointmentSlotTaken": "Dieser Terminzeitpunkt wurde bereits gebucht.",
     "freebarberNotAvailable": "Der freie Friseur ist derzeit nicht verfügbar.",
     "freebarberNotFound": "Freier Friseur nicht gefunden.",
@@ -635,6 +642,11 @@
     "chairPricing": "Stuhlpreise festlegen",
     "rentPriceHourly": "Stündlicher Mietpreis",
     "workingHours": "Arbeitszeiten",
+    "startTimeShort": "Beginn",
+    "endTimeShort": "Ende",
+    "closed": "Geschlossen",
+    "closedDays": "Geschlossene Tage",
+    "closedDaysHint": "Auf einen geschlossenen Tag tippen, um ihn zu öffnen",
     "setAddress": "Adresse festlegen",
     "addressDescription": "Adressbeschreibung",
     "storeNameLabel": "Unternehmensname",
@@ -704,7 +716,14 @@
     "freebarberUserNotFound": "Freier Friseur-Benutzer nicht gefunden.",
     "barberCallFailed": "Friseuranruf fehlgeschlagen.",
     "appointmentNotePlaceholder": "Du kannst Dienstleistungen, Preise, Zeitinformationen schreiben...",
-    "appointmentNotePlaceholderAlt": "Du kannst Dienstleistungen, Preise, Zeitinformationen usw. schreiben..."
+    "appointmentNotePlaceholderAlt": "Du kannst Dienstleistungen, Preise, Zeitinformationen usw. schreiben...",
+    "today": "Heute",
+    "weekGridTitle": "Wöchentliche Verfügbarkeit",
+    "weekGridFree": "Frei",
+    "weekGridBooked": "Belegt",
+    "weekGridPast": "Vorbei",
+    "weekGridClosed": "Geschlossen",
+    "selectedTime": "Ausgewählt"
   },
   "complaint": {
     "title": "Beschwerde einreichen",
@@ -750,7 +769,45 @@
     "threadNotFound": "Chat nicht gefunden",
     "today": "Heute",
     "yesterday": "Gestern",
-    "newMessage": "Neue Nachricht"
+    "newMessage": "Neue Nachricht",
+    "reply": "Antworten",
+    "delete": "Löschen",
+    "deleteMessage": "Nachricht löschen",
+    "deleteMessageConfirm": "Möchtest du diese Nachricht wirklich löschen?",
+    "replyTo": "Antwort auf:",
+    "replyingTo": "Antwort auf:",
+    "galleryPermission": "Galerie-Berechtigung erforderlich, um Fotos zu senden.",
+    "microphonePermission": "Mikrofonberechtigung erforderlich, um Sprachnachrichten zu senden.",
+    "locationPermission": "Standort-Berechtigung erforderlich, um den Standort zu teilen.",
+    "imageUploadFailed": "Foto-Upload fehlgeschlagen. Bitte erneut versuchen.",
+    "locationFailed": "Standort konnte nicht abgerufen werden.",
+    "recordingFailed": "Sprachaufnahme konnte nicht gestartet werden.",
+    "transcriptionFailed": "Sprache konnte nicht in Text umgewandelt werden.",
+    "uploadingMedia": "Medien werden hochgeladen...",
+    "locationShared": "Standort geteilt",
+    "photo": "Foto",
+    "location": "Standort",
+    "deleteThread": "Unterhaltung löschen",
+    "deleteThreadConfirm": "Diese Unterhaltung für dich löschen? Andere Teilnehmer können sie noch sehen.",
+    "fileUploadFailed": "Datei-Upload fehlgeschlagen. Bitte erneut versuchen.",
+    "tapToOpen": "Tippen zum Öffnen",
+    "file": "Datei"
+  },
+  "ai": {
+    "assistantTitle": "KI-Assistent",
+    "tapToSpeak": "Sprechen Sie über Ihre Termine",
+    "recording": "Ich höre zu...",
+    "transcribing": "Sprache wird umgewandelt...",
+    "thinking": "Ich denke nach...",
+    "tapToStop": "Tippen zum Stoppen",
+    "retry": "Erneut versuchen",
+    "actionTaken": "Aktion abgeschlossen",
+    "error_recording_permission_denied": "Mikrofonberechtigung erforderlich.",
+    "error_recording_failed": "Aufnahme konnte nicht gestartet werden.",
+    "error_transcription_empty": "Keine Sprache erkannt. Bitte erneut versuchen.",
+    "error_whisper_failed": "Sprache konnte nicht in Text umgewandelt werden.",
+    "error_ai_error": "KI-Assistent konnte nicht antworten.",
+    "error_unknown": "Ein unerwarteter Fehler ist aufgetreten."
   },
   "rating": {
     "selectRating": "Bitte wähle eine Bewertung.",
@@ -983,7 +1040,14 @@
     "topSectionExpandedHint": "Tippen, um Suche und Zusammenfassung auszublenden",
     "topSectionCollapsedHint": "Tippen, um Suche und Zusammenfassung anzuzeigen",
     "collapseTopSection": "Oberen Bereich einklappen",
-    "expandTopSection": "Oberen Bereich ausklappen"
+    "expandTopSection": "Oberen Bereich ausklappen",
+    "viewMyPanel": "Mein Panel anzeigen",
+    "viewMyBusinesses": "Meine Geschäfte anzeigen",
+    "layoutToggleHint": "Liste oder Raster",
+    "overflowCompare": "Vergleichen",
+    "overflowPhotos": "Fotos ansehen",
+    "overflowMenuA11y": "Panelaktionen",
+    "locationDeniedShort": "Standort aus; Entdeckung aus. Ihre Panel-Daten werden trotzdem geladen."
   },
   "moderation": {
     "inappropriateText": "Ihre Nachricht enthält unangemessene Inhalte. Bitte verwenden Sie keine Schimpfwörter, Beleidigungen oder anstößige Ausdrücke.",
@@ -1000,5 +1064,10 @@
     "consentAgreement": "Ich gebe meine ausdrückliche Einwilligung zur Verarbeitung meiner personenbezogenen Daten.",
     "mustAgree": "Sie müssen die Vereinbarungen akzeptieren, um fortzufahren.",
     "close": "Schließen"
+  },
+  "nativePermissions": {
+    "locationWhenInUse": "Wir nutzen Ihren Standort, um nahegelegene Salons und Barbiere anzuzeigen.",
+    "locationAlways": "Der Standort hält die Position freier Barbiere aktuell, auch wenn die App im Hintergrund ist.",
+    "microphone": "Das Mikrofon wird für Sprachnachrichten verwendet."
   }
 }

@@ -1,7 +1,8 @@
+import { Icon } from "react-native-paper";
 import React from "react";
 import { View, ActivityIndicator, Switch, Image, FlatList, RefreshControl, TouchableOpacity } from "react-native";
 import { Text } from "../../components/common/Text";
-import { Icon } from "react-native-paper";
+
 import { useGetMyBlockedUsersQuery, useUnblockUserMutation } from "../../store/api";
 import { BlockedGetDto, UserType } from "../../types";
 import { useLanguage } from "../../hook/useLanguage";

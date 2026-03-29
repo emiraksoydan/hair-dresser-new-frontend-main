@@ -1,7 +1,7 @@
 import React from "react";
 import { View } from "react-native";
 import { Text } from "../common/Text";
-import { TextInput, HelperText, IconButton, Icon } from "react-native-paper";
+import { HelperText, Icon, IconButton, TextInput } from "react-native-paper";
 import { Controller, Control, FieldErrors } from "react-hook-form";
 import { Dropdown } from "react-native-element-dropdown";
 import { useLanguage } from "../../hook/useLanguage";

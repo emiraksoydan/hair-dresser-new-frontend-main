@@ -28,14 +28,7 @@ import {
 } from "../../utils/time/time-helper";
 import { Controller, useFieldArray, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import {
-  Avatar,
-  Divider,
-  HelperText,
-  Icon,
-  IconButton,
-  TextInput,
-} from "react-native-paper";
+import { Avatar, Divider, HelperText, Icon, IconButton, TextInput } from "react-native-paper";
 import { Button } from "../common/Button";
 import { Dropdown } from "react-native-element-dropdown";
 import { CategoryListSelect } from "../common/CategoryListSelect";
@@ -77,6 +70,7 @@ import { safeCoord } from "../../utils/location/geo";
 import { useAppDispatch } from "../../store/hook";
 import { showSnack } from "../../store/snackbarSlice";
 import { ChairItem } from "./ChairItem";
+import { WorkingHoursAccordion } from "./WorkingHoursAccordion";
 import { ManuelBarberItem } from "./ManuelBarberItem";
 import { useOptimizedChairOptions } from "../../hooks/useOptimizedFieldArray";
 import {
@@ -446,7 +440,7 @@ const FormStoreUpdate = React.memo(({
   const { userId } = useAuth();
   const { t, currentLanguage } = useLanguage();
   const { confirm } = useAlert();
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
 
   // MultiSelect style objects - depend on colors so defined inside component
   const MULTI_SELECT_STYLE = useMemo(() => ({
@@ -896,13 +890,6 @@ const FormStoreUpdate = React.memo(({
 
   const working = watch("workingHours") ?? [];
   const holidayDays = watch("holidayDays") ?? [];
-  const [activeDay, setActiveDay] = useState<number>(0);
-  const [activeStart, setActiveStart] = useState<Date>(() =>
-    fromHHmm(working[0]?.startTime ?? "09:00"),
-  );
-  const [activeEnd, setActiveEnd] = useState<Date>(() =>
-    fromHHmm(working[0]?.endTime ?? "18:00"),
-  );
   const selectedType = watch("type");
   const selectedMainHeadings = watch("selectedMainHeadings") ?? [];
   const selectedSubHeadings = watch("selectedSubHeadings") ?? [];
@@ -1040,28 +1027,6 @@ const FormStoreUpdate = React.memo(({
     () => new Set(parentCategories.map((cat: any) => cat.name)),
     [parentCategories],
   );
-
-  // FIX: Use working length instead of working array to avoid infinite loop
-  const workingLengthRef = useRef<number>(0);
-  const lastActiveDayRef = useRef<number | undefined>(undefined);
-  useEffect(() => {
-    const currentLength = working?.length || 0;
-    const lengthChanged = currentLength !== workingLengthRef.current;
-    const dayChanged = activeDay !== lastActiveDayRef.current;
-
-    if (lengthChanged || dayChanged) {
-      const idx = (working ?? []).findIndex((w) => w.dayOfWeek === activeDay);
-      if (idx >= 0) {
-        const row = working[idx];
-        if (row) {
-          setActiveStart(fromHHmm(row.startTime));
-          setActiveEnd(fromHHmm(row.endTime));
-        }
-      }
-    }
-    workingLengthRef.current = currentLength;
-    lastActiveDayRef.current = activeDay;
-  }, [activeDay, working?.length]);
 
   const { updateLocation, reverseAndSetAddress } =
     createStoreLocationHelpers<FormUpdateValues>(setValue, getValues);
@@ -2425,108 +2390,21 @@ const FormStoreUpdate = React.memo(({
                         {t("form.workingHours")}
                       </Text>
                       <View className="mt-2 mx-0 rounded-xl px-2 py-3" style={{ backgroundColor: colors.cardBg }}>
-                        <View className="mt-2 px-0">
-                          <View className="flex-row  gap-2">
-                            {DAYS_TR.map((d) => {
-                              const isHoliday = (holidayDays ?? []).includes(d.day);
-                              const isActive = activeDay === d.day;
-                              return (
-                                <TouchableOpacity
-                                  key={d.day}
-                                  disabled={isHoliday}
-                                  onPress={() => setActiveDay(d.day)}
-                                  className={`px-3 py-2 rounded-full border ${isHoliday
-                                    ? "opacity-40 border-gray-600"
-                                    : isActive
-                                      ? "bg-emerald-500"
-                                      : "border-gray-500"
-                                    }`}
-                                  activeOpacity={0.8}
-                                >
-                                  <Text className="text-xs" style={{ color: colors.sectionHeaderText }}>
-                                    {d.label}
-                                  </Text>
-                                </TouchableOpacity>
-                              );
-                            })}
-                          </View>
-                          {(() => {
-                            const idx = (working ?? []).findIndex(
-                              (w) => w.dayOfWeek === activeDay,
-                            );
-                            if (idx < 0) return null;
-                            const dayRow = working[idx];
-                            const isDisabled =
-                              dayRow?.isClosed ||
-                              (holidayDays ?? []).includes(activeDay);
-                            const dayErr = errors.workingHours?.[idx];
-                            return (
-                              <View className="mt-0 rounded-xl p-0" style={{ backgroundColor: colors.cardBg }}>
-                                <View className="flex-row items-center mt-6">
-                                  <Text className="text-sm" style={{ color: colors.sectionHeaderText }}>
-                                    Başlangıç saati:
-                                  </Text>
-                                  <DateTimePicker
-                                    value={activeStart}
-                                    mode="time"
-                                    is24Hour
-                                    locale="tr-TR"
-                                    disabled={isDisabled}
-                                    onChange={(_, d) => {
-                                      if (!d || isDisabled) return;
-                                      setActiveStart(d);
-                                      setValue(
-                                        `workingHours.${idx}.startTime`,
-                                        fmtHHmm(d),
-                                        {
-                                          shouldDirty: true,
-                                          shouldValidate: true,
-                                        },
-                                      );
-                                      trigger([
-                                        `workingHours.${idx}.startTime`,
-                                        `workingHours.${idx}.endTime`,
-                                      ]);
-                                    }}
-                                  />
-                                  <Text className="text-sm ml-5" style={{ color: colors.sectionHeaderText }}>
-                                    Bitiş saati:
-                                  </Text>
-                                  <DateTimePicker
-                                    value={activeEnd}
-                                    mode="time"
-                                    is24Hour
-                                    locale="tr-TR"
-                                    disabled={isDisabled}
-                                    onChange={(_, d) => {
-                                      if (!d || isDisabled) return;
-                                      setActiveEnd(d);
-                                      setValue(
-                                        `workingHours.${idx}.endTime`,
-                                        fmtHHmm(d),
-                                        {
-                                          shouldDirty: true,
-                                          shouldValidate: true,
-                                        },
-                                      );
-                                      trigger([
-                                        `workingHours.${idx}.startTime`,
-                                        `workingHours.${idx}.endTime`,
-                                      ]);
-                                    }}
-                                  />
-                                </View>
-                                <HelperText
-                                  type="error"
-                                  visible={!!(dayErr?.startTime || dayErr?.endTime)}
-                                >
-                                  {((dayErr?.startTime?.message as string) ||
-                                    (dayErr?.endTime?.message as string)) ??
-                                    ""}
-                                </HelperText>
-                              </View>
-                            );
-                          })()}
+                        <WorkingHoursAccordion
+                          working={working}
+                          holidayDays={holidayDays}
+                          errors={errors}
+                          colors={{
+                            cardBg: colors.cardBg,
+                            cardBg2: colors.cardBg2,
+                            sectionHeaderText: colors.sectionHeaderText,
+                            textSecondary: colors.textSecondary,
+                            borderColor: colors.borderColor,
+                          }}
+                          isDark={isDark}
+                          setValue={setValue}
+                          trigger={trigger}
+                        />
                           <Text className="text-[#c2a523] font-century-gothic pt-2 pb-1 text-sm">
                             - {t("form.workingHoursInfo")}
                           </Text>
@@ -2566,7 +2444,6 @@ const FormStoreUpdate = React.memo(({
                           />
                         </View>
                       </View>
-                    </View>
                   </>
                 )}
                 {currentStep === 8 && (

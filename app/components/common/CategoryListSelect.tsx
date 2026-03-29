@@ -1,6 +1,7 @@
+import { Icon } from "react-native-paper";
 import React from "react";
 import { View, TouchableOpacity, StyleSheet } from "react-native";
-import { Icon } from "react-native-paper";
+
 import { Text } from "./Text";
 import { useTheme } from "../../hook/useTheme";
 

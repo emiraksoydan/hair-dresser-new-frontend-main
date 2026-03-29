@@ -1,10 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   useGetFreeBarberEarningsQuery,
-  useLazyGetBarberStoreEarningsQuery,
+  useLazyGetBarberStoreEarningsAggregatedQuery,
 } from "../store/api";
 import type { EarningsDto } from "../types";
-import { mergeEarnings } from "../utils/earnings/merge-earnings";
 
 function toDateStr(d: Date) {
   return d.toISOString().split("T")[0];
@@ -18,7 +17,7 @@ function computeMonthlyRange(): [Date, Date] {
 }
 
 export function useBarberStorePanelEarningsPreview(storeIds: string[]) {
-  const [fetchStoreEarnings] = useLazyGetBarberStoreEarningsQuery();
+  const [fetchAggregated] = useLazyGetBarberStoreEarningsAggregatedQuery();
   const [merged, setMerged] = useState<EarningsDto | null>(null);
   const [rangeStart, rangeEnd] = useMemo(() => computeMonthlyRange(), []);
   const idsKey = storeIds.join(",");
@@ -33,16 +32,12 @@ export function useBarberStorePanelEarningsPreview(storeIds: string[]) {
     let cancelled = false;
     (async () => {
       try {
-        const results = await Promise.all(
-          storeIds.map((id) =>
-            fetchStoreEarnings({
-              storeId: id,
-              startDate: start,
-              endDate: end,
-            }).unwrap()
-          )
-        );
-        if (!cancelled) setMerged(mergeEarnings(results));
+        const data = await fetchAggregated({
+          storeIds,
+          startDate: start,
+          endDate: end,
+        }).unwrap();
+        if (!cancelled) setMerged(data);
       } catch {
         if (!cancelled) setMerged(null);
       }
@@ -50,7 +45,7 @@ export function useBarberStorePanelEarningsPreview(storeIds: string[]) {
     return () => {
       cancelled = true;
     };
-  }, [idsKey, rangeStart, rangeEnd, fetchStoreEarnings, storeIds]);
+  }, [idsKey, rangeStart, rangeEnd, fetchAggregated, storeIds]);
 
   return merged;
 }

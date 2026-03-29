@@ -4,6 +4,7 @@ import LottieView from 'lottie-react-native';
 import { MotiText } from 'moti';
 import { useLanguage } from '../../hook/useLanguage';
 import { useTheme } from '../../hook/useTheme';
+import { COLORS } from '../../constants/colors';
 import { Text } from './Text';
 
 type EmptyStateProps = {
@@ -65,10 +66,13 @@ export const LottieViewComponent: React.FC<EmptyStateProps> = ({
                 <View className="mt-4">
                     <TouchableOpacity
                         onPress={onRetry}
-                        className="bg-[#ffb900] px-6 py-2 rounded-lg"
+                        style={{ backgroundColor: COLORS.UI.ACCENT_GOLD }}
+                        className="px-6 py-2 rounded-lg"
                         activeOpacity={0.8}
                     >
-                        <Text className="text-white font-medium">{t("common.retry")}</Text>
+                        <Text style={{ color: COLORS.UI.TEXT_ON_GOLD }} className="font-medium">
+                            {t("common.retry")}
+                        </Text>
                     </TouchableOpacity>
                 </View>
             )}

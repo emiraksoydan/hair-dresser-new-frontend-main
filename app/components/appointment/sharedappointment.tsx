@@ -1,9 +1,22 @@
-import React, { useState, useCallback, useMemo } from "react";
-import { View, TouchableOpacity, RefreshControl, ActivityIndicator, ScrollView, } from "react-native";
+import { Icon } from "react-native-paper";
+import React, { useState, useCallback, useMemo, useEffect, useContext, useRef } from "react";
+import {
+  View,
+  TouchableOpacity,
+  RefreshControl,
+  ActivityIndicator,
+  ScrollView,
+  Pressable,
+  StyleSheet,
+  BackHandler,
+  Platform,
+  Dimensions,
+} from "react-native";
+import { MotiView } from "moti";
 import { Text } from "../common/Text";
 import { LegendList } from "@legendapp/list";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Icon } from "react-native-paper";
+
 import { StarRatingDisplay } from "react-native-star-rating-widget";
 import { BottomSheetModal, BottomSheetView } from "@gorhom/bottom-sheet";
 import {
@@ -28,6 +41,7 @@ import { useLanguage } from "../../hook/useLanguage";
 import { useAlert } from "../../hook/useAlert";
 import { useTheme } from "../../hook/useTheme";
 import { useActionGuard } from "../../hook/useActionGuard";
+import { MoreFabPanelContext } from "../layout/MoreFabContext";
 
 export default function SharedAppointmentScreen() {
   const { t, currentLanguage } = useLanguage();
@@ -72,6 +86,24 @@ export default function SharedAppointmentScreen() {
     targets: Array<{ userId: string; name: string; image?: string; type: string }>;
     actionType: "complaint" | "block";
   } | null>(null);
+
+  // Randevu card aksiyonları menüsü (dots-vertical) — tam ekran overlay + MotiView animasyon, kart yüksekliğini değiştirmez
+  const [openCardMenuId, setOpenCardMenuId] = useState<string | null>(null);
+  /** Menü konumu köke göre; yatayda ekran içinde kalacak şekilde clamp */
+  const [cardMenuLayout, setCardMenuLayout] = useState<{
+    top: number;
+    left: number;
+    width: number;
+  } | null>(null);
+  const cardMenuDotRefs = useRef<Record<string, View | null>>({});
+  const cardMenuRootRef = useRef<View | null>(null);
+
+  // FAB'ı sheet açıkken gizle
+  const fabCtx = useContext(MoreFabPanelContext);
+  const anySheetOpen = ratingSheet.isOpen || complaintSheet.isOpen || userSelectionSheet.isOpen;
+  useEffect(() => {
+    fabCtx?.reportOverlayOpen(anySheetOpen);
+  }, [anySheetOpen, fabCtx]);
 
   // --- API ---
   const {
@@ -526,6 +558,98 @@ export default function SharedAppointmentScreen() {
     );
   }, [deleteAllAppointments, t, confirm, alertError, alertSuccess, guard]);
 
+  const openCardMenuAppointment = useMemo(
+    () =>
+      openCardMenuId
+        ? filteredAppointments.find((a) => a.id === openCardMenuId) ?? null
+        : null,
+    [openCardMenuId, filteredAppointments],
+  );
+
+  const cardMenuFlags = useMemo(() => {
+    const item = openCardMenuAppointment;
+    if (!item) return { showDelete: false, showComplaintBlock: false };
+    let showDeleteButton = false;
+    if (
+      (activeFilter === AppointmentFilter.Completed ||
+        activeFilter === AppointmentFilter.Cancelled) &&
+      item.status !== AppointmentStatus.Pending &&
+      item.status !== AppointmentStatus.Approved
+    ) {
+      showDeleteButton = true;
+    }
+    const showComplaintBlock =
+      (activeFilter === AppointmentFilter.Completed ||
+        activeFilter === AppointmentFilter.Cancelled) &&
+      getAllComplaintTargets(item).length > 0;
+    return { showDelete: showDeleteButton, showComplaintBlock };
+  }, [openCardMenuAppointment, activeFilter, getAllComplaintTargets]);
+
+  const closeCardMenu = useCallback(() => {
+    setOpenCardMenuId(null);
+    setCardMenuLayout(null);
+  }, []);
+
+  const handleOpenCardMenu = useCallback(
+    (item: AppointmentGetDto) => {
+      if (openCardMenuId === item.id) {
+        closeCardMenu();
+        return;
+      }
+      const tryPlace = (attempt: number) => {
+        const dotRef = cardMenuDotRefs.current[item.id];
+        const rootRef = cardMenuRootRef.current;
+        if (!dotRef) return;
+        if (!rootRef) {
+          if (attempt < 4) setTimeout(() => tryPlace(attempt + 1), 24);
+          return;
+        }
+        dotRef.measureInWindow((ax, ay, aw, ah) => {
+          const h = ah || 28;
+          rootRef.measureInWindow((rx, ry, rw, _rh) => {
+            const sw = Dimensions.get("window").width;
+            const pad = 10;
+            const menuW = Math.min(240, Math.max(176, rw - pad * 2));
+            const dotRight = ax + aw;
+            let menuLeftWin = dotRight - menuW;
+            menuLeftWin = Math.max(pad, Math.min(menuLeftWin, sw - pad - menuW));
+            setCardMenuLayout({
+              top: ay - ry + h + 4,
+              left: menuLeftWin - rx,
+              width: menuW,
+            });
+            setOpenCardMenuId(item.id);
+          });
+        });
+      };
+      requestAnimationFrame(() => tryPlace(0));
+    },
+    [openCardMenuId, closeCardMenu],
+  );
+
+  useEffect(() => {
+    if (!openCardMenuId) return;
+    const sub = BackHandler.addEventListener("hardwareBackPress", () => {
+      closeCardMenu();
+      return true;
+    });
+    return () => sub.remove();
+  }, [openCardMenuId, closeCardMenu]);
+
+  // Header'a "tümünü sil" butonu ekle/kaldır (filteredAppointments ve handleDeleteAll tanımlandıktan sonra)
+  const showHeaderDeleteAction =
+    (activeFilter === AppointmentFilter.Completed || activeFilter === AppointmentFilter.Cancelled) &&
+    (filteredAppointments?.length ?? 0) > 0;
+  useEffect(() => {
+    if (showHeaderDeleteAction) {
+      fabCtx?.setHeaderDeleteAction({ onPress: handleDeleteAll, loading: isDeletingAllAppointments });
+    } else {
+      fabCtx?.setHeaderDeleteAction(null);
+    }
+    return () => { fabCtx?.setHeaderDeleteAction(null); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showHeaderDeleteAction, isDeletingAllAppointments]);
+
   // Rating Component - Ortalama rating ve kullanıcının rating'i göster
   const RatingDisplay = ({
     myRating,
@@ -615,7 +739,13 @@ export default function SharedAppointmentScreen() {
   };
 
   // --- RENDER ITEM ---
-  const renderItem = ({ item }: { item: AppointmentGetDto }) => {
+  const renderItem = ({
+    item,
+    index,
+  }: {
+    item: AppointmentGetDto;
+    index: number;
+  }) => {
     const hasSchedule =
       !!item.appointmentDate && !!item.startTime && !!item.endTime;
     const passed = hasSchedule
@@ -701,10 +831,10 @@ export default function SharedAppointmentScreen() {
       borderWidth: 1,
       borderColor: colors.borderColor,
       shadowColor: "#000",
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: isDark ? 0.14 : 0.04,
-      shadowRadius: 6,
-      elevation: 2,
+      shadowOffset: { width: 0, height: 1 },
+      shadowOpacity: isDark ? 0.08 : 0.03,
+      shadowRadius: 4,
+      elevation: 1,
     };
     const sectionLabelStyle = {
       color: isDark ? "#fb923c" : "#c2410c",
@@ -734,8 +864,9 @@ export default function SharedAppointmentScreen() {
     };
     const scheduleStripOuter = {
       borderRadius: 12,
-      padding: 8,
-      marginBottom: 8,
+      paddingVertical: 6,
+      paddingHorizontal: 8,
+      marginBottom: 4,
       backgroundColor: colors.cardBg2,
       borderWidth: 1,
       borderColor: colors.borderColor,
@@ -764,50 +895,45 @@ export default function SharedAppointmentScreen() {
           : currentLanguage === "ar"
             ? "ar-SA"
             : "en-US";
-
     return (
       <View
         className="rounded-2xl mb-3 overflow-hidden"
         style={{
           backgroundColor: colors.cardBg,
-          borderColor: isCompletedOrCancelled ? colors.borderColor : "rgba(255, 185, 0, 0.32)",
+          borderColor: isCompletedOrCancelled ? colors.borderColor : "rgba(255, 185, 0, 0.22)",
           borderWidth: 1,
           borderRadius: 14,
-          borderLeftWidth: 3,
+          borderLeftWidth: 2,
           borderLeftColor: statusColor,
           shadowColor: statusColor,
-          shadowOffset: { width: 0, height: 3 },
-          shadowOpacity: isDark ? 0.12 : isCompletedOrCancelled ? 0.04 : 0.08,
-          shadowRadius: 8,
-          elevation: 3,
+          shadowOffset: { width: 0, height: 2 },
+          shadowOpacity: isDark ? 0.07 : isCompletedOrCancelled ? 0.025 : 0.05,
+          shadowRadius: 6,
+          elevation: 2,
         }}
       >
-        <View className="p-3">
-        {/* Durum Badge'i - Active, Pending tab'ında ve tamamlanan/iptal durumlarında göster */}
-        {(activeFilter === AppointmentFilter.Active ||
-          activeFilter === AppointmentFilter.Pending ||
-          isCompletedOrCancelled) && (
+        <View className="pt-2 px-3 pb-3">
+        <View style={{ marginBottom: 2 }}>
+          {(activeFilter === AppointmentFilter.Active ||
+            activeFilter === AppointmentFilter.Pending ||
+            isCompletedOrCancelled) && (
             <View
-              className="mb-2 pb-2"
+              className="mb-1 pb-1"
               style={{ borderBottomWidth: 1, borderBottomColor: colors.borderColor }}
             >
               <View
                 className="flex-row items-center gap-2 justify-between"
                 style={{
-                  backgroundColor: isDark ? `${statusColor}24` : `${statusColor}14`,
+                  backgroundColor: isDark ? `${statusColor}18` : `${statusColor}10`,
                   borderRadius: 10,
-                  paddingVertical: 8,
+                  paddingVertical: 7,
                   paddingHorizontal: 10,
                   borderWidth: 1,
-                  borderColor: isDark ? `${statusColor}45` : `${statusColor}30`,
+                  borderColor: isDark ? `${statusColor}32` : `${statusColor}22`,
                 }}
               >
-                <View className="flex-row items-center gap-2 flex-1">
-                  <Icon
-                    source={statusIconName}
-                    size={16}
-                    color={statusColor}
-                  />
+                <View className="flex-row items-center gap-2 flex-1 flex-wrap">
+                  <Icon source={statusIconName} size={16} color={statusColor} />
                   <Text
                     className="text-sm font-semibold flex-shrink"
                     style={{ color: statusColor, fontFamily: "CenturyGothic-Bold" }}
@@ -815,9 +941,8 @@ export default function SharedAppointmentScreen() {
                   >
                     {statusText}
                   </Text>
-                  {/* Zaman geçmişse uyarı göster - Active tab'ında sadece Approved randevular var */}
                   {passed && isApproved && (
-                    <View className="flex-row items-center ml-2">
+                    <View className="flex-row items-center">
                       <Icon source="alert-circle" size={14} color="#ffb900" />
                       <Text className="text-[#ffb900] text-xs ml-1">
                         {t("appointment.labels.timePassed")}
@@ -825,15 +950,33 @@ export default function SharedAppointmentScreen() {
                     </View>
                   )}
                 </View>
+                {/* Dots menu button — only shown when card has actions */}
+                {(showDeleteButton || ((activeFilter === AppointmentFilter.Completed || activeFilter === AppointmentFilter.Cancelled) && getAllComplaintTargets(item).length > 0)) && (
+                  <View ref={(r) => { cardMenuDotRefs.current[item.id] = r; }} collapsable={false}>
+                    <TouchableOpacity
+                      onPress={() => handleOpenCardMenu(item)}
+                      hitSlop={8}
+                      style={{
+                        width: 30,
+                        height: 30,
+                        borderRadius: 15,
+                        alignItems: "center",
+                        justifyContent: "center",
+                        backgroundColor: openCardMenuId === item.id
+                          ? (isDark ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.06)")
+                          : "transparent",
+                      }}
+                    >
+                      <Icon source="dots-vertical" size={18} color={statusColor} />
+                    </TouchableOpacity>
+                  </View>
+                )}
               </View>
             </View>
           )}
 
-        {item.startTime &&
-          item.endTime &&
-          item.appointmentDate && (
-            <View style={scheduleStripOuter}>
-              <View className="flex-row gap-2">
+          {item.startTime && item.endTime && item.appointmentDate && (
+            <View className="flex-row gap-2" style={{ marginBottom: 0, marginTop: 2 }}>
                 <View style={schedulePill}>
                   <View
                     style={{
@@ -845,7 +988,7 @@ export default function SharedAppointmentScreen() {
                   >
                     <Icon source="calendar-month" size={16} color="#f05e23" />
                   </View>
-                  <View className="flex-1">
+                  <View className="flex-1" style={{ minWidth: 0 }}>
                     <Text
                       style={{
                         color: isDark ? "#fb923c" : "#c2410c",
@@ -865,14 +1008,11 @@ export default function SharedAppointmentScreen() {
                       }}
                       numberOfLines={2}
                     >
-                      {new Date(item.appointmentDate).toLocaleDateString(
-                        dateLocale,
-                        {
-                          weekday: "short",
-                          day: "numeric",
-                          month: "long",
-                        },
-                      )}
+                      {new Date(item.appointmentDate).toLocaleDateString(dateLocale, {
+                        weekday: "short",
+                        day: "numeric",
+                        month: "short",
+                      })}
                     </Text>
                   </View>
                 </View>
@@ -887,7 +1027,7 @@ export default function SharedAppointmentScreen() {
                   >
                     <Icon source="clock-outline" size={16} color="#f05e23" />
                   </View>
-                  <View className="flex-1">
+                  <View className="flex-1" style={{ minWidth: 0 }}>
                     <Text
                       style={{
                         color: isDark ? "#fb923c" : "#c2410c",
@@ -907,16 +1047,15 @@ export default function SharedAppointmentScreen() {
                       }}
                       numberOfLines={1}
                     >
-                      {item.startTime.substring(0, 5)} –{" "}
-                      {item.endTime.substring(0, 5)}
+                      {item.startTime.substring(0, 5)} – {item.endTime.substring(0, 5)}
                     </Text>
                   </View>
                 </View>
               </View>
-            </View>
           )}
+        </View>
 
-        <View className="mb-3 gap-2">
+        <View className="mb-1 gap-1.5" style={{ marginTop: 8 }}>
           {/* Birincil aksiyonlar */}
           {(showCompleteButton || showCancelButton) && (
             <View className="flex-row gap-3 justify-end">
@@ -927,10 +1066,10 @@ export default function SharedAppointmentScreen() {
                   className="bg-green-600 flex-1 py-2.5 rounded-xl flex-row items-center justify-center"
                   style={{
                     shadowColor: "#15803d",
-                    shadowOffset: { width: 0, height: 3 },
-                    shadowOpacity: 0.35,
-                    shadowRadius: 6,
-                    elevation: 4,
+                    shadowOffset: { width: 0, height: 2 },
+                    shadowOpacity: 0.22,
+                    shadowRadius: 4,
+                    elevation: 2,
                   }}
                 >
                   {isCompleting ? (
@@ -952,12 +1091,12 @@ export default function SharedAppointmentScreen() {
                   className="bg-red-600 flex-1 py-2.5 rounded-xl flex-row items-center justify-center"
                   style={{
                     borderWidth: 1,
-                    borderColor: "rgba(127, 29, 29, 0.5)",
+                    borderColor: "rgba(127, 29, 29, 0.45)",
                     shadowColor: "#b91c1c",
-                    shadowOffset: { width: 0, height: 3 },
-                    shadowOpacity: 0.3,
-                    shadowRadius: 6,
-                    elevation: 4,
+                    shadowOffset: { width: 0, height: 2 },
+                    shadowOpacity: 0.2,
+                    shadowRadius: 4,
+                    elevation: 2,
                   }}
                 >
                   {isCancelling ? (
@@ -974,77 +1113,11 @@ export default function SharedAppointmentScreen() {
               )}
             </View>
           )}
-          {/* İkincil aksiyonlar (Şikayet, Engelle, Sil) */}
-          {((activeFilter === AppointmentFilter.Completed ||
-            activeFilter === AppointmentFilter.Cancelled) &&
-            getAllComplaintTargets(item).length > 0 || showDeleteButton) && (
-            <View className="flex-row gap-3 justify-end">
-              {(activeFilter === AppointmentFilter.Completed ||
-                activeFilter === AppointmentFilter.Cancelled) &&
-                getAllComplaintTargets(item).length > 0 && (
-                  <>
-                    <TouchableOpacity
-                      onPress={() => handleComplaintOrBlockAction(item, "complaint")}
-                      className="px-4 py-2 rounded-xl flex-row items-center justify-center"
-                      style={{
-                        backgroundColor: colors.cardBg3,
-                        borderColor: "rgba(245,158,11,0.4)",
-                        borderWidth: 1,
-                      }}
-                    >
-                      <Icon source="alert-circle-outline" size={15} color="#f59e0b" />
-                      <Text className="text-[#f59e0b] text-sm ml-2">
-                        {t("complaint.title")}
-                      </Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      onPress={() => handleComplaintOrBlockAction(item, "block")}
-                      disabled={isBlockingUser}
-                      className={`px-4 py-2 rounded-xl flex-row items-center justify-center ${isBlockingUser ? "opacity-60" : ""}`}
-                      style={{
-                        backgroundColor: colors.cardBg3,
-                        borderColor: "rgba(156,163,175,0.4)",
-                        borderWidth: 1,
-                      }}
-                    >
-                      {isBlockingUser ? (
-                        <ActivityIndicator color="#9ca3af" size="small" />
-                      ) : (
-                        <>
-                          <Icon source="block-helper" size={15} color="#9ca3af" />
-                          <Text className="text-[#9ca3af] text-sm ml-2">
-                            {t("block.submit")}
-                          </Text>
-                        </>
-                      )}
-                    </TouchableOpacity>
-                  </>
-                )}
-              {showDeleteButton && (
-                <TouchableOpacity
-                  onPress={() => handleDelete(item.id)}
-                  disabled={isDeletingAppointment}
-                  className={`bg-red-500 border border-red-900/40 px-4 py-2 rounded-xl flex-row items-center justify-center ${isDeletingAppointment ? "opacity-60" : ""}`}
-                >
-                  {isDeletingAppointment ? (
-                    <ActivityIndicator color="#ef4444" size="small" />
-                  ) : (
-                    <>
-                      <Icon source="delete-outline" size={15} color="#fff" />
-                      <Text className="text-white text-sm ml-2">
-                        {t("appointment.actions.delete")}
-                      </Text>
-                    </>
-                  )}
-                </TouchableOpacity>
-              )}
-            </View>
-          )}
         </View>
 
-        <View className="mb-0">
+        <View className="mb-0" style={{ marginTop: 8 }}>
           {userType === UserType.BarberStore && (
-            <View className="gap-2.5">
+            <View className="gap-3">
               {item.customerUserId && (
                 <View style={participantCardStyle}>
                   <View className="flex-row items-start mb-1">
@@ -1251,7 +1324,7 @@ export default function SharedAppointmentScreen() {
                         numberOfLines={1}
                         ellipsizeMode="tail"
                       >
-                        {item.chairName}
+                        {item.chairName || t("appointment.labels.chair")}
                       </Text>
                     </View>
                   </View>
@@ -1261,7 +1334,7 @@ export default function SharedAppointmentScreen() {
           )}
 
           {userType === UserType.FreeBarber && (
-            <View className="gap-2.5">
+            <View className="gap-3">
               {item.barberStoreId && (
                 <View style={participantCardStyle}>
                   <View className="flex-row items-start mb-1">
@@ -1294,6 +1367,11 @@ export default function SharedAppointmentScreen() {
                       {item.storeType !== undefined && (
                         <Text style={[metaLineStyle, { opacity: 0.85 }]}>
                           {getBarberTypeName(item.storeType as BarberType)}
+                        </Text>
+                      )}
+                      {item.storeNo && (
+                        <Text style={metaLineStyle}>
+                          {'#'}{item.storeNo}
                         </Text>
                       )}
                       {item.storeOwnerNumber && (
@@ -1403,7 +1481,7 @@ export default function SharedAppointmentScreen() {
           )}
 
           {userType === UserType.Customer && (
-            <View className="gap-2.5">
+            <View className="gap-3">
               {item.barberStoreId && (
                 <View style={participantCardStyle}>
                   <View className="flex-row items-start mb-1">
@@ -1436,6 +1514,11 @@ export default function SharedAppointmentScreen() {
                       {item.storeType !== undefined && (
                         <Text style={[metaLineStyle, { opacity: 0.85 }]}>
                           {getBarberTypeName(item.storeType as BarberType)}
+                        </Text>
+                      )}
+                      {item.storeNo && (
+                        <Text style={metaLineStyle}>
+                          {'#'}{item.storeNo}
                         </Text>
                       )}
                       {item.storeOwnerNumber && (
@@ -1622,7 +1705,7 @@ export default function SharedAppointmentScreen() {
                         numberOfLines={1}
                         ellipsizeMode="tail"
                       >
-                        {item.chairName}
+                        {item.chairName || t("appointment.labels.chair")}
                       </Text>
                     </View>
                   </View>
@@ -1725,43 +1808,6 @@ export default function SharedAppointmentScreen() {
           </View>
         )}
 
-        {/* Koltuk Adı - Sadece manuel berber veya free barber yoksa göster */}
-        {item.chairName && !item.manuelBarberId && !item.freeBarberId && (
-          <View className="mt-2 mb-3">
-            <View
-              className="flex-row items-center rounded-xl py-2.5 px-3"
-              style={{
-                backgroundColor: colors.cardBg3,
-                borderWidth: 1,
-                borderColor: colors.borderColor,
-              }}
-            >
-              <Icon source="seat" size={16} color="#f05e23" />
-              <Text
-                style={{
-                  ...sectionLabelStyle,
-                  marginBottom: 0,
-                  marginLeft: 8,
-                }}
-              >
-                {t("appointment.labels.chair")}
-              </Text>
-              <Text
-                style={{
-                  marginLeft: 8,
-                  fontFamily: "CenturyGothic-Bold",
-                  fontSize: 13,
-                  color: colors.sectionHeaderText,
-                  flex: 1,
-                }}
-                numberOfLines={1}
-              >
-                {item.chairName}
-              </Text>
-            </View>
-          </View>
-        )}
-
         {/* Hizmetler */}
         {item.services.length > 0 && (
           <View className="mt-2 mb-1.5">
@@ -1826,14 +1872,23 @@ export default function SharedAppointmentScreen() {
   };
 
   return (
-    <View style={{ flex: 1, backgroundColor: colors.panelBg }}>
+    <View
+      ref={cardMenuRootRef}
+      collapsable={false}
+      style={{ flex: 1, backgroundColor: colors.screenBg }}
+    >
       <View className="pt-2 pb-2">
-        <View className="px-4 mb-2 flex-row gap-2">
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 8, gap: 8, alignItems: "center" }}
+        >
           <FilterChip
             itemKey="pending"
             selected={activeFilter === AppointmentFilter.Pending}
             onPress={() => setActiveFilter(AppointmentFilter.Pending)}
-            fontSize={10}
+            fontSize={12}
+            className="rounded-3xl border-[1.5px] px-3 py-2 flex-row"
           >
             {t("appointment.filters.pending")}
           </FilterChip>
@@ -1841,7 +1896,8 @@ export default function SharedAppointmentScreen() {
             itemKey="active"
             selected={activeFilter === AppointmentFilter.Active}
             onPress={() => setActiveFilter(AppointmentFilter.Active)}
-            fontSize={10}
+            fontSize={12}
+            className="rounded-3xl border-[1.5px] px-3 py-2 flex-row"
           >
             {t("appointment.filters.active")}
           </FilterChip>
@@ -1849,7 +1905,8 @@ export default function SharedAppointmentScreen() {
             itemKey="completed"
             selected={activeFilter === AppointmentFilter.Completed}
             onPress={() => setActiveFilter(AppointmentFilter.Completed)}
-            fontSize={10}
+            fontSize={12}
+            className="rounded-3xl border-[1.5px] px-3 py-2 flex-row"
           >
             {t("appointment.filters.completed")}
           </FilterChip>
@@ -1857,32 +1914,12 @@ export default function SharedAppointmentScreen() {
             itemKey="cancelled"
             selected={activeFilter === AppointmentFilter.Cancelled}
             onPress={() => setActiveFilter(AppointmentFilter.Cancelled)}
-            fontSize={10}
+            fontSize={12}
+            className="rounded-3xl border-[1.5px] px-3 py-2 flex-row"
           >
             {t("appointment.filters.cancelled")}
           </FilterChip>
-        </View>
-        {(activeFilter === AppointmentFilter.Completed ||
-          activeFilter === AppointmentFilter.Cancelled) &&
-          filteredAppointments &&
-          filteredAppointments.length > 0 && (
-            <View className="px-4 mb-2 flex-row justify-end">
-              <TouchableOpacity
-                onPress={handleDeleteAll}
-                disabled={isDeletingAllAppointments}
-                className={`bg-red-600 rounded-3xl px-3 py-2 flex-row items-center gap-1.5 ${isDeletingAllAppointments ? "opacity-60" : ""}`}
-              >
-                {isDeletingAllAppointments ? (
-                  <ActivityIndicator size="small" color="white" />
-                ) : (
-                  <Icon source="delete-sweep" size={18} color="white" />
-                )}
-                <Text className="text-white font-semibold text-sm">
-                  {t("appointment.actions.deleteAll")}
-                </Text>
-              </TouchableOpacity>
-            </View>
-          )}
+        </ScrollView>
       </View>
 
       {isLoading ? (
@@ -1922,9 +1959,11 @@ export default function SharedAppointmentScreen() {
       ) : (
         <LegendList
           data={filteredAppointments}
-          keyExtractor={(item) => item.id}
-          renderItem={renderItem}
+          keyExtractor={((item: AppointmentGetDto) => item.id) as any}
+          renderItem={renderItem as any}
+          extraData={openCardMenuId}
           estimatedItemSize={250}
+          scrollEventThrottle={16}
           contentContainerStyle={{
             paddingHorizontal: 16,
             paddingBottom: 100,
@@ -2060,6 +2099,118 @@ export default function SharedAppointmentScreen() {
           )}
         </BottomSheetView>
       </BottomSheetModal>
+
+      {openCardMenuId && cardMenuLayout && openCardMenuAppointment ? (
+        <View
+          pointerEvents="box-none"
+          style={[
+            StyleSheet.absoluteFillObject,
+            {
+              zIndex: 9999,
+              elevation: Platform.OS === "android" ? 24 : 0,
+            },
+          ]}
+        >
+          <Pressable
+            style={[StyleSheet.absoluteFillObject, { backgroundColor: "rgba(0,0,0,0.06)" }]}
+            onPress={closeCardMenu}
+          />
+          <MotiView
+            key={openCardMenuId ?? "menu"}
+            from={{ opacity: 0, scale: 0.94, translateY: -4 }}
+            animate={{ opacity: 1, scale: 1, translateY: 0 }}
+            transition={{ type: "timing", duration: 180 }}
+            style={{
+              position: "absolute",
+              top: cardMenuLayout.top,
+              left: cardMenuLayout.left,
+              width: cardMenuLayout.width,
+              borderRadius: 14,
+              overflow: "hidden",
+              backgroundColor: isDark
+                ? "rgba(255, 255, 255, 0.94)"
+                : "rgba(255, 255, 255, 0.98)",
+              borderWidth: 1,
+              borderColor: isDark ? "rgba(255, 185, 0, 0.35)" : "rgba(255, 185, 0, 0.42)",
+              elevation: 12,
+              shadowColor: "#000",
+              shadowOffset: { width: 0, height: 6 },
+              shadowOpacity: isDark ? 0.22 : 0.14,
+              shadowRadius: 12,
+            }}
+          >
+              {cardMenuFlags.showComplaintBlock && (
+                <>
+                  <TouchableOpacity
+                    onPress={() => {
+                      closeCardMenu();
+                      handleComplaintOrBlockAction(openCardMenuAppointment, "complaint");
+                    }}
+                    className="flex-row items-center px-4 py-2.5"
+                    style={{
+                      borderBottomWidth: 1,
+                      borderBottomColor: isDark ? colors.borderColor : "rgba(255, 185, 0, 0.22)",
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <View style={{ marginRight: 10 }}>
+                      <Icon source="alert-circle-outline" size={18} color="#f59e0b" />
+                    </View>
+                    <Text className="text-sm font-century-gothic-sans-medium flex-1" style={{ color: colors.sectionHeaderText }} numberOfLines={2}>
+                      {t("complaint.title")}
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={() => {
+                      closeCardMenu();
+                      handleComplaintOrBlockAction(openCardMenuAppointment, "block");
+                    }}
+                    disabled={isBlockingUser}
+                    className={`flex-row items-center px-4 py-2.5 ${isBlockingUser ? "opacity-60" : ""}`}
+                    style={{
+                      borderBottomWidth: cardMenuFlags.showDelete ? 1 : 0,
+                      borderBottomColor: isDark ? colors.borderColor : "rgba(255, 185, 0, 0.22)",
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <View style={{ marginRight: 10, width: 18, alignItems: "center" }}>
+                      {isBlockingUser ? (
+                        <ActivityIndicator size="small" color="#9ca3af" />
+                      ) : (
+                        <Icon source="block-helper" size={18} color="#9ca3af" />
+                      )}
+                    </View>
+                    <Text className="text-sm font-century-gothic-sans-medium flex-1" style={{ color: colors.sectionHeaderText }} numberOfLines={2}>
+                      {t("block.submit")}
+                    </Text>
+                  </TouchableOpacity>
+                </>
+              )}
+              {cardMenuFlags.showDelete && (
+                <TouchableOpacity
+                  onPress={() => {
+                    closeCardMenu();
+                    handleDelete(openCardMenuAppointment.id);
+                  }}
+                  disabled={isDeletingAppointment}
+                  className={`flex-row items-center px-4 py-2.5 ${isDeletingAppointment ? "opacity-60" : ""}`}
+                  activeOpacity={0.7}
+                >
+                  <View style={{ marginRight: 10, width: 18, alignItems: "center" }}>
+                    {isDeletingAppointment ? (
+                      <ActivityIndicator size="small" color="#ef4444" />
+                    ) : (
+                      <Icon source="delete-outline" size={18} color="#ef4444" />
+                    )}
+                  </View>
+                  <Text className="text-sm font-century-gothic-sans-medium flex-1" style={{ color: "#ef4444" }} numberOfLines={2}>
+                    {t("appointment.actions.delete")}
+                  </Text>
+                </TouchableOpacity>
+              )}
+          </MotiView>
+        </View>
+      ) : null}
     </View>
   );
 }

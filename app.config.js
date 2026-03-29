@@ -1,27 +1,37 @@
+const tr = require("./app/i18n/locales/tr.json");
+const en = require("./app/i18n/locales/en.json");
+const de = require("./app/i18n/locales/de.json");
+const ar = require("./app/i18n/locales/ar.json");
+
+/** iOS / expo-location native permission copy is baked at prebuild. Set EXPO_NATIVE_PERM_LANG=tr|en|de|ar to match your store listing; it does not follow in-app language changes without a new build. */
+const localeBundles = { tr, en, de, ar };
+const permLang = process.env.EXPO_NATIVE_PERM_LANG || "tr";
+const np =
+  localeBundles[permLang]?.nativePermissions ||
+  localeBundles.tr.nativePermissions;
+
 module.exports = {
   expo: {
     scheme: "hairdresser",
-    name: "Gumus Makas",
+    name: "Gümüş Makas",
     slug: "HairDresser",
     version: "1.0.0",
     orientation: "portrait",
     icon: "./assets/adaptive-icon.png",
     userInterfaceStyle: "automatic",
     newArchEnabled: false,
+    // Görsel marka intro’su tamamen React (BrandIntro). Native: sadece düz renk.
     splash: {
-      image: "./assets/icon.png",
-      resizeMode: "contain",
       backgroundColor: "#ffffff",
+      resizeMode: "cover",
     },
     ios: {
       supportsTablet: false,
       infoPlist: {
-        NSLocationWhenInUseUsageDescription:
-          "This app needs your location to show nearby barbershops and barbers.",
-        NSLocationAlwaysAndWhenInUseUsageDescription:
-          "This app needs your location even when closed to keep free barbers' locations updated.",
-        NSLocationAlwaysUsageDescription:
-          "This app needs your location even when closed to keep free barbers' locations updated.",
+        NSLocationWhenInUseUsageDescription: np.locationWhenInUse,
+        NSLocationAlwaysAndWhenInUseUsageDescription: np.locationAlways,
+        NSLocationAlwaysUsageDescription: np.locationAlways,
+        NSMicrophoneUsageDescription: np.microphone,
         UIBackgroundModes: ["location", "fetch"],
       },
       bundleIdentifier: "com.hairdresser.app",
@@ -34,7 +44,7 @@ module.exports = {
       },
       edgeToEdgeEnabled: true,
       predictiveBackGestureEnabled: false,
-      permissions: ["ACCESS_FINE_LOCATION", "ACCESS_BACKGROUND_LOCATION"],
+      permissions: ["ACCESS_FINE_LOCATION", "ACCESS_BACKGROUND_LOCATION", "RECORD_AUDIO"],
       config: {
         googleMaps: {
           apiKey: process.env.GOOGLE_MAPS_API_KEY,
@@ -52,12 +62,9 @@ module.exports = {
       [
         "expo-location",
         {
-          locationAlwaysAndWhenInUsePermission:
-            "This app needs your location even when closed to keep free barbers' locations updated.",
-          locationAlwaysPermission:
-            "This app needs your location even when closed to keep free barbers' locations updated.",
-          locationWhenInUsePermission:
-            "This app needs your location to show nearby barbershops and barbers.",
+          locationAlwaysAndWhenInUsePermission: np.locationAlways,
+          locationAlwaysPermission: np.locationAlways,
+          locationWhenInUsePermission: np.locationWhenInUse,
         },
       ],
       "@react-native-firebase/app",

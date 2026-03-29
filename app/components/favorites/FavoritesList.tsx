@@ -1,7 +1,10 @@
+import { Icon } from "react-native-paper";
 import React, { useCallback, useMemo, useState } from 'react';
 import { View, FlatList, Dimensions, RefreshControl, ScrollView, TouchableOpacity } from 'react-native';
+import { useAnimatedScrollHandler, useSharedValue } from 'react-native-reanimated';
+import { AnimatedLegendList } from '../common/AnimatedLegendList';
+import { ScrollStackItem } from '../common/ScrollStackItem';
 import { Text } from '../common/Text';
-import { LegendList } from '@legendapp/list';
 import { useGetMyFavoritesQuery, useGetMeQuery, useGetFreeBarberMinePanelQuery, useGetSettingQuery } from '../../store/api';
 import { shouldFilterStoresToOthersOnly, shouldFilterOwnFreeBarberFromCompare, isOtherUsersStore, isOtherUsersFreeBarber } from '../../utils/compare-eligibility';
 import { FavoriteGetDto, FavoriteTargetType, UserType } from '../../types';
@@ -11,7 +14,7 @@ import { CustomerCardInner } from '../customer/customercard';
 import { ManuelBarberCardInner } from '../manuelbarber/manuelbarbercard';
 import { useSafeNavigation } from '../../hook/useSafeNavigation';
 import { BarberStoreGetDto, FreeBarGetDto, UserFavoriteDto, ManuelBarberFavoriteDto } from '../../types';
-import { Icon } from 'react-native-paper';
+
 import { BottomSheetModal, BottomSheetView } from '@gorhom/bottom-sheet';
 import { RatingsBottomSheet } from '../rating/ratingsbottomsheet';
 import { useBottomSheet } from '../../hook/useBottomSheet';
@@ -26,9 +29,17 @@ type FavoritesListProps = {
     mode?: 'store' | 'customer' | 'freebarber';
 };
 
+const FAVORITE_CARD_STRIDE = 320;
+
 const FavoritesList: React.FC<FavoritesListProps> = ({ mode = 'store' }) => {
     const { t } = useLanguage();
     const { colors } = useTheme();
+    const scrollY = useSharedValue(0);
+    const onFavScroll = useAnimatedScrollHandler({
+        onScroll: (e) => {
+            scrollY.value = e.contentOffset.y;
+        },
+    });
     const { data: favorites, isLoading, refetch, isFetching, error, isError } = useGetMyFavoritesQuery();
     const { data: currentUser, isLoading: isUserLoading, isSuccess: isUserSuccess } = useGetMeQuery();
     const compareUid = currentUser?.data?.id;
@@ -103,9 +114,6 @@ const FavoritesList: React.FC<FavoritesListProps> = ({ mode = 'store' }) => {
         });
     }, [router, currentUserId, updateFreeBarberSheet]);
 
-
-
-
     const handlePressRatings = useCallback((targetId: string, targetName: string) => {
         setSelectedRatingsTarget({ targetId, targetName });
         // Sheet'i açmak için küçük bir gecikme ekle
@@ -179,12 +187,13 @@ const FavoritesList: React.FC<FavoritesListProps> = ({ mode = 'store' }) => {
         }
     }, []);
 
-    const renderItem = useCallback(({ item }: { item: FavoriteGetDto }) => {
+    const renderItem = useCallback(({ item, index }: { item: FavoriteGetDto; index: number }) => {
         const typeLabel = getTargetTypeLabel(item.targetType);
         const typeLabelColor = getTargetTypeColor(item.targetType);
 
         if (item.targetType === FavoriteTargetType.Store && item.store) {
             return (
+                <ScrollStackItem index={index} scroll={scrollY} itemStride={FAVORITE_CARD_STRIDE}>
                 <StoreCardInner
                     store={item.store}
                     isList={true}
@@ -197,9 +206,11 @@ const FavoritesList: React.FC<FavoritesListProps> = ({ mode = 'store' }) => {
                     isViewerFromFreeBr={mode === 'freebarber'}
                     showImageAnimation={settingData?.data?.showImageAnimation ?? true}
                 />
+                </ScrollStackItem>
             );
         } else if (item.targetType === FavoriteTargetType.FreeBarber && item.freeBarber) {
             return (
+                <ScrollStackItem index={index} scroll={scrollY} itemStride={FAVORITE_CARD_STRIDE}>
                 <FreeBarberCardInner
                     freeBarber={item.freeBarber}
                     isList={true}
@@ -211,9 +222,11 @@ const FavoritesList: React.FC<FavoritesListProps> = ({ mode = 'store' }) => {
                     onPressRatings={handlePressRatings}
                     showImageAnimation={settingData?.data?.showImageAnimation ?? true}
                 />
+                </ScrollStackItem>
             );
         } else if (item.targetType === FavoriteTargetType.Customer && item.customer) {
             return (
+                <ScrollStackItem index={index} scroll={scrollY} itemStride={FAVORITE_CARD_STRIDE}>
                 <CustomerCardInner
                     customer={item.customer}
                     isList={true}
@@ -223,9 +236,11 @@ const FavoritesList: React.FC<FavoritesListProps> = ({ mode = 'store' }) => {
                     typeLabelColor={typeLabelColor}
                     onPressRatings={handlePressRatings}
                 />
+                </ScrollStackItem>
             );
         } else if (item.targetType === FavoriteTargetType.ManuelBarber && item.manuelBarber) {
             return (
+                <ScrollStackItem index={index} scroll={scrollY} itemStride={FAVORITE_CARD_STRIDE}>
                 <ManuelBarberCardInner
                     manuelBarber={item.manuelBarber}
                     isList={true}
@@ -234,10 +249,11 @@ const FavoritesList: React.FC<FavoritesListProps> = ({ mode = 'store' }) => {
                     typeLabel={typeLabel}
                     typeLabelColor={typeLabelColor}
                 />
+                </ScrollStackItem>
             );
         }
         return null;
-    }, [cardWidth, goStoreDetail, goFreeBarberDetail, getTargetTypeLabel, getTargetTypeColor, mode, handlePressRatings, settingData]);
+    }, [cardWidth, goStoreDetail, goFreeBarberDetail, getTargetTypeLabel, getTargetTypeColor, mode, handlePressRatings, settingData, scrollY]);
 
     if (isLoading) {
         return (
@@ -308,11 +324,13 @@ const FavoritesList: React.FC<FavoritesListProps> = ({ mode = 'store' }) => {
                     </Text>
                 </TouchableOpacity>
             )}
-            <LegendList
+            <AnimatedLegendList
                 data={allFavorites}
-                keyExtractor={(item) => item.id}
-                renderItem={renderItem}
+                keyExtractor={((item: FavoriteGetDto) => item.id) as any}
+                renderItem={renderItem as any}
                 estimatedItemSize={200}
+                scrollEventThrottle={16}
+                onScroll={onFavScroll}
                 contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 100, paddingTop: 10 }}
                 refreshControl={
                     <RefreshControl

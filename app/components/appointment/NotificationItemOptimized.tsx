@@ -1,6 +1,8 @@
-import { View, TouchableOpacity, ActivityIndicator } from "react-native";
-import { Text } from "../common/Text";
 import { Icon } from "react-native-paper";
+import { View, TouchableOpacity, ActivityIndicator, StyleSheet } from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
+import { Text } from "../common/Text";
+
 import type { NotificationDto, NotificationPayload } from "../../types";
 import {
   NotificationType,
@@ -503,29 +505,88 @@ export const NotificationItemOptimized = React.memo<NotificationItemProps>(
 
     const unread = !item.isRead;
 
+    const cardBg = unread
+      ? isDark
+        ? "rgba(26, 29, 36, 0.98)"
+        : "#ffffff"
+      : colors.screenBg;
+    const cardBorder = unread
+      ? isDark
+        ? "rgba(240, 94, 35, 0.35)"
+        : "rgba(240, 94, 35, 0.22)"
+      : isDark
+        ? "rgba(255,255,255,0.08)"
+        : "rgba(15, 23, 42, 0.06)";
+
     // ========== RENDER ==========
     return (
       <TouchableOpacity
         onPress={handlePress}
         disabled={isAwaitingDecision}
-        className="p-4 mb-3"
+        className="mb-3"
         style={{
-          borderRadius: 16,
-          backgroundColor: unread ? (isDark ? '#1e2128' : '#ffffff') : colors.screenBg,
+          borderRadius: 20,
           borderWidth: 1,
-          borderColor: unread ? (isDark ? '#3d4350' : '#dbeafe') : (isDark ? '#2a2e38' : '#e8ecf1'),
-          shadowColor: '#000',
-          shadowOffset: { width: 0, height: unread ? 6 : 2 },
-          shadowOpacity: isDark ? 0.35 : unread ? 0.12 : 0.05,
-          shadowRadius: unread ? 12 : 6,
-          elevation: unread ? 6 : 2,
+          borderColor: cardBorder,
+          shadowColor: "#000",
+          shadowOffset: { width: 0, height: unread ? 4 : 2 },
+          shadowOpacity: isDark ? (unread ? 0.35 : 0.2) : unread ? 0.09 : 0.05,
+          shadowRadius: unread ? 14 : 8,
+          elevation: unread ? 5 : 2,
+          overflow: "hidden",
+          backgroundColor: cardBg,
         }}
-        activeOpacity={0.7}
+        activeOpacity={0.72}
       >
+        {unread && (
+          <LinearGradient
+            colors={
+              isDark
+                ? ["rgba(240, 94, 35, 0.14)", "rgba(240, 94, 35, 0)"]
+                : ["rgba(240, 94, 35, 0.08)", "rgba(255,255,255,0)"]
+            }
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={{
+              position: "absolute",
+              left: 0,
+              right: 0,
+              top: 0,
+              height: 72,
+            }}
+            pointerEvents="none"
+          />
+        )}
+        <View
+          style={{
+            position: "absolute",
+            left: 0,
+            top: 0,
+            bottom: 0,
+            width: unread ? 4 : 0,
+            borderTopLeftRadius: 20,
+            borderBottomLeftRadius: 20,
+            backgroundColor: unread ? "#f05e23" : "transparent",
+          }}
+        />
+        <View className="px-4 pt-4 pb-4">
         {/* Header */}
         <View className="flex-row items-center mb-2">
           {unread && (
-            <View className="w-2 h-2 rounded-full bg-[#f05e23] mr-2" />
+            <View
+              style={{
+                width: 8,
+                height: 8,
+                borderRadius: 4,
+                backgroundColor: "#f05e23",
+                marginRight: 10,
+                shadowColor: "#f05e23",
+                shadowOffset: { width: 0, height: 0 },
+                shadowOpacity: 0.45,
+                shadowRadius: 4,
+                elevation: 2,
+              }}
+            />
           )}
           <Text
             className={`flex-1 text-base ${unread ? "font-bold" : "font-medium"}`}
@@ -547,7 +608,7 @@ export const NotificationItemOptimized = React.memo<NotificationItemProps>(
                   )}
                 </TouchableOpacity>
               )}
-            <Text className="text-[#8b8c90] text-xs">
+            <Text style={{ color: colors.textSecondary, fontSize: 11 }}>
               {formatDate(item.createdAt)}
             </Text>
           </View>
@@ -555,20 +616,53 @@ export const NotificationItemOptimized = React.memo<NotificationItemProps>(
 
         {/* Payload Content */}
         {payload && (
-          <View className="mt-2 pt-3 border-t" style={{ borderTopColor: colors.borderColor }}>
+          <View
+            className="mt-2 pt-3 border-t"
+            style={{
+              borderTopColor: isDark ? "rgba(255,255,255,0.07)" : "rgba(15,23,42,0.08)",
+            }}
+          >
             {/* Date and Time */}
             {payload.date && payload.startTime && payload.endTime && (
-              <View className="flex-row justify-end items-center mb-3">
-                <Icon source="calendar" size={16} color="#6b7280" />
-                <Text className="text-[#9ca3af] text-sm ml-1.5">
-                  {formatDate(payload.date)}
-                </Text>
-                <Text className="text-[#6b7280] mx-1.5">-</Text>
-                <Icon source="clock-outline" size={14} color="#6b7280" />
-                <Text className="text-[#9ca3af] text-sm ml-1">
-                  {formatTime(payload.startTime)} -{" "}
-                  {formatTime(payload.endTime)}
-                </Text>
+              <View
+                style={[
+                  contentStyles.scheduleStrip,
+                  {
+                    backgroundColor: isDark
+                      ? "rgba(255,255,255,0.05)"
+                      : "rgba(248, 250, 252, 0.95)",
+                    borderColor: isDark
+                      ? "rgba(255,255,255,0.07)"
+                      : "rgba(203, 213, 225, 0.55)",
+                  },
+                ]}
+              >
+                <View style={contentStyles.scheduleItem}>
+                  <View style={contentStyles.iconBubble}>
+                    <Icon source="calendar" size={16} color="#d97706" />
+                  </View>
+                  <Text
+                    style={[
+                      contentStyles.scheduleText,
+                      { color: colors.sectionHeaderText },
+                    ]}
+                  >
+                    {formatDate(payload.date)}
+                  </Text>
+                </View>
+                <View style={contentStyles.scheduleItem}>
+                  <View style={contentStyles.iconBubble}>
+                    <Icon source="clock-outline" size={16} color="#d97706" />
+                  </View>
+                  <Text
+                    style={[
+                      contentStyles.scheduleText,
+                      { color: colors.sectionHeaderText },
+                    ]}
+                  >
+                    {formatTime(payload.startTime)} – {formatTime(payload.endTime)}
+                  </Text>
+                </View>
               </View>
             )}
 
@@ -587,8 +681,23 @@ export const NotificationItemOptimized = React.memo<NotificationItemProps>(
               {recipientRole === "freebarber" &&
                 payload.store?.pricingType !== undefined &&
                 payload.store?.pricingValue !== undefined && (
-                  <View className="rounded-lg p-2 mb-2 mt-2" style={{ backgroundColor: isDark ? '#2a2c30' : '#f3f4f6' }}>
-                    <Text className="text-[#9ca3af] text-xs">
+                  <View
+                    style={[
+                      contentStyles.quoteBox,
+                      {
+                        backgroundColor: isDark
+                          ? "rgba(251, 191, 36, 0.1)"
+                          : "rgba(254, 243, 199, 0.55)",
+                        borderLeftColor: "#fbbf24",
+                      },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        contentStyles.quoteText,
+                        { color: colors.textSecondary },
+                      ]}
+                    >
                       {formatPricingPolicy(
                         payload.store.pricingType,
                         payload.store.pricingValue,
@@ -602,15 +711,28 @@ export const NotificationItemOptimized = React.memo<NotificationItemProps>(
             {payload.serviceOfferings &&
               payload.serviceOfferings.length > 0 && (
                 <View className="mb-2 mt-2">
-                  <Text className="text-[#9ca3af] text-xs mb-1 font-semibold">
-                    {t("card.services")}:
+                  <Text
+                    style={[
+                      contentStyles.sectionLabel,
+                      { color: colors.textSecondary },
+                    ]}
+                  >
+                    {t("card.services")}
                   </Text>
                   <View className="flex-row flex-wrap gap-2">
                     {payload.serviceOfferings.map((service: any) => (
                       <View
                         key={service.id}
-                        className="rounded-lg px-2 py-1"
-                        style={{ backgroundColor: isDark ? '#2a2c30' : '#f3f4f6' }}
+                        className="rounded-full px-3 py-1.5"
+                        style={{
+                          backgroundColor: isDark
+                            ? "rgba(255,255,255,0.055)"
+                            : "rgba(255, 251, 235, 0.65)",
+                          borderWidth: 1,
+                          borderColor: isDark
+                            ? "rgba(253, 230, 138, 0.2)"
+                            : "rgba(253, 224, 71, 0.35)",
+                        }}
                       >
                         <Text className="text-sm" style={{ color: colors.sectionHeaderText }}>
                           {service.serviceName} {t("card.currencySymbol")}
@@ -630,11 +752,33 @@ export const NotificationItemOptimized = React.memo<NotificationItemProps>(
                 payload.storeSelectionType === StoreSelectionType.StoreSelection
               ) && (
                 <View className="mb-2 mt-2">
-                  <Text className="text-[#9ca3af] text-xs mb-1 font-semibold">
-                    {t("common.note")}:
+                  <Text
+                    style={[
+                      contentStyles.sectionLabel,
+                      { color: colors.textSecondary },
+                    ]}
+                  >
+                    {t("common.note")}
                   </Text>
-                  <View className="rounded-lg px-2 py-2" style={{ backgroundColor: isDark ? '#2a2c30' : '#f3f4f6' }}>
-                    <Text className="text-sm" style={{ color: colors.sectionHeaderText }}>{payload.note}</Text>
+                  <View
+                    style={[
+                      contentStyles.noteBox,
+                      {
+                        backgroundColor: isDark
+                          ? "rgba(255,255,255,0.045)"
+                          : "rgba(241, 245, 249, 0.9)",
+                        borderLeftColor: "#fcd34d",
+                      },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        contentStyles.noteBody,
+                        { color: colors.sectionHeaderText },
+                      ]}
+                    >
+                      {payload.note}
+                    </Text>
                   </View>
                 </View>
               )}
@@ -645,14 +789,19 @@ export const NotificationItemOptimized = React.memo<NotificationItemProps>(
         {showStatus && statusKind && (() => {
           const st = getStatusBannerLook(statusKind, isDark);
           return (
-            <View className="mt-3 pt-3 border-t" style={{ borderTopColor: colors.borderColor }}>
+            <View
+              className="mt-3 pt-3 border-t"
+              style={{
+                borderTopColor: isDark ? "rgba(255,255,255,0.07)" : "rgba(15,23,42,0.08)",
+              }}
+            >
               <View
                 style={{
                   paddingVertical: 14,
                   paddingHorizontal: 16,
                   borderRadius: 14,
                   backgroundColor: st.backgroundColor,
-                  borderWidth: 1.5,
+                  borderWidth: 1,
                   borderColor: st.borderColor,
                 }}
               >
@@ -740,10 +889,74 @@ export const NotificationItemOptimized = React.memo<NotificationItemProps>(
             FreeBarber dükkan eklemek için doğrudan Yakındaki Dükkanlar sayfasına gidip
             oradan randevu oluşturabilir. Bu buton gereksiz karmaşıklık yaratıyordu.
         */}
+        </View>
       </TouchableOpacity>
     );
   },
   areEqual,
 );
+
+const contentStyles = StyleSheet.create({
+  scheduleStrip: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "center",
+    gap: 12,
+    marginBottom: 14,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderRadius: 14,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  scheduleItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  iconBubble: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    backgroundColor: "rgba(253, 224, 71, 0.28)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  scheduleText: {
+    fontSize: 14,
+    fontFamily: "CenturyGothic-Bold",
+  },
+  sectionLabel: {
+    fontSize: 10,
+    fontFamily: "CenturyGothic-Bold",
+    letterSpacing: 0.7,
+    textTransform: "uppercase",
+    marginBottom: 8,
+    marginTop: 4,
+  },
+  quoteBox: {
+    marginTop: 10,
+    marginBottom: 4,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    borderLeftWidth: 3,
+  },
+  quoteText: {
+    fontSize: 12,
+    lineHeight: 18,
+    fontFamily: "CenturyGothic",
+  },
+  noteBox: {
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderLeftWidth: 3,
+  },
+  noteBody: {
+    fontSize: 14,
+    lineHeight: 21,
+    fontFamily: "CenturyGothic",
+  },
+});
 
 NotificationItemOptimized.displayName = "NotificationItemOptimized";

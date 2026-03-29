@@ -1,7 +1,7 @@
+import { Icon } from "react-native-paper";
 import React from 'react';
 import { TouchableOpacity, View, ViewStyle, TextStyle, ActivityIndicator } from 'react-native';
 import { Text } from './Text';
-import { Icon } from 'react-native-paper';
 
 interface ButtonProps {
     onPress: () => void;

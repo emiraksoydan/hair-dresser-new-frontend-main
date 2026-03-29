@@ -224,6 +224,13 @@ const FreeBarberMineCard: React.FC<Props> = ({
               onPressRatings={handlePressRatings}
             />
           </View>
+          {freeBarber.customerNumber && (
+            <View className="flex-row items-center mt-1">
+              <Text style={{ color: colors.textSecondary, fontSize: 11, fontFamily: 'CenturyGothic' }}>
+                {'#'}{freeBarber.customerNumber}
+              </Text>
+            </View>
+          )}
         </View>
       </View>
       <View className="rounded-xl pr-2 mt-4">

@@ -1,7 +1,9 @@
+import { Icon } from "react-native-paper";
 import React, { useCallback } from "react";
 import { Pressable, View } from "react-native";
-import { Icon } from "react-native-paper";
+
 import Animated from "react-native-reanimated";
+import { AnimatedCountText } from "./AnimatedCountText";
 import { Text } from "./Text";
 import { useTheme } from "../../hook/useTheme";
 import { useFavoriteHeartPulse } from "./useFavoriteHeartPulse";
@@ -52,7 +54,13 @@ export const FavoriteReceivedStat: React.FC<{
         style={{ color: colors.sectionHeaderText }}
         className="font-century-gothic-sans-regular text-xs"
       >
-        ({count})
+        (
+        <AnimatedCountText
+          value={count}
+          style={{ color: colors.sectionHeaderText }}
+          className="font-century-gothic-sans-regular text-xs"
+        />
+        )
       </Text>
     </View>
   );
@@ -115,7 +123,13 @@ export const FavoriteButton: React.FC<FavoriteButtonProps> = ({
             style={{ color: colors.sectionHeaderText }}
             className={`font-century-gothic-sans-regular text-xs ${className}`}
           >
-            ({favoriteCount})
+            (
+            <AnimatedCountText
+              value={favoriteCount}
+              style={{ color: colors.sectionHeaderText }}
+              className={`font-century-gothic-sans-regular text-xs ${className}`}
+            />
+            )
           </Text>
         )}
       </Pressable>
@@ -139,7 +153,13 @@ export const FavoriteButton: React.FC<FavoriteButtonProps> = ({
           style={{ color: colors.sectionHeaderText }}
           className={`font-century-gothic-sans-regular text-xs ${className}`}
         >
-          ({favoriteCount})
+          (
+          <AnimatedCountText
+            value={favoriteCount}
+            style={{ color: colors.sectionHeaderText }}
+            className={`font-century-gothic-sans-regular text-xs ${className}`}
+          />
+          )
         </Text>
       )}
     </Pressable>

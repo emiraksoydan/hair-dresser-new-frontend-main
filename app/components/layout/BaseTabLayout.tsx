@@ -1,14 +1,24 @@
-import React, { useState, useMemo, useCallback } from "react";
-import { View } from "react-native";
+import React, { useState, useMemo, useCallback, useRef } from "react";
+import { View, Pressable, ActivityIndicator } from "react-native";
+import { AIAssistantSheet } from "../ai/AIAssistantSheet";
+import { useSegments } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Tabs } from "expo-router";
 import { BottomSheetModal } from "@gorhom/bottom-sheet";
 import { CustomCurvedTabBar, CustomTabItem } from "../common/CustomCurvedTabBar";
 import { Text } from "../common/Text";
 import { BadgeIconButton } from "../common/badgeiconbutton";
-import { HeaderActions } from "../common/HeaderActions";
-import { HeaderDropdownMenu } from "../common/headerdropdownmenu";
 import { NotificationsSheet } from "../appointment/notificationsheet";
+import {
+  MoreActionsFab,
+  FAB_NUDGE_LAST_TAB_CLEARANCE,
+} from "./MoreActionsFab";
+import { Icon } from "react-native-paper";
+import {
+  MoreFabPanelContext,
+  type MoreFabMenuItem,
+  type HeaderDeleteAction,
+} from "./MoreFabContext";
 import { InfoModal } from "../common/infomodal";
 import { useAppDispatch } from "../../store/hook";
 import { showSnack } from "../../store/snackbarSlice";
@@ -31,6 +41,8 @@ export interface TabConfig {
   label: string;
   showHeaderLeft?: boolean;
   headerTitleAlign?: "left" | "center";
+  /** true: üst başlık metnini gösterme (panel sekmesi) */
+  hideHeaderTitle?: boolean;
 }
 
 export interface BaseTabLayoutProps {
@@ -38,11 +50,8 @@ export interface BaseTabLayoutProps {
   accentColor: string;
   tabs: TabConfig[];
   children?: React.ReactNode;
-  dropdownMenuItems?: Array<{
-    icon: string;
-    label: string;
-    onPress: () => void;
-  }>;
+  /** Dükkan: mağaza ekle vb. (Üstten alta: önce bunlar, sonra ortak öğeler, en sonda panel satırları.) */
+  fabExtraItems?: MoreFabMenuItem[];
   renderAdditionalBottomSheets?: () => React.ReactNode;
 }
 
@@ -51,13 +60,56 @@ export const BaseTabLayout: React.FC<BaseTabLayoutProps> = ({
   accentColor,
   tabs,
   children,
-  dropdownMenuItems,
+  fabExtraItems,
   renderAdditionalBottomSheets,
 }) => {
   const { colors, isDark } = useTheme();
   const { t } = useLanguage();
   const insets = useSafeAreaInsets();
+  const segments = useSegments();
+
+  /** Yol içinde birden fazla sekme adı geçebilir; en sondaki gerçek aktif sekmedir (FAB ters çalışmasın diye). */
+  const activeTabIndex = useMemo(() => {
+    const names = tabs.map((tab) => tab.name);
+    const s = segments as string[];
+    for (let i = s.length - 1; i >= 0; i--) {
+      const ix = names.indexOf(s[i]!);
+      if (ix >= 0) return ix;
+    }
+    return 0;
+  }, [segments, tabs]);
+
+  const fabNudgeDown =
+    tabs.length > 0 && activeTabIndex === tabs.length - 1
+      ? FAB_NUDGE_LAST_TAB_CLEARANCE
+      : 0;
+
+  /** Sadece sekme köşelerinde (alt push yokken) FAB */
+  const showMainFab = useMemo(() => {
+    const s = segments as string[];
+    if (s.length === 0) return true;
+    if (s[0] === "(screens)" || s[0] === "(auth)") return false;
+    const tabNames = new Set([
+      "(panel)",
+      "(appointment)",
+      "(messages)",
+      "(favorites)",
+      "(profile)",
+    ]);
+    const tabIdx = s.findIndex((seg) => tabNames.has(seg));
+    if (tabIdx === -1) return true;
+    const tail = s.slice(tabIdx + 1);
+    if (tail.length === 0) return true;
+    if (tail.length === 1 && tail[0] === "index") return true;
+    return false;
+  }, [segments]);
   const [infoModalVisible, setInfoModalVisible] = useState(false);
+  const aiSheetRef = useRef<BottomSheetModal>(null);
+  const [aiSheetOpen, setAiSheetOpen] = useState(false);
+  const [notiSheetOpen, setNotiSheetOpen] = useState(false);
+  const [overlaySheetOpen, setOverlaySheetOpen] = useState(false);
+  const [panelFabItems, setPanelFabItems] = useState<MoreFabMenuItem[] | null>(null);
+  const [headerDeleteAction, setHeaderDeleteAction] = useState<HeaderDeleteAction>(null);
   const dispatch = useAppDispatch();
   const { userName, isAuthenticated } = useAuth();
 
@@ -104,40 +156,102 @@ export const BaseTabLayout: React.FC<BaseTabLayoutProps> = ({
     setInfoModalVisible(true);
   }, []);
 
-  // Header right component - dropdown veya basit actions
-  const renderHeaderRight = useCallback(
-    () => {
-      if (dropdownMenuItems && dropdownMenuItems.length > 0) {
-        return (
-          <View className="flex-row items-center justify-center mr-2 h-full">
-            <BadgeIconButton
-              icon="bell-outline"
-              iconColor={colors.headerText}
-              size={22}
-              badgeCount={unreadNoti}
-              onPress={handleNotificationPress}
-              animateWhenActive={true}
-            />
-            <HeaderDropdownMenu iconSize={22} items={dropdownMenuItems} />
-          </View>
-        );
-      }
+  const handleAIAssistantPress = useCallback(() => {
+    setAiSheetOpen(true);
+    aiSheetRef.current?.present();
+  }, []);
 
-      return (
-        <View className="h-full justify-center">
-          <HeaderActions
-            unreadNoti={unreadNoti}
-            onNotificationPress={handleNotificationPress}
-            onInfoPress={handleInfoPress}
-          />
-        </View>
-      );
-    },
+  const noopShopping = useCallback(() => {}, []);
+
+  const mergedFabItems = useMemo(() => {
+    const list: MoreFabMenuItem[] = [];
+    list.push({
+      id: "ai-assistant",
+      icon: "microphone",
+      label: t("ai.assistantTitle"),
+      onPress: handleAIAssistantPress,
+    });
+    list.push({
+      id: "info",
+      icon: "information-outline",
+      label: t("navigation.info"),
+      onPress: handleInfoPress,
+    });
+    if (userType === UserType.BarberStore && fabExtraItems?.length) {
+      list.push(...fabExtraItems);
+    }
+    list.push({
+      id: "shopping",
+      icon: "shopping-outline",
+      label: t("navigation.shopping"),
+      onPress: noopShopping,
+    });
+    if (panelFabItems?.length) {
+      list.push(...panelFabItems);
+    }
+    return list;
+  }, [
+    userType,
+    fabExtraItems,
+    panelFabItems,
+    t,
+    handleInfoPress,
+    handleAIAssistantPress,
+    noopShopping,
+  ]);
+
+  const reportOverlayOpen = useCallback((open: boolean) => {
+    setOverlaySheetOpen(open);
+  }, []);
+
+  const moreFabContextValue = useMemo(
+    () => ({ setPanelFabItems, reportOverlayOpen, setHeaderDeleteAction }),
+    [reportOverlayOpen],
+  );
+
+  const renderHeaderRight = useCallback(
+    () => (
+      <View className="flex-row items-center justify-center mr-2 h-full gap-1">
+        {headerDeleteAction &&
+          tabs[activeTabIndex]?.name === "(appointment)" && (
+          <Pressable
+            onPress={headerDeleteAction.onPress}
+            disabled={headerDeleteAction.loading}
+            style={{
+              width: 34,
+              height: 34,
+              borderRadius: 17,
+              alignItems: "center",
+              justifyContent: "center",
+              marginRight: 2,
+              backgroundColor: "rgba(220,38,38,0.88)",
+              opacity: headerDeleteAction.loading ? 0.6 : 1,
+            }}
+          >
+            {headerDeleteAction.loading ? (
+              <ActivityIndicator size="small" color="white" />
+            ) : (
+              <Icon source="delete-sweep-outline" size={20} color="white" />
+            )}
+          </Pressable>
+        )}
+        <BadgeIconButton
+          icon="bell-outline"
+          iconColor={colors.headerText}
+          size={22}
+          badgeCount={unreadNoti}
+          onPress={handleNotificationPress}
+          animateWhenActive={true}
+        />
+      </View>
+    ),
     [
       unreadNoti,
-      dropdownMenuItems,
       handleNotificationPress,
-      handleInfoPress,
+      colors.headerText,
+      headerDeleteAction,
+      tabs,
+      activeTabIndex,
     ],
   );
 
@@ -145,10 +259,16 @@ export const BaseTabLayout: React.FC<BaseTabLayoutProps> = ({
   const tabScreenOptions = useMemo(() =>
     tabs.map((tab) => ({
       name: tab.name,
-      headerStyle: { backgroundColor: colors.headerBg, height: Math.max(80, 56 + insets.top) },
+      headerStyle: {
+        backgroundColor: colors.headerBg,
+        height: tab.hideHeaderTitle
+          ? Math.max(52, 44 + insets.top)
+          : Math.max(80, 56 + insets.top),
+      },
       headerTitleAlign: (tab.headerTitleAlign || "center") as "left" | "center",
       showHeaderLeft: tab.showHeaderLeft,
       headerTitle: tab.headerTitle,
+      hideHeaderTitle: tab.hideHeaderTitle,
     })),
     [tabs, colors.headerBg, insets.top]
   );
@@ -218,7 +338,8 @@ export const BaseTabLayout: React.FC<BaseTabLayoutProps> = ({
   );
 
   return (
-    <>
+    <MoreFabPanelContext.Provider value={moreFabContextValue}>
+      <View style={{ flex: 1, position: "relative" }}>
       <Tabs
         tabBar={renderCurvedTabBar}
         screenOptions={{
@@ -238,15 +359,18 @@ export const BaseTabLayout: React.FC<BaseTabLayoutProps> = ({
             options={{
               headerStyle: tabOpt.headerStyle,
               headerShown: true,
-              headerTitle: () => (
-                <View className="flex-1 justify-center">
-                  <Text className="text-2xl mr-0" style={{ color: colors.headerText }}>
-                    {tabOpt.showHeaderLeft && userName
-                      ? t("navigation.welcomeWithName", { name: userName })
-                      : tabOpt.headerTitle}
-                  </Text>
-                </View>
-              ),
+              headerTitle: () =>
+                tabOpt.hideHeaderTitle ? (
+                  <View style={{ flex: 1 }} />
+                ) : (
+                  <View className="flex-1 justify-center">
+                    <Text className="text-2xl mr-0" style={{ color: colors.headerText }}>
+                      {tabOpt.showHeaderLeft && userName
+                        ? t("navigation.welcomeWithName", { name: userName })
+                        : tabOpt.headerTitle}
+                    </Text>
+                  </View>
+                ),
               headerTitleAlign: tabOpt.headerTitleAlign,
               headerRight: renderHeaderRight,
             }}
@@ -263,7 +387,8 @@ export const BaseTabLayout: React.FC<BaseTabLayoutProps> = ({
         snapPoints={notificationsSheet.snapPoints}
         enableOverDrag={notificationsSheet.enableOverDrag}
         enablePanDownToClose={notificationsSheet.enablePanDownToClose}
-        onChange={notificationsSheet.handleChange}
+        onChange={(index) => { notificationsSheet.handleChange(index); setNotiSheetOpen(index >= 0); }}
+        onDismiss={() => setNotiSheetOpen(false)}
       >
         <NotificationsSheet
           onClose={() => notificationsSheet.dismiss()}
@@ -293,6 +418,23 @@ export const BaseTabLayout: React.FC<BaseTabLayoutProps> = ({
 
       {/* Additional children */}
       {children}
-    </>
+
+      {showMainFab ? (
+        <MoreActionsFab
+          items={mergedFabItems}
+          accentColor={accentColor}
+          fabNudgeDown={fabNudgeDown}
+          hidden={notiSheetOpen || aiSheetOpen || overlaySheetOpen}
+        />
+      ) : null}
+
+      {/* AI Appointment Assistant */}
+      <AIAssistantSheet
+        sheetRef={aiSheetRef}
+        accentColor={accentColor}
+        onClose={() => setAiSheetOpen(false)}
+      />
+      </View>
+    </MoreFabPanelContext.Provider>
   );
 };

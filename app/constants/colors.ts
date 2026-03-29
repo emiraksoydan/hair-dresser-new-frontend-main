@@ -25,6 +25,9 @@ export const COLORS = {
         TEXT_TERTIARY: '#6b7280', // gray-500
         ACCENT: '#22c55e',         // green-500
         ACCENT_DARK: '#16a34a',   // green-600
+        /** Sarı CTA (Tekrar dene, compare şeridi vb.) */
+        ACCENT_GOLD: '#ffb900',
+        TEXT_ON_GOLD: '#1f2937',
     },
 
     // Barber Type Colors

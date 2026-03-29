@@ -1,3 +1,4 @@
+import { Icon } from "react-native-paper";
 import React, { useState, useCallback, useMemo } from "react";
 import {
   View,
@@ -9,7 +10,7 @@ import {
 } from "react-native";
 import { Text } from "../common/Text";
 import { BottomSheetView } from "@gorhom/bottom-sheet";
-import { Icon } from "react-native-paper";
+
 import StarRating from "react-native-star-rating-widget";
 import { useCreateRatingMutation } from "../../store/api";
 import { CreateRatingDto, ImageOwnerType } from "../../types";

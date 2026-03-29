@@ -50,12 +50,14 @@ export type FreeBarGetDto = {
   isOwnPanel?: boolean; // Kullanıcının kendi paneli mi (filtrelerden etkilenmez)
   /** Güzellik salonu sertifikası varsa dolu; kartta "Güzellik Uzmanı" chip gösterilir */
   beautySalonCertificateImageId?: string | null;
+  customerNumber?: string | null; // Serbest berberin müşteri numarası
 };
 
 export type FreeBarberPanelDto = {
   id: string;
   freeBarberUserId?: string;
   fullName: string;
+  customerNumber?: string | null;
   rating: number;
   favoriteCount: number;
   isAvailable: boolean;

@@ -2,6 +2,7 @@ import React from 'react';
 import { View, TouchableOpacity } from 'react-native';
 import { StarRatingDisplay } from 'react-native-star-rating-widget';
 import { Text } from './Text';
+import { AnimatedCountText } from './AnimatedCountText';
 import { useLanguage } from '../../hook/useLanguage';
 import { useTheme } from '../../hook/useTheme';
 
@@ -45,12 +46,27 @@ export const RatingSection: React.FC<RatingSectionProps> = ({
           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
         >
           <Text style={{ color: colors.textSecondary }} className="underline mr-1 mb-0 text-xs">
-            {t('card.reviewsCount', { count: reviewCount || 0 })}
+            {t('card.reviews')}{' '}
+            (
+            <AnimatedCountText
+              value={reviewCount || 0}
+              style={{ color: colors.textSecondary }}
+              className="underline text-xs"
+            />
+            )
           </Text>
         </TouchableOpacity>
       )}
       {!showReviewsLink && (
-        <Text style={{ color: colors.textSecondary }} className="text-xs">({reviewCount || 0})</Text>
+        <Text style={{ color: colors.textSecondary }} className="text-xs">
+          (
+          <AnimatedCountText
+            value={reviewCount || 0}
+            style={{ color: colors.textSecondary }}
+            className="text-xs"
+          />
+          )
+        </Text>
       )}
     </View>
   );

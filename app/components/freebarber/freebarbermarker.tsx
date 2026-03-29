@@ -1,7 +1,7 @@
+import { Icon } from "react-native-paper";
 import React, { useState, memo, useEffect, useRef } from "react";
 import { View, Image, ActivityIndicator } from "react-native";
 import { Marker } from "react-native-maps";
-import { Icon } from "react-native-paper";
 
 interface FreeBarberMarkerProps {
     barberId: string;

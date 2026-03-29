@@ -1,5 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { View, Dimensions, FlatList } from 'react-native';
+import Animated, { useAnimatedScrollHandler, useSharedValue } from 'react-native-reanimated';
+import { PerplexityListItem } from './PerplexityListItem';
 import { Text } from '../common/Text';
 import MotiViewExpand from '../../components/common/motiviewexpand';
 import { SkeletonComponent } from '../../components/common/skeleton';
@@ -38,11 +40,20 @@ export const EmptyStateFunc = ({ loading, hasData, hasLocation, locationStatus, 
     </View>
 );
 
+const STORE_LIST_STRIDE = 460;
+const FB_LIST_STRIDE = 440;
+
 export const StoresSection = React.memo(({ stores, loading, hasLocation, locationStatus, fetchedOnce, isList, onPressStore, onPressRatings, searchQuery, appliedFilters, error, showImageAnimation = true, onRetry }: any) => {
     const { t } = useLanguage();
     const [expanded, setExpanded] = useState(true);
     const screenWidth = Dimensions.get('window').width;
     const cardWidth = expanded ? screenWidth * 0.92 : screenWidth * 0.94;
+    const scrollY = useSharedValue(0);
+    const onScroll = useAnimatedScrollHandler({
+        onScroll: (e) => {
+            scrollY.value = e.contentOffset.y;
+        },
+    });
 
     // Network/Server error durumu - öncelikli göster
     if (error) {
@@ -114,11 +125,24 @@ export const StoresSection = React.memo(({ stores, loading, hasLocation, locatio
         <View>
             <SectionHeader title="İşletmeler" expanded={expanded} onToggle={() => setExpanded(!expanded)} />
             {expanded ? (
-                <View style={{ paddingTop: 8 }}>
-                    {stores.map((s: any) => (
-                        <StoreCardInner key={s.id} store={s} isList={isList} expanded={expanded} cardWidthStore={cardWidth} onPressUpdate={onPressStore} onPressRatings={onPressRatings} showImageAnimation={showImageAnimation} />
-                    ))}
-                </View>
+                <Animated.FlatList
+                    data={stores}
+                    keyExtractor={(s: any) => s.id}
+                    onScroll={onScroll}
+                    scrollEventThrottle={16}
+                    showsVerticalScrollIndicator={false}
+                    renderItem={({ item: s, index }: { item: any; index: number }) => (
+                        <PerplexityListItem
+                            scrollPos={scrollY}
+                            itemStart={index * STORE_LIST_STRIDE}
+                            itemLength={STORE_LIST_STRIDE}
+                            horizontal={false}
+                        >
+                            <StoreCardInner store={s} isList={isList} expanded={expanded} cardWidthStore={cardWidth} onPressUpdate={onPressStore} onPressRatings={onPressRatings} showImageAnimation={showImageAnimation} />
+                        </PerplexityListItem>
+                    )}
+                    contentContainerStyle={{ paddingTop: 8 }}
+                />
             ) : (
                 <FlatList
                     data={stores}
@@ -146,6 +170,12 @@ export const FreeBarbersSection = React.memo(({ freeBarbers, loading, hasLocatio
     const [expanded, setExpanded] = useState(false);
     const screenWidth = Dimensions.get('window').width;
     const cardWidth = expanded ? screenWidth * 0.92 : screenWidth * 0.94;
+    const scrollYFb = useSharedValue(0);
+    const onScrollFb = useAnimatedScrollHandler({
+        onScroll: (e) => {
+            scrollYFb.value = e.contentOffset.y;
+        },
+    });
 
     // Network/Server error durumu - öncelikli göster
     if (error) {
@@ -217,11 +247,24 @@ export const FreeBarbersSection = React.memo(({ freeBarbers, loading, hasLocatio
         <View>
             <SectionHeader title="Serbest Berberler" expanded={expanded} onToggle={() => setExpanded(!expanded)} />
             {expanded ? (
-                <View style={{ paddingTop: 8 }}>
-                    {freeBarbers.map((fb: any) => (
-                        <FreeBarberCardInner key={fb.id} freeBarber={fb} isList={isList} expanded={expanded} cardWidthFreeBarber={cardWidth} onPressUpdate={onPressFreeBarber} onPressRatings={onPressRatings} showImageAnimation={showImageAnimation} />
-                    ))}
-                </View>
+                <Animated.FlatList
+                    data={freeBarbers}
+                    keyExtractor={(fb: any) => fb.id}
+                    onScroll={onScrollFb}
+                    scrollEventThrottle={16}
+                    showsVerticalScrollIndicator={false}
+                    renderItem={({ item: fb, index }: { item: any; index: number }) => (
+                        <PerplexityListItem
+                            scrollPos={scrollYFb}
+                            itemStart={index * FB_LIST_STRIDE}
+                            itemLength={FB_LIST_STRIDE}
+                            horizontal={false}
+                        >
+                            <FreeBarberCardInner freeBarber={fb} isList={isList} expanded={expanded} cardWidthFreeBarber={cardWidth} onPressUpdate={onPressFreeBarber} onPressRatings={onPressRatings} showImageAnimation={showImageAnimation} />
+                        </PerplexityListItem>
+                    )}
+                    contentContainerStyle={{ paddingTop: 8 }}
+                />
             ) : (
                 <FlatList
                     data={freeBarbers}

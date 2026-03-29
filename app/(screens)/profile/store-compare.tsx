@@ -1,13 +1,27 @@
-import React, { useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, ScrollView, TouchableOpacity, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
 import { Icon } from "react-native-paper";
+import React, { useEffect, useMemo, useState } from "react";
+import { ActivityIndicator, ScrollView, StyleSheet, TouchableOpacity, View } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+
 import { Text } from "../../components/common/Text";
 import { useTheme } from "../../hook/useTheme";
 import { useLanguage } from "../../hook/useLanguage";
 import { useSafeNavigation } from "../../hook/useSafeNavigation";
 import { useGetMineStoresQuery, useLazyGetBarberStoreEarningsQuery } from "../../store/api";
 import { BarberStoreMineDto, EarningsDto } from "../../types";
+import type { ThemeColors } from "../../hook/useTheme";
+import {
+  type CompareMetrics,
+  CompareGoldAccentBar,
+  CompareHeaderChrome,
+  CompareOwnerRow,
+  VsBadge,
+  compareBackButtonSurface,
+  compareHeaderTitleStyle,
+  screenBg,
+  useCompareCardShell,
+  useCompareMetrics,
+} from "../compare/compareShared";
 
 const CURRENCY = "₺";
 
@@ -15,10 +29,89 @@ function toDateStr(d: Date) {
   return d.toISOString().split("T")[0];
 }
 
+function MineStoreCompareColumn({
+  isDark,
+  colors,
+  m,
+  store,
+  earn,
+  onCycle,
+  t,
+}: {
+  isDark: boolean;
+  colors: ThemeColors;
+  m: CompareMetrics;
+  store?: BarberStoreMineDto;
+  earn: EarningsDto | null;
+  onCycle: () => void;
+  t: (k: string) => string;
+}) {
+  const cardStyle = useCompareCardShell(isDark);
+  return (
+    <View style={cardStyle}>
+      <CompareGoldAccentBar />
+      <TouchableOpacity
+        onPress={onCycle}
+        style={{
+          flexDirection: "row",
+          alignItems: "center",
+          justifyContent: "space-between",
+          marginBottom: m.titleNameMb,
+        }}
+      >
+        <Text
+          numberOfLines={2}
+          style={{
+            color: colors.sectionHeaderText,
+            fontFamily: "CenturyGothic-Bold",
+            fontSize: m.titleNameFont,
+            flex: 1,
+          }}
+        >
+          {store?.storeName ?? "—"}
+        </Text>
+        <Icon source="swap-horizontal" size={m.backIcon - 4} color="#ffb900" />
+      </TouchableOpacity>
+
+      <CompareOwnerRow label={t("profile.rating")} value={`${store?.rating?.toFixed(1) ?? "—"}`} />
+      <CompareOwnerRow label={t("profile.reviews")} value={String(store?.reviewCount ?? 0)} />
+      <CompareOwnerRow label={t("profile.favorites")} value={String(store?.favoriteCount ?? 0)} />
+      <View
+        style={{
+          height: StyleSheet.hairlineWidth,
+          backgroundColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(15,23,42,0.08)",
+          marginVertical: m.dividerMv,
+        }}
+      />
+      <Text
+        style={{
+          color: colors.textSecondary,
+          fontSize: m.sectionLabelFont,
+          marginBottom: m.sectionLabelMb,
+        }}
+      >
+        {t("profile.storeEarningsTitle")} · {t("profile.periodLast30Days")}
+      </Text>
+      <CompareOwnerRow
+        label={t("profile.totalEarnings")}
+        value={`${(earn?.totalEarnings ?? 0).toLocaleString("tr-TR")} ${CURRENCY}`}
+        bold
+      />
+      <CompareOwnerRow
+        label={t("profile.dailyEarnings")}
+        value={`${(earn?.dailyEarnings ?? 0).toLocaleString("tr-TR")} ${CURRENCY}`}
+      />
+      <CompareOwnerRow label={t("profile.profitRate")} value={`${(earn?.changePercent ?? 0).toFixed(1)}%`} />
+    </View>
+  );
+}
+
 export default function StoreCompareScreen() {
   const { colors, isDark } = useTheme();
   const { t } = useLanguage();
   const router = useSafeNavigation();
+  const m = useCompareMetrics();
+  const ht = compareHeaderTitleStyle(colors, m);
   const { data: stores = [] } = useGetMineStoresQuery();
   const [fetchEarnings] = useLazyGetBarberStoreEarningsQuery();
 
@@ -79,136 +172,85 @@ export default function StoreCompareScreen() {
     return currentId;
   };
 
+  const HeaderRow = () => (
+    <CompareHeaderChrome isDark={isDark}>
+      <View style={{ flexDirection: "row", alignItems: "center" }}>
+        <TouchableOpacity
+          onPress={() => router.back()}
+          style={compareBackButtonSurface(isDark, m)}
+        >
+          <Icon source="chevron-left" size={m.backIcon} color={colors.sectionHeaderText} />
+        </TouchableOpacity>
+        <View style={{ marginLeft: m.titleMarginLeft, flex: 1 }}>
+          <Text style={ht.title}>{t("profile.compareStores")}</Text>
+          <Text style={ht.sub}>{t("profile.compareStoresSubtitle")}</Text>
+        </View>
+      </View>
+    </CompareHeaderChrome>
+  );
+
   if (stores.length < 2) {
     return (
-      <SafeAreaView style={{ flex: 1, backgroundColor: isDark ? "#0f0f1a" : "#f1f5f9" }} edges={["top"]}>
-        <View style={{ flexDirection: "row", alignItems: "center", padding: 16 }}>
-          <TouchableOpacity
-            onPress={() => router.back()}
-            style={{
-              padding: 8,
-              borderRadius: 12,
-              backgroundColor: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)",
-            }}
-          >
-            <Icon source="chevron-left" size={24} color={colors.sectionHeaderText} />
-          </TouchableOpacity>
-          <Text style={{ marginLeft: 12, fontFamily: "CenturyGothic-Bold", fontSize: 17, color: colors.sectionHeaderText }}>
-            {t("profile.compareStores")}
+      <SafeAreaView style={{ flex: 1, backgroundColor: screenBg(isDark) }} edges={["top"]}>
+        <HeaderRow />
+        <View style={{ flex: 1, justifyContent: "center", padding: m.emptyPad }}>
+          <Text style={{ textAlign: "center", color: colors.textSecondary, fontSize: m.rowFont }}>
+            {t("profile.compareStoresSubtitle")}
           </Text>
-        </View>
-        <View style={{ flex: 1, justifyContent: "center", padding: 24 }}>
-          <Text style={{ textAlign: "center", color: colors.textSecondary }}>{t("profile.compareStoresSubtitle")}</Text>
         </View>
       </SafeAreaView>
     );
   }
 
-  const Col = ({
-    store,
-    earn,
-    onCycle,
-  }: {
-    store?: BarberStoreMineDto;
-    earn: EarningsDto | null;
-    onCycle: () => void;
-  }) => (
-    <View
-      style={{
-        flex: 1,
-        borderRadius: 16,
-        padding: 12,
-        backgroundColor: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)",
-        borderWidth: 1,
-        borderColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)",
-      }}
-    >
-      <TouchableOpacity onPress={onCycle} style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
-        <Text numberOfLines={2} style={{ color: colors.sectionHeaderText, fontFamily: "CenturyGothic-Bold", fontSize: 14, flex: 1 }}>
-          {store?.storeName ?? "—"}
-        </Text>
-        <Icon source="swap-horizontal" size={20} color="#ffb900" />
-      </TouchableOpacity>
-
-      <Row label={t("profile.rating")} a={`${store?.rating?.toFixed(1) ?? "—"}`} />
-      <Row label={t("profile.reviews")} a={String(store?.reviewCount ?? 0)} />
-      <Row label={t("profile.favorites")} a={String(store?.favoriteCount ?? 0)} />
-      <View style={{ height: 1, backgroundColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)", marginVertical: 10 }} />
-      <Text style={{ color: colors.textSecondary, fontSize: 11, marginBottom: 6 }}>
-        {t("profile.storeEarningsTitle")} · {t("profile.periodLast30Days")}
-      </Text>
-      <Row
-        label={t("profile.totalEarnings")}
-        a={`${(earn?.totalEarnings ?? 0).toLocaleString("tr-TR")} ${CURRENCY}`}
-        bold
-      />
-      <Row label={t("profile.dailyEarnings")} a={`${(earn?.dailyEarnings ?? 0).toLocaleString("tr-TR")} ${CURRENCY}`} />
-      <Row label={t("profile.profitRate")} a={`${(earn?.changePercent ?? 0).toFixed(1)}%`} />
-    </View>
-  );
-
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: isDark ? "#0f0f1a" : "#f1f5f9" }} edges={["top"]}>
-      <View
-        style={{
-          flexDirection: "row",
-          alignItems: "center",
-          paddingHorizontal: 16,
-          paddingVertical: 12,
-          backgroundColor: isDark ? "#1a1a2e" : "#ffffff",
-          borderBottomWidth: 1,
-          borderBottomColor: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.07)",
-        }}
-      >
-        <TouchableOpacity
-          onPress={() => router.back()}
-          style={{
-            padding: 8,
-            borderRadius: 12,
-            backgroundColor: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)",
-          }}
-        >
-          <Icon source="chevron-left" size={24} color={colors.sectionHeaderText} />
-        </TouchableOpacity>
-        <View style={{ marginLeft: 12, flex: 1 }}>
-          <Text style={{ fontFamily: "CenturyGothic-Bold", fontSize: 17, color: colors.sectionHeaderText }}>{t("profile.compareStores")}</Text>
-          <Text style={{ color: colors.textSecondary, fontSize: 11, marginTop: 2 }}>{t("profile.compareStoresSubtitle")}</Text>
-        </View>
-      </View>
+    <SafeAreaView style={{ flex: 1, backgroundColor: screenBg(isDark) }} edges={["top"]}>
+      <HeaderRow />
 
       {loading ? (
-        <View style={{ padding: 24 }}>
+        <View style={{ padding: m.loadingPad, alignItems: "center" }}>
           <ActivityIndicator color="#ffb900" />
         </View>
       ) : null}
 
-      <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
-        <View style={{ flexDirection: "row", gap: 10, alignItems: "stretch" }}>
-          <Col
+      <ScrollView
+        contentContainerStyle={{
+          paddingHorizontal: m.scrollPadH,
+          paddingBottom: m.scrollPadBottom,
+        }}
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={{ flexDirection: "row", gap: m.gapRow, alignItems: "stretch" }}>
+          <MineStoreCompareColumn
+            isDark={isDark}
+            colors={colors}
+            m={m}
             store={leftStore}
             earn={leftE}
             onCycle={() => setLeftId(cycleStore(leftId, rightId))}
+            t={t}
           />
-          <Col
+          <VsBadge />
+          <MineStoreCompareColumn
+            isDark={isDark}
+            colors={colors}
+            m={m}
             store={rightStore}
             earn={rightE}
             onCycle={() => setRightId(cycleStore(rightId, leftId))}
+            t={t}
           />
         </View>
-        <Text style={{ color: colors.textSecondary, fontSize: 11, marginTop: 14, textAlign: "center" }}>
+        <Text
+          style={{
+            color: colors.textSecondary,
+            fontSize: m.footerNoteFont,
+            marginTop: m.footerNoteMt,
+            textAlign: "center",
+          }}
+        >
           {t("profile.filterCustom")}: {range.start.toLocaleDateString("tr-TR")} – {range.end.toLocaleDateString("tr-TR")}
         </Text>
       </ScrollView>
     </SafeAreaView>
-  );
-}
-
-function Row({ label, a, bold }: { label: string; a: string; bold?: boolean }) {
-  const { colors } = useTheme();
-  return (
-    <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 6 }}>
-      <Text style={{ color: colors.textSecondary, fontSize: 12 }}>{label}</Text>
-      <Text style={{ color: colors.sectionHeaderText, fontSize: 12, fontFamily: bold ? "CenturyGothic-Bold" : "CenturyGothic" }}>{a}</Text>
-    </View>
   );
 }

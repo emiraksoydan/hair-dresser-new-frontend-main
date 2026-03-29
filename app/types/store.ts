@@ -69,6 +69,7 @@ export type BarberStoreGetDto = {
   serviceOfferings: ServiceOfferingGetDto[];
   imageList: ImageGetDto[];
   isOwnStore?: boolean; // Kullanıcının kendi dükkanı mı (filtrelerden etkilenmez)
+  storeNo?: string; // Dükkanın benzersiz 6 haneli numarası
 };
 
 export type BarberStoreMineDto = {
