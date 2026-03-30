@@ -45,7 +45,7 @@ export function PanelCollapsibleTop({
             flex: 1,
             flexDirection: "row",
             alignItems: "center",
-            minHeight: 32,
+            minHeight: 34,
           }}
           accessibilityRole="button"
           accessibilityLabel={
@@ -60,7 +60,7 @@ export function PanelCollapsibleTop({
           >
             <MaterialCommunityIcons
               name="chevron-right"
-              size={22}
+              size={20}
               color={colors.sectionHeaderText}
             />
           </MotiView>
@@ -68,10 +68,12 @@ export function PanelCollapsibleTop({
             style={{
               flex: 1,
               color: colors.textSecondary,
-              fontSize: 12,
-              marginLeft: 2,
+              fontSize: 13,
+              lineHeight: 18,
+              marginLeft: 4,
+              fontFamily: "CenturyGothic",
             }}
-            numberOfLines={1}
+            numberOfLines={2}
           >
             {expanded
               ? t("panel.topSectionExpandedHint")

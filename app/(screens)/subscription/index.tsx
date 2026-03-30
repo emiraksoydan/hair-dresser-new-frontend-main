@@ -51,44 +51,45 @@ function PlanCard({ planName, planDesc, price, features, isCurrent, accentColor,
                     borderBottomColor: accentColor + '44',
                 }}
             >
-                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                        <View
-                            style={{
-                                width: 42,
-                                height: 42,
-                                borderRadius: 21,
-                                backgroundColor: accentColor + '33',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                            }}
-                        >
-                            <Icon source={icon} size={22} color={accentColor} />
-                        </View>
-                        <View>
-                            <Text style={{ color: colors.sectionHeaderText, fontSize: 16, fontFamily: 'CenturyGothic-Bold' }}>
-                                {planName}
-                            </Text>
-                            <Text style={{ color: colors.textSecondary, fontSize: 12, fontFamily: 'CenturyGothic', marginTop: 2 }}>
-                                {planDesc}
-                            </Text>
-                        </View>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                    <View
+                        style={{
+                            width: 42,
+                            height: 42,
+                            borderRadius: 21,
+                            backgroundColor: accentColor + '33',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                        }}
+                    >
+                        <Icon source={icon} size={22} color={accentColor} />
                     </View>
-                    {isCurrent && (
-                        <View
-                            style={{
-                                backgroundColor: accentColor,
-                                borderRadius: 20,
-                                paddingHorizontal: 10,
-                                paddingVertical: 4,
-                            }}
-                        >
-                            <Text style={{ color: '#fff', fontSize: 11, fontFamily: 'CenturyGothic-Bold' }}>
-                                {t('subscription.currentPlan')}
-                            </Text>
-                        </View>
-                    )}
+                    <View>
+                        <Text style={{ color: colors.sectionHeaderText, fontSize: 16, fontFamily: 'CenturyGothic-Bold' }}>
+                            {planName}
+                        </Text>
+                        <Text style={{ color: colors.textSecondary, fontSize: 12, fontFamily: 'CenturyGothic', marginTop: 2 }}>
+                            {planDesc}
+                        </Text>
+                    </View>
                 </View>
+                {isCurrent && (
+                    <View
+                        style={{
+                            position: 'absolute',
+                            top: 12,
+                            right: 20,
+                            backgroundColor: accentColor,
+                            borderRadius: 20,
+                            paddingHorizontal: 10,
+                            paddingVertical: 4,
+                        }}
+                    >
+                        <Text style={{ color: '#fff', fontSize: 11, fontFamily: 'CenturyGothic-Bold' }}>
+                            {t('subscription.currentPlan')}
+                        </Text>
+                    </View>
+                )}
 
                 {/* Price */}
                 <View style={{ flexDirection: 'row', alignItems: 'flex-end', marginTop: 14 }}>

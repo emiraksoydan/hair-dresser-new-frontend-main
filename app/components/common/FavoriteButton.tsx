@@ -20,6 +20,8 @@ interface FavoriteButtonProps {
   className?: string;
   /** Engelli kullanıcı vb. */
   favoriteDisabled?: boolean;
+  /** Profil kartları: kalp ve sayı biraz küçük */
+  compact?: boolean;
 }
 
 /**
@@ -51,14 +53,14 @@ export const FavoriteReceivedStat: React.FC<{
         />
       </View>
       <Text
-        style={{ color: colors.sectionHeaderText }}
-        className="font-century-gothic-sans-regular text-xs"
+        style={{ color: colors.sectionHeaderText, fontSize: 14 }}
+        className="font-century-gothic-sans-regular"
       >
         (
         <AnimatedCountText
           value={count}
-          style={{ color: colors.sectionHeaderText }}
-          className="font-century-gothic-sans-regular text-xs"
+          style={{ color: colors.sectionHeaderText, fontSize: 14 }}
+          className="font-century-gothic-sans-regular"
         />
         )
       </Text>
@@ -72,11 +74,14 @@ export const FavoriteButton: React.FC<FavoriteButtonProps> = ({
   isLoading,
   onPress,
   variant = "icon",
-  size = 25,
+  size,
   showCount = true,
   className = "",
   favoriteDisabled = false,
+  compact = false,
 }) => {
+  const heartSize = size ?? (compact ? 22 : 25);
+  const countFontSize = compact ? 13 : 14;
   const { colors } = useTheme();
   const { t } = useLanguage();
   const { animatedStyle, bump } = useFavoriteHeartPulse();
@@ -97,7 +102,7 @@ export const FavoriteButton: React.FC<FavoriteButtonProps> = ({
     <Animated.View style={animatedStyle}>
       <Icon
         source={isFavorite ? "heart" : "heart-outline"}
-        size={size}
+        size={heartSize}
         color={isFavorite ? "#ef4444" : colors.textSecondary}
       />
     </Animated.View>
@@ -120,14 +125,14 @@ export const FavoriteButton: React.FC<FavoriteButtonProps> = ({
         </View>
         {showCount && (
           <Text
-            style={{ color: colors.sectionHeaderText }}
-            className={`font-century-gothic-sans-regular text-xs ${className}`}
+            style={{ color: colors.sectionHeaderText, fontSize: countFontSize }}
+            className={`font-century-gothic-sans-regular ${className}`}
           >
             (
             <AnimatedCountText
               value={favoriteCount}
-              style={{ color: colors.sectionHeaderText }}
-              className={`font-century-gothic-sans-regular text-xs ${className}`}
+              style={{ color: colors.sectionHeaderText, fontSize: countFontSize }}
+              className={`font-century-gothic-sans-regular ${className}`}
             />
             )
           </Text>
@@ -150,14 +155,14 @@ export const FavoriteButton: React.FC<FavoriteButtonProps> = ({
       <View pointerEvents="none">{heartIcon}</View>
       {showCount && (
         <Text
-          style={{ color: colors.sectionHeaderText }}
-          className={`font-century-gothic-sans-regular text-xs ${className}`}
+          style={{ color: colors.sectionHeaderText, fontSize: countFontSize }}
+          className={`font-century-gothic-sans-regular ${className}`}
         >
           (
           <AnimatedCountText
             value={favoriteCount}
-            style={{ color: colors.sectionHeaderText }}
-            className={`font-century-gothic-sans-regular text-xs ${className}`}
+            style={{ color: colors.sectionHeaderText, fontSize: countFontSize }}
+            className={`font-century-gothic-sans-regular ${className}`}
           />
           )
         </Text>

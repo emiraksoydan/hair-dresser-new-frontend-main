@@ -20,7 +20,9 @@
     "timeRemaining": "Zeit: {{time}}",
     "resendCode": "Code erneut senden",
     "codeSent": "Bestätigungscode gesendet",
-    "selectLanguage": "Sprache auswählen"
+    "rateLimitExceeded": "Zu viele Anfragen. Bitte warten Sie einige Minuten und versuchen Sie es erneut.",
+    "selectLanguage": "Sprache auswählen",
+    "backToOtpVerification": "Zur Verifizierung zurück"
   },
   "profile": {
     "title": "Profilinformationen",
@@ -364,6 +366,7 @@
     "confirm": "Bestätigen",
     "save": "Speichern",
     "delete": "Löschen",
+    "copy": "Kopieren",
     "edit": "Bearbeiten",
     "close": "Schließen",
     "search": "Suchen...",
@@ -552,6 +555,11 @@
     "beautySalonSubHeadingsRequired": "Schönheitssalon-Unterüberschriften sind erforderlich",
     "mainHeadingsRequired": "Hauptüberschriften sind erforderlich",
     "subHeadingsRequired": "Unterüberschriften sind erforderlich",
+    "categoryStepHelperMainCategoryFreeBarber": "Wähle genau eine Hauptkategorie aus der Liste, um fortzufahren.",
+    "categoryStepHelperMainHeadings": "Wähle mindestens eine Hauptüberschrift, um fortzufahren.",
+    "categoryStepHelperSubHeadings": "Wähle mindestens eine Unterüberschrift, um fortzufahren.",
+    "categoryStepHelperServicesStore": "Wähle mindestens einen Service, den du anbietest, bevor du fortfährst.",
+    "categoryStepHelperServicesFreeBarber": "Wähle mindestens einen Service hier oder füge im nächsten Schritt Schönheitssalon-Services hinzu – insgesamt mindestens ein Service ist erforderlich.",
     "mainCategories": "Hauptkategorien",
     "beautySalonCategories": "Schönheitssalon-Kategorien",
     "priceRequired": "Preis ist erforderlich",
@@ -613,7 +621,7 @@
     "stepMainHeadings": "Hauptüberschriften",
     "stepSubHeadings": "Unterüberschriften",
     "stepServices": "Dienstleistungen",
-    "stepBeautySalon": "Schönheitssalon",
+    "stepBeautySalon": "Schönheitsexperte",
     "stepPrices": "Preise",
     "stepPreview": "Vorschau",
     "stepAvailability": "Verfügbarkeit",
@@ -783,6 +791,8 @@
     "locationFailed": "Standort konnte nicht abgerufen werden.",
     "recordingFailed": "Sprachaufnahme konnte nicht gestartet werden.",
     "transcriptionFailed": "Sprache konnte nicht in Text umgewandelt werden.",
+    "transcriptionUnavailableTitle": "Transkription nicht möglich",
+    "transcriptionUnavailableBody": "Dienstlimit oder Verbindungsproblem. Sie können Ihre Nachricht normal tippen und senden.",
     "uploadingMedia": "Medien werden hochgeladen...",
     "locationShared": "Standort geteilt",
     "photo": "Foto",
@@ -806,6 +816,7 @@
     "error_recording_failed": "Aufnahme konnte nicht gestartet werden.",
     "error_transcription_empty": "Keine Sprache erkannt. Bitte erneut versuchen.",
     "error_whisper_failed": "Sprache konnte nicht in Text umgewandelt werden.",
+    "error_whisper_rate_limit": "Transkriptionslimit oder Dienst ausgelastet. Sie können stattdessen tippen.",
     "error_ai_error": "KI-Assistent konnte nicht antworten.",
     "error_unknown": "Ein unerwarteter Fehler ist aufgetreten."
   },
@@ -1047,7 +1058,10 @@
     "overflowCompare": "Vergleichen",
     "overflowPhotos": "Fotos ansehen",
     "overflowMenuA11y": "Panelaktionen",
-    "locationDeniedShort": "Standort aus; Entdeckung aus. Ihre Panel-Daten werden trotzdem geladen."
+    "locationDeniedShort": "Standort aus; Entdeckung aus. Ihre Panel-Daten werden trotzdem geladen.",
+    "emptyStateHintFreeBarber": "Fügen Sie Ihr Panel hinzu, damit Kunden Sie in der Entdeckung finden.",
+    "emptyStateHintStore": "Öffnen Sie den Friseursalon-Tab und nutzen Sie +, um Ihr erstes Geschäft anzulegen.",
+    "openStorePanelToAdd": "Zum Salon-Panel"
   },
   "moderation": {
     "inappropriateText": "Ihre Nachricht enthält unangemessene Inhalte. Bitte verwenden Sie keine Schimpfwörter, Beleidigungen oder anstößige Ausdrücke.",

@@ -20,7 +20,9 @@
     "timeRemaining": "الوقت: {{time}}",
     "resendCode": "إعادة إرسال الرمز",
     "codeSent": "تم إرسال رمز التحقق",
-    "selectLanguage": "اختر اللغة"
+    "rateLimitExceeded": "طلبات كثيرة جداً. يرجى الانتظار بضع دقائق والمحاولة مرة أخرى.",
+    "selectLanguage": "اختر اللغة",
+    "backToOtpVerification": "العودة إلى التحقق"
   },
   "profile": {
     "title": "معلومات الملف الشخصي",
@@ -364,6 +366,7 @@
     "confirm": "تأكيد",
     "save": "حفظ",
     "delete": "حذف",
+    "copy": "نسخ",
     "edit": "تعديل",
     "close": "إغلاق",
     "search": "بحث...",
@@ -552,6 +555,11 @@
     "beautySalonSubHeadingsRequired": "عناوين صالون التجميل الفرعية مطلوبة",
     "mainHeadingsRequired": "العناوين الرئيسية مطلوبة",
     "subHeadingsRequired": "العناوين الفرعية مطلوبة",
+    "categoryStepHelperMainCategoryFreeBarber": "للمتابعة، اختر فئة رئيسية واحدة بالضبط من القائمة.",
+    "categoryStepHelperMainHeadings": "للمتابعة، اختر عنوانًا رئيسيًا واحدًا على الأقل.",
+    "categoryStepHelperSubHeadings": "للمتابعة، اختر عنوانًا فرعيًا واحدًا على الأقل.",
+    "categoryStepHelperServicesStore": "اختر خدمة واحدة على الأقل تقدمها قبل المتابعة.",
+    "categoryStepHelperServicesFreeBarber": "اختر خدمة واحدة على الأقل هنا، أو أضف خدمات صالون التجميل في الخطوة التالية—يجب تحديد خدمة واحدة على الأقل في المجموع.",
     "mainCategories": "الفئات الرئيسية",
     "beautySalonCategories": "فئات صالون التجميل",
     "priceRequired": "السعر مطلوب",
@@ -613,7 +621,7 @@
     "stepMainHeadings": "العناوين الرئيسية",
     "stepSubHeadings": "العناوين الفرعية",
     "stepServices": "الخدمات",
-    "stepBeautySalon": "صالون التجميل",
+    "stepBeautySalon": "خبير تجميل",
     "stepPrices": "الأسعار",
     "stepPreview": "معاينة",
     "stepAvailability": "التوفر",
@@ -783,6 +791,8 @@
     "locationFailed": "تعذر الحصول على الموقع.",
     "recordingFailed": "تعذر بدء التسجيل الصوتي.",
     "transcriptionFailed": "تعذر تحويل الصوت إلى نص.",
+    "transcriptionUnavailableTitle": "تعذر تحويل الصوت",
+    "transcriptionUnavailableBody": "قد يكون هناك حد للخدمة أو مشكلة في الاتصال. يمكنك كتابة رسالتك وإرسالها كالمعتاد.",
     "uploadingMedia": "جاري رفع الوسائط...",
     "locationShared": "تمت مشاركة الموقع",
     "photo": "صورة",
@@ -806,6 +816,7 @@
     "error_recording_failed": "تعذّر بدء التسجيل.",
     "error_transcription_empty": "لم يُكتشف كلام. حاول مجدداً.",
     "error_whisper_failed": "تعذّر تحويل الصوت إلى نص.",
+    "error_whisper_rate_limit": "انتهت حصة التحويل أو الخدمة مشغولة. يمكنك الكتابة بدلاً من ذلك.",
     "error_ai_error": "تعذّر على المساعد الذكي الرد.",
     "error_unknown": "حدث خطأ غير متوقع."
   },
@@ -1047,7 +1058,10 @@
     "overflowCompare": "مقارنة",
     "overflowPhotos": "عرض الصور",
     "overflowMenuA11y": "إجراءات اللوحة",
-    "locationDeniedShort": "الموقع معطّل؛ الاستكشاف غير متاح، وستُحمّل بيانات لوحتك."
+    "locationDeniedShort": "الموقع معطّل؛ الاستكشاف غير متاح، وستُحمّل بيانات لوحتك.",
+    "emptyStateHintFreeBarber": "أضف لوحتك ليستطيع العملاء العثور عليك في الاستكشاف.",
+    "emptyStateHintStore": "افتح تبويب صالون الحلاقة واستخدم زر + لإضافة أول نشاط تجاري.",
+    "openStorePanelToAdd": "فتح لوحة المتجر"
   },
   "moderation": {
     "inappropriateText": "رسالتك تحتوي على محتوى غير لائق. يرجى عدم استخدام الألفاظ النابية أو الإهانات.",

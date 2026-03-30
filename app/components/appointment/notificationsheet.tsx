@@ -29,6 +29,7 @@ import { NotificationItemOptimized } from "./NotificationItemOptimized";
 import { useSafeNavigation } from "../../hook/useSafeNavigation";
 import { useAlert } from "../../hook/useAlert";
 import { useActionGuard } from "../../hook/useActionGuard";
+import { useTheme } from "../../hook/useTheme";
 
 // ---------------------------------------------------------------------------
 // 2. Ana NotificationsSheet Bileşeni
@@ -62,6 +63,7 @@ export function NotificationsSheet({
     useDeleteAllNotificationsMutation();
   const { userType } = useAuth();
   const { t } = useLanguage();
+  const { isDark } = useTheme();
   const { alert, alertSuccess, alertError, confirm } = useAlert();
   const [storeDecision, { isLoading: isStoreDeciding }] =
     useStoreDecisionMutation();
@@ -419,14 +421,22 @@ export function NotificationsSheet({
             <TouchableOpacity
               onPress={handleDeleteAll}
               disabled={isDeletingAllNotifications}
-              className={`bg-red-600 rounded-lg px-3 py-2 flex-row items-center gap-1.5 ${isDeletingAllNotifications ? "opacity-60" : ""}`}
+              className={`rounded-lg px-3 py-2 flex-row items-center gap-1.5 ${isDeletingAllNotifications ? "opacity-60" : ""}`}
+              style={{
+                backgroundColor: isDark ? "rgba(248,113,113,0.14)" : "rgba(254,202,202,0.55)",
+                borderWidth: 1,
+                borderColor: isDark ? "rgba(248,113,113,0.38)" : "rgba(220,38,38,0.22)",
+              }}
             >
               {isDeletingAllNotifications ? (
-                <ActivityIndicator size="small" color="white" />
+                <ActivityIndicator size="small" color={isDark ? "#fca5a5" : "#dc2626"} />
               ) : (
-                <Icon source="delete-sweep" size={18} color="white" />
+                <Icon source="delete-sweep-outline" size={18} color={isDark ? "#fca5a5" : "#b91c1c"} />
               )}
-              <Text className="text-white font-semibold text-sm">
+              <Text
+                className="font-semibold text-sm"
+                style={{ color: isDark ? "#fecaca" : "#991b1b", fontFamily: "CenturyGothic-Bold" }}
+              >
                 {t("notification.deleteAllNotifications")}
               </Text>
             </TouchableOpacity>

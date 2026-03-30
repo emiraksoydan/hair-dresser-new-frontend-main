@@ -56,6 +56,7 @@ import { useAppDispatch } from "../../store/hook";
 import { showSnack } from "../../store/snackbarSlice";
 import { useCanPerformAction } from "../../hook/useCanPerformAction";
 import { mapBarberType, mapPricingType } from "../../utils/form/form-mappers";
+import { resolveMimeType } from "../../utils/form/pick-document";
 import { ChairItem } from "./ChairItem";
 import { WorkingHoursAccordion } from "./WorkingHoursAccordion";
 import { ManuelBarberItem } from "./ManuelBarberItem";
@@ -314,6 +315,15 @@ const createFullSchema = (t: (key: string) => string) =>
       chairs: z.array(createChairSchema(t)).default([]),
     })
     .superRefine((data, ctx) => {
+      if (data.type && String(data.type).trim()) {
+        if (!data.selectedMainHeadings || data.selectedMainHeadings.length === 0) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: t("form.mainHeadingsRequired"),
+            path: ["selectedMainHeadings"],
+          });
+        }
+      }
       // Ana başlıklar seçilip alt başlıklar seçilmezse hata ver
       if (data.selectedMainHeadings && data.selectedMainHeadings.length > 0) {
         if (!data.selectedSubHeadings || data.selectedSubHeadings.length === 0) {
@@ -619,6 +629,7 @@ const FormStoreAdd = ({
   const address = watch("location.addressDescription");
   const dispatch = useAppDispatch();
   const OnSubmit = async (data: FormValues) => {
+    console.log(data);
     // Error veya location denied kontrolü
     if (!checkCanPerformAction()) {
       return;
@@ -649,7 +660,7 @@ const FormStoreAdd = ({
       formData.append("file", {
         uri: data.taxDocumentImage.uri,
         name: data.taxDocumentImage.name ?? "tax-document.jpg",
-        type: data.taxDocumentImage.type ?? "image/jpeg",
+        type: resolveMimeType(data.taxDocumentImage.type, data.taxDocumentImage.name),
       } as any);
       formData.append("ownerType", String(ImageOwnerType.User));
       formData.append("ownerId", userId);
@@ -767,7 +778,7 @@ const FormStoreAdd = ({
             formData.append("files", {
               uri: img.uri,
               name: img.name ?? "photo.jpg",
-              type: img.type ?? "image/jpeg",
+              type: resolveMimeType(img.type, img.name),
             } as any);
           });
           formData.append("ownerType", String(ImageOwnerType.Store));
@@ -795,7 +806,7 @@ const FormStoreAdd = ({
               formData.append("file", {
                 uri: barber.avatar!.uri,
                 name: barber.avatar!.name ?? "photo.jpg",
-                type: barber.avatar!.type ?? "image/jpeg",
+                type: resolveMimeType(barber.avatar!.type, barber.avatar!.name),
               } as any);
               formData.append("ownerType", String(ImageOwnerType.ManuelBarber));
               formData.append("ownerId", barber.id);
@@ -1088,7 +1099,7 @@ const FormStoreAdd = ({
   useEffect(() => {
     if (currentStep === 8 && !hasAutoPickedLocationRef.current) {
       hasAutoPickedLocationRef.current = true;
-      pickMyCurrentLocation().catch(() => {});
+      pickMyCurrentLocation().catch(() => { });
     }
   }, [currentStep]);
 
@@ -1289,12 +1300,19 @@ const FormStoreAdd = ({
                           {taxDocErrorText}
                         </HelperText>
                         {value?.uri && (
-                          <View className="mt-0 w-full rounded-xl overflow-hidden" style={{ backgroundColor: colors.cardBg }}>
+                          <View className="mt-2 relative w-full rounded-xl overflow-hidden" style={{ backgroundColor: colors.cardBg }}>
                             <Image
                               source={{ uri: value.uri }}
                               style={{ width: "100%", height: 200 }}
-                              resizeMode="stretch"
+                              resizeMode="cover"
                             />
+                            <TouchableOpacity
+                              onPress={() => onChange(undefined as any)}
+                              className="absolute top-2 right-2 bg-red-500 rounded-full p-1.5"
+                              activeOpacity={0.85}
+                            >
+                              <Icon source="close" size={18} color="white" />
+                            </TouchableOpacity>
                           </View>
                         )}
                       </>
@@ -1403,14 +1421,25 @@ const FormStoreAdd = ({
               <>
                 <View className="mt-2 px-2">
                   {!selectedType || mainHeadingOptions.length === 0 ? (
-                    <Text className="text-gray-400 text-center py-8">
-                      {t("form.stepMainHeadings")} - {t("form.selectMainCategory")}
-                    </Text>
+                    <>
+                      <Text className="text-gray-400 text-center py-8">
+                        {t("form.stepMainHeadings")} - {t("form.selectMainCategory")}
+                      </Text>
+                      <HelperText type="info" visible style={{ fontFamily: "CenturyGothic" }}>
+                        {t("form.categoryStepHelperMainHeadings")}
+                      </HelperText>
+                      <HelperText type="error" visible={!!errors.selectedMainHeadings} style={{ fontFamily: "CenturyGothic" }}>
+                        {errors.selectedMainHeadings?.message as string}
+                      </HelperText>
+                    </>
                   ) : (
                     <>
                       <Text className="text-xl mb-3 font-century-gothic-bold" style={{ color: colors.sectionHeaderText }}>
-                        {t("form.mainHeadings")}
+                        {t("form.mainHeadings")} *
                       </Text>
+                      <HelperText type="info" visible style={{ fontFamily: "CenturyGothic", marginTop: -8, marginBottom: 8 }}>
+                        {t("form.categoryStepHelperMainHeadings")}
+                      </HelperText>
                       <View className="rounded-xl p-3" style={{ borderWidth: 1, borderColor: colors.borderColor, backgroundColor: colors.cardBg }}>
                         <Controller
                           control={control}
@@ -1425,6 +1454,7 @@ const FormStoreAdd = ({
                               <HelperText
                                 type="error"
                                 visible={!!errors.selectedMainHeadings}
+                                style={{ fontFamily: "CenturyGothic" }}
                               >
                                 {errors.selectedMainHeadings?.message}
                               </HelperText>
@@ -1441,14 +1471,25 @@ const FormStoreAdd = ({
               <>
                 <View className="mt-2 px-2">
                   {selectedMainHeadings.length === 0 || subHeadingOptions.length === 0 ? (
-                    <Text className="text-gray-400 text-center py-8">
-                      {t("form.stepSubHeadings")} - {t("form.selectMainHeadings")}
-                    </Text>
+                    <>
+                      <Text className="text-gray-400 text-center py-8">
+                        {t("form.stepSubHeadings")} - {t("form.selectMainHeadings")}
+                      </Text>
+                      <HelperText type="info" visible style={{ fontFamily: "CenturyGothic" }}>
+                        {t("form.categoryStepHelperSubHeadings")}
+                      </HelperText>
+                      <HelperText type="error" visible={!!errors.selectedSubHeadings} style={{ fontFamily: "CenturyGothic" }}>
+                        {errors.selectedSubHeadings?.message as string}
+                      </HelperText>
+                    </>
                   ) : (
                     <>
                       <Text className="text-xl mb-3 font-century-gothic-bold" style={{ color: colors.sectionHeaderText }}>
-                        {t("form.subHeadings")}
+                        {t("form.subHeadings")} *
                       </Text>
+                      <HelperText type="info" visible style={{ fontFamily: "CenturyGothic", marginTop: -8, marginBottom: 8 }}>
+                        {t("form.categoryStepHelperSubHeadings")}
+                      </HelperText>
                       <View className="rounded-xl p-3" style={{ borderWidth: 1, borderColor: colors.borderColor, backgroundColor: colors.cardBg }}>
                         <Controller
                           control={control}
@@ -1463,6 +1504,7 @@ const FormStoreAdd = ({
                               <HelperText
                                 type="error"
                                 visible={!!errors.selectedSubHeadings}
+                                style={{ fontFamily: "CenturyGothic" }}
                               >
                                 {errors.selectedSubHeadings?.message}
                               </HelperText>
@@ -1479,14 +1521,25 @@ const FormStoreAdd = ({
               <>
                 <View className="mt-2 px-2">
                   {selectedSubHeadings.length === 0 || categoryOptions.length === 0 ? (
-                    <Text className="text-gray-400 text-center py-8">
-                      {t("form.stepStoreServices")} - {t("form.selectSubHeadings")}
-                    </Text>
+                    <>
+                      <Text className="text-gray-400 text-center py-8">
+                        {t("form.stepStoreServices")} - {t("form.selectSubHeadings")}
+                      </Text>
+                      <HelperText type="info" visible style={{ fontFamily: "CenturyGothic" }}>
+                        {t("form.categoryStepHelperServicesStore")}
+                      </HelperText>
+                      <HelperText type="error" visible={!!errors.selectedCategories} style={{ fontFamily: "CenturyGothic" }}>
+                        {errors.selectedCategories?.message as string}
+                      </HelperText>
+                    </>
                   ) : (
                     <>
                       <Text className="text-xl mb-3 font-century-gothic-bold" style={{ color: colors.sectionHeaderText }}>
-                        {t("form.servicesTitle")} ({selectedType})
+                        {t("form.servicesTitle")} ({selectedType}) *
                       </Text>
+                      <HelperText type="info" visible style={{ fontFamily: "CenturyGothic", marginTop: -8, marginBottom: 8 }}>
+                        {t("form.categoryStepHelperServicesStore")}
+                      </HelperText>
                       <View className="rounded-xl p-3" style={{ borderWidth: 1, borderColor: colors.borderColor, backgroundColor: colors.cardBg }}>
                         <Controller
                           control={control}
@@ -1501,6 +1554,7 @@ const FormStoreAdd = ({
                               <HelperText
                                 type="error"
                                 visible={!!errors.selectedCategories}
+                                style={{ fontFamily: "CenturyGothic" }}
                               >
                                 {errors.selectedCategories?.message}
                               </HelperText>
@@ -1522,13 +1576,15 @@ const FormStoreAdd = ({
                     </Text>
                   ) : (
                     <>
-                      {/* Prices */}
+                      <Text className="text-xl mb-3 font-century-gothic-bold" style={{ color: colors.sectionHeaderText }}>
+                        {t("form.stepStorePrices")} *
+                      </Text>
                       <View
-                        className="mt-0 mx-0  rounded-xl"
+                        className="rounded-xl p-3"
                         style={{
+                          borderWidth: 1,
+                          borderColor: colors.borderColor,
                           backgroundColor: colors.cardBg,
-                          paddingVertical: 6,
-                          paddingHorizontal: 16,
                         }}
                       >
                         {selectedCategories.map((categoryId) => {
@@ -1899,35 +1955,11 @@ const FormStoreAdd = ({
                       setValue={setValue}
                       trigger={trigger}
                     />
-                      <Text className="text-[#c2a523] font-century-gothic pt-2 pb-1 text-sm">
-                        - {t("form.workingHoursInfo")}
-                      </Text>
-                      <Text className="text-white text-xl mt-1" style={{ color: colors.sectionHeaderText }}>
-                        {t("form.holidayDays")}
-                      </Text>
-                      <Controller
-                        control={control}
-                        name="holidayDays"
-                        render={({
-                          field: { value, onChange },
-                          fieldState: { error },
-                        }) => (
-                          <>
-                            <CategoryListSelect
-                              data={HOLIDAY_OPTIONS}
-                              value={(value ?? []).map(String)}
-                              onChange={(vals: string[]) =>
-                                onChange(vals.map((v) => Number(v)))
-                              }
-                            />
-                            <HelperText type="error" visible={!!error}>
-                              {error?.message as string}
-                            </HelperText>
-                          </>
-                        )}
-                      />
-                    </View>
+                    <Text className="text-[#c2a523] font-century-gothic pt-2 pb-1 text-sm">
+                      - {t("form.workingHoursInfo")}
+                    </Text>
                   </View>
+                </View>
               </>
             )}
             {currentStep === 8 && (

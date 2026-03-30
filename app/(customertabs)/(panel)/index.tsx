@@ -21,6 +21,7 @@ import { toggleExpand } from "../../utils/common/expand-toggle";
 import { BarberStoreGetDto, FreeBarGetDto } from "../../types";
 import { useGetSettingQuery, useGetMeQuery, useGetSavedFiltersQuery, useCreateSavedFilterMutation, useDeleteSavedFilterMutation, useUpdateSavedFilterMutation } from "../../store/api";
 import { useAppDispatch } from "../../store/hook";
+import { setFreeBarberSwipeIds, setStoreSwipeIds } from "../../store/bookingSwipeSlice";
 import { showSnack } from "../../store/snackbarSlice";
 import { getErrorMessage, getMessage } from "../../utils/errorHandler";
 import { FilterDrawer } from "../../components/common/filterdrawer";
@@ -45,6 +46,7 @@ import { useActionGuard } from "../../hook/useActionGuard";
 import { isOtherUsersFreeBarber, isOtherUsersStore } from "../../utils/compare-eligibility";
 import { PanelCollapsibleTop } from "../../components/panel/PanelCollapsibleTop";
 import { PerplexityHorizontalList } from "../../components/panel/PerplexityHorizontalList";
+import { PerplexityListItem } from "../../components/panel/PerplexityListItem";
 import { usePanelMoreFab } from "../../hook/usePanelMoreFab";
 import { getCompareStripBottom } from "../../components/layout/panelBottomOverlays";
 import {
@@ -52,7 +54,6 @@ import {
   compareStripOuterStyle,
   useCompareMetrics,
 } from "../../(screens)/compare/compareShared";
-import { ScrollStackItem } from "../../components/common/ScrollStackItem";
 
 const { width: screenWidth } = Dimensions.get("window");
 
@@ -235,27 +236,6 @@ const Index = () => {
     },
   });
 
-  // Navigation handlers
-  const goStoreDetail = useCallback(
-    (store: BarberStoreGetDto) => {
-      router.push({
-        pathname: "/store/[storeId]",
-        params: { storeId: store.id },
-      });
-    },
-    [router],
-  );
-
-  const goFreeBarberDetail = useCallback(
-    (freeBarber: FreeBarGetDto) => {
-      router.push({
-        pathname: "/freebarber/[freeBarberId]",
-        params: { freeBarberId: (freeBarber as any).id },
-      });
-    },
-    [router],
-  );
-
   // Rating handler
   const handlePressRatings = useCallback(
     (targetId: string, targetName: string) => {
@@ -314,6 +294,33 @@ const Index = () => {
       return true;
     });
   }, [freeBarbers, searchQuery, filterCriteria.userType]);
+
+  // Navigation handlers (filtered list sırası — detayda yatay kaydırma ile aynı sıra)
+  const goStoreDetail = useCallback(
+    (store: BarberStoreGetDto) => {
+      dispatch(setStoreSwipeIds(filteredStores.map((s) => s.id)));
+      router.push({
+        pathname: "/store/[storeId]",
+        params: { storeId: store.id },
+      });
+    },
+    [router, dispatch, filteredStores],
+  );
+
+  const goFreeBarberDetail = useCallback(
+    (freeBarber: FreeBarGetDto) => {
+      dispatch(
+        setFreeBarberSwipeIds(
+          filteredFreeBarbers.map((fb) => (fb as FreeBarGetDto & { id: string }).id),
+        ),
+      );
+      router.push({
+        pathname: "/freebarber/[freeBarberId]",
+        params: { freeBarberId: (freeBarber as any).id },
+      });
+    },
+    [router, dispatch, filteredFreeBarbers],
+  );
 
   // Card dimensions
   const cardWidthStore = useMemo(
@@ -394,6 +401,7 @@ const Index = () => {
         isList={isList}
         expanded={expandedStores}
         cardWidthStore={cardWidthStore}
+        compactMeta
         onPressUpdate={goStoreDetail}
         onPressRatings={handlePressRatings}
         showImageAnimation={settingData?.data?.showImageAnimation ?? true}
@@ -428,6 +436,7 @@ const Index = () => {
         isList={isList}
         expanded={expandedFreeBarbers}
         cardWidthFreeBarber={cardWidthFreeBarber}
+        compactMeta
         onPressUpdate={goFreeBarberDetail}
         onPressRatings={handlePressRatings}
         showImageAnimation={settingData?.data?.showImageAnimation ?? true}
@@ -688,6 +697,7 @@ const Index = () => {
           <View style={{ backgroundColor: colors.cardBg, borderRadius: 12, borderWidth: 1.5, borderColor: colors.cardBg }}>
             <SearchBar
               transparent
+              compact
               searchQuery={searchQuery}
               setSearchQuery={setSearchQuery}
               isList={isList}
@@ -743,7 +753,7 @@ const Index = () => {
             if (item.type === "stores-header") {
               return (
                 <View className="flex flex-row justify-between items-center mt-4">
-                  <Text className="font-century-gothic text-2xl" style={{ color: colors.sectionHeaderText }}>
+                  <Text className="font-century-gothic text-xl" style={{ color: colors.sectionHeaderText }}>
                     {t("panel.nearbyStores")}
                   </Text>
                   {filteredStores.length > 0 && (
@@ -752,6 +762,7 @@ const Index = () => {
                       onPress={() =>
                         toggleExpand(expandedStores, setExpandedStores)
                       }
+                      size={20}
                     />
                   )}
                 </View>
@@ -806,14 +817,13 @@ const Index = () => {
             }
             if (item.type === "store-row") {
               return (
-                <ScrollStackItem
-                  scroll={scrollY}
-                  itemStride={item._scrollLen}
-                  scrollAnchor={item._scrollStart}
-                  bandLength={item._scrollLen}
+                <PerplexityListItem
+                  scrollPos={scrollY}
+                  itemStart={item._scrollStart}
+                  itemLength={item._scrollLen}
                 >
                   {renderStoreItem({ item: item.data })}
-                </ScrollStackItem>
+                </PerplexityListItem>
               );
             }
 
@@ -825,7 +835,7 @@ const Index = () => {
                     keyExtractor={(store: BarberStoreGetDto) => store.id}
                     snapInterval={cardWidthStore + 12}
                     minHeight={isList ? 260 : 280}
-                    contentContainerStyle={{ paddingTop: 8, paddingBottom: 4 }}
+                    contentContainerStyle={{ paddingTop: 8, paddingBottom: 4, paddingHorizontal: 10 }}
                     renderItem={({ item: store }) => renderStoreItem({ item: store })}
                   />
                 </View>
@@ -834,8 +844,8 @@ const Index = () => {
 
             if (item.type === "freebarbers-header") {
               return (
-                <View className="flex flex-row justify-between items-center mt-12">
-                  <Text className="font-century-gothic text-2xl" style={{ color: colors.sectionHeaderText }}>
+                <View className="flex flex-row justify-between items-center mt-6">
+                  <Text className="font-century-gothic text-xl" style={{ color: colors.sectionHeaderText }}>
                     {t("panel.nearbyFreeBarbers")}
                   </Text>
                   {filteredFreeBarbers.length > 0 && (
@@ -847,6 +857,7 @@ const Index = () => {
                           setExpandedFreeBarbers,
                         )
                       }
+                      size={20}
                     />
                   )}
                 </View>
@@ -903,14 +914,13 @@ const Index = () => {
 
             if (item.type === "freebarber-row") {
               return (
-                <ScrollStackItem
-                  scroll={scrollY}
-                  itemStride={item._scrollLen}
-                  scrollAnchor={item._scrollStart}
-                  bandLength={item._scrollLen}
+                <PerplexityListItem
+                  scrollPos={scrollY}
+                  itemStart={item._scrollStart}
+                  itemLength={item._scrollLen}
                 >
                   {renderFreeBarberItem({ item: item.data })}
-                </ScrollStackItem>
+                </PerplexityListItem>
               );
             }
 
@@ -922,7 +932,7 @@ const Index = () => {
                     keyExtractor={(fb: FreeBarGetDto) => (fb as any).id}
                     snapInterval={cardWidthFreeBarber + 12}
                     minHeight={isList ? 260 : 280}
-                    contentContainerStyle={{ paddingTop: 8, paddingBottom: 4 }}
+                    contentContainerStyle={{ paddingTop: 8, paddingBottom: 4, paddingHorizontal: 10 }}
                     renderItem={({ item: fb }) => renderFreeBarberItem({ item: fb })}
                   />
                 </View>

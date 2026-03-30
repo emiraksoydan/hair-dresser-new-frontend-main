@@ -33,32 +33,50 @@ export function PerplexityListItem({
     const p = scrollPos.value;
     const start = itemStart;
     const L = Math.max(itemLength, 1);
-    const inputRange = [start - L, start, start + L];
+    /** d=0 satır görünür alanın üstüne (veya yatayda sola) hizalandığında → tam ölçek, merkez ofseti yok */
+    const d = p - start;
+    /** Tam hizalı / snap sonrası küçük kaymalarda opaklık 1 kalsın; sadece gerçekten uzaklaşınca animasyon */
+    const far = L;
+    const restIdeal = Math.min(Math.max(L * 0.22, 28), 100);
+    const rest = Math.min(restIdeal, far * 0.45);
+    const inputRange = [-far, -rest, rest, far];
     const scale = interpolate(
-      p,
+      d,
       inputRange,
-      [0.86, 1, 0.86],
+      horizontal ? [0.9, 1, 1, 0.9] : [0.94, 1, 1, 0.94],
       Extrapolation.CLAMP,
     );
     const opacity = interpolate(
-      p,
+      d,
       inputRange,
-      [0.42, 1, 0.42],
+      horizontal ? [0.45, 1, 1, 0.45] : [0.55, 1, 1, 0.55],
       Extrapolation.CLAMP,
     );
-    const shift = interpolate(
-      p,
+    const rot = interpolate(
+      d,
       inputRange,
-      horizontal ? [10, 0, -10] : [12, 0, -12],
+      horizontal ? [-4.5, 0, 0, 4.5] : [4.5, 0, 0, -4.5],
       Extrapolation.CLAMP,
     );
+    if (horizontal) {
+      return {
+        opacity,
+        transform: [
+          { perspective: 960 },
+          { rotateY: `${rot}deg` },
+          { scale },
+        ],
+      };
+    }
     return {
       opacity,
-      transform: horizontal
-        ? [{ translateX: shift }, { scale }]
-        : [{ translateY: shift }, { scale }],
+      transform: [
+        { perspective: 1000 },
+        { rotateX: `${rot}deg` },
+        { scale },
+      ],
     };
-  });
+  }, [itemStart, itemLength, horizontal]);
 
   return <Animated.View style={animatedStyle}>{children}</Animated.View>;
 }

@@ -43,6 +43,7 @@ import { useLanguage } from "../../hook/useLanguage";
 import { UnifiedStateWrapper } from "../../components/common/UnifiedStateManager";
 import { useTheme } from "../../hook/useTheme";
 import { useActionGuard } from "../../hook/useActionGuard";
+import { useSubscriptionGuard } from "../../hook/useSubscriptionGuard";
 import { useSafeNavigation } from "../../hook/useSafeNavigation";
 import { isOtherUsersFreeBarber } from "../../utils/compare-eligibility";
 import { PanelCollapsibleTop } from "../../components/panel/PanelCollapsibleTop";
@@ -57,8 +58,10 @@ import Animated, {
   useAnimatedScrollHandler,
   useSharedValue,
 } from "react-native-reanimated";
-import { ScrollStackItem } from "../../components/common/ScrollStackItem";
+import { PerplexityListItem } from "../../components/panel/PerplexityListItem";
 import { PerplexityHorizontalList } from "../../components/panel/PerplexityHorizontalList";
+import { PanelEmptyCta } from "../../components/common/PanelEmptyCta";
+import { useBarberStoreSheet } from "../../context/BarberStoreSheetContext";
 
 const Index = () => {
   const insets = useSafeAreaInsets();
@@ -72,6 +75,8 @@ const Index = () => {
   const { t } = useLanguage();
   const cmpM = useCompareMetrics();
   const guard = useActionGuard();
+  const { withSubscription } = useSubscriptionGuard();
+  const barberStoreSheet = useBarberStoreSheet();
 
   // Current user for filters
   const { data: currentUser } = useGetMeQuery();
@@ -147,19 +152,6 @@ const Index = () => {
   const [selectedMapItem, setSelectedMapItem] = useState<FreeBarGetDto | null>(
     null,
   );
-
-  const panelMapFabItems = useMemo(
-    () => [
-      {
-        id: "panel-map-toggle",
-        icon: isMapMode ? "format-list-bulleted" : "map",
-        label: isMapMode ? t("common.list") : t("common.searchOnMap"),
-        onPress: () => setIsMapMode((m) => !m),
-      },
-    ],
-    [isMapMode, t],
-  );
-  usePanelMoreFab(panelMapFabItems);
 
   // Bottom sheet hooks
   const mapDetailSheet = useBottomSheet({
@@ -296,6 +288,12 @@ const Index = () => {
     manualFetch();
   }, [manualFetch]);
 
+  const handleViewMyBusinessesPress = useCallback(() => {
+    withSubscription(() => {
+      router.push("/(screens)/profile/barber-store-businesses");
+    });
+  }, [router, withSubscription]);
+
   const renderFreeBarberItem = useCallback(
     ({ item }: { item: FreeBarGetDto }) => (
       <FreeBarberCardInner
@@ -303,6 +301,7 @@ const Index = () => {
         isList={isList}
         expanded={expandedFreeBarbers}
         cardWidthFreeBarber={cardWidthFreeBarber}
+        compactMeta
         mode="barbershop"
         onPressRatings={handlePressRatings}
         onCallFreeBarber={handleManualFetch}
@@ -506,6 +505,7 @@ const Index = () => {
           <View style={{ backgroundColor: colors.cardBg, borderRadius: 14, borderWidth: 1.5, borderColor: colors.cardBg, overflow: "hidden" }}>
             <SearchBar
               transparent
+              compact
               searchQuery={searchQuery}
               setSearchQuery={setSearchQuery}
               isList={isList}
@@ -514,22 +514,20 @@ const Index = () => {
             />
             <TouchableOpacity
               activeOpacity={0.7}
-              onPress={() =>
-                router.push("/(screens)/profile/barber-store-businesses")
-              }
+              onPress={handleViewMyBusinessesPress}
               style={{
                 flexDirection: "row",
                 alignItems: "center",
-                minHeight: 46,
-                paddingHorizontal: 14,
-                paddingVertical: 10,
+                minHeight: 40,
+                paddingHorizontal: 12,
+                paddingVertical: 8,
                 borderTopWidth: StyleSheet.hairlineWidth,
                 borderTopColor: colors.borderColor2,
               }}
             >
               <Text
-                numberOfLines={1}
-                style={{ flex: 1, fontSize: 13, color: colors.textSecondary, fontFamily: "CenturyGothic-Bold" }}
+                numberOfLines={2}
+                style={{ flex: 1, fontSize: 13, lineHeight: 18, color: colors.textSecondary, fontFamily: "CenturyGothic-Bold" }}
               >
                 {t("panel.viewMyBusinesses")}
               </Text>
@@ -538,12 +536,12 @@ const Index = () => {
             {savedFilters.length > 0 && (
               <View
                 style={{
-                  marginHorizontal: 10,
-                  marginBottom: 12,
+                  marginHorizontal: 8,
+                  marginBottom: 10,
                   marginTop: 2,
-                  paddingHorizontal: 12,
-                  paddingTop: 12,
-                  paddingBottom: 12,
+                  paddingHorizontal: 10,
+                  paddingTop: 10,
+                  paddingBottom: 10,
                   borderRadius: 12,
                   backgroundColor: colors.cardBg2,
                   borderWidth: StyleSheet.hairlineWidth,
@@ -594,7 +592,7 @@ const Index = () => {
             if (item.type === "freebarbers-header") {
               return (
                 <View className="flex flex-row justify-between items-center mt-4">
-                  <Text className="font-century-gothic text-2xl" style={{ color: colors.sectionHeaderText }}>
+                  <Text className="font-century-gothic text-xl" style={{ color: colors.sectionHeaderText }}>
                     {t("panel.nearbyFreeBarbers")}
                   </Text>
                   {hasFreeBarbers && (
@@ -606,6 +604,7 @@ const Index = () => {
                           setExpandedFreeBarbers,
                         )
                       }
+                      size={20}
                     />
                   )}
                 </View>
@@ -638,7 +637,20 @@ const Index = () => {
               );
             }
             if (item.type === "freebarbers-empty") {
-              // Veri yok durumu - uygun boş mesaj göster
+              if (stores.length === 0) {
+                return (
+                  <View className="mt-2 pr-2">
+                    <PanelEmptyCta
+                      title={t("empty.addStoreToSeeNearbyFreeBarbers")}
+                      subtitle={t("panel.emptyStateHintStore")}
+                      buttonLabel={t("navigation.addStore")}
+                      onPress={() =>
+                        withSubscription(() => barberStoreSheet?.openAddStore?.())
+                      }
+                    />
+                  </View>
+                );
+              }
               return (
                 <View className="mt-2" style={{ minHeight: 250, maxHeight: 400 }}>
                   <UnifiedStateWrapper
@@ -649,9 +661,8 @@ const Index = () => {
                     fetchedOnce={true}
                     onRetry={manualFetch}
                     customMessages={{
-                      empty: stores.length === 0
-                        ? t("empty.addStoreToSeeNearbyFreeBarbers")
-                        : searchQuery || hasActiveFilters
+                      empty:
+                        searchQuery || hasActiveFilters
                           ? t("empty.noResultsFound")
                           : t("empty.noNearbyFreeBarbers"),
                     }}
@@ -663,14 +674,13 @@ const Index = () => {
             }
             if (item.type === "freebarber-row") {
               return (
-                <ScrollStackItem
-                  scroll={scrollY}
-                  itemStride={item._scrollLen}
-                  scrollAnchor={item._scrollStart}
-                  bandLength={item._scrollLen}
+                <PerplexityListItem
+                  scrollPos={scrollY}
+                  itemStart={item._scrollStart}
+                  itemLength={item._scrollLen}
                 >
                   {renderFreeBarberItem({ item: item.data })}
-                </ScrollStackItem>
+                </PerplexityListItem>
               );
             }
             if (item.type === "freebarbers-content-horizontal") {
@@ -680,7 +690,7 @@ const Index = () => {
                     data={filteredFreeBarbers}
                     keyExtractor={(fb: FreeBarGetDto) => (fb as any).id}
                     snapInterval={cardWidthFreeBarber + 12}
-                    contentContainerStyle={{ gap: 12, paddingTop: 8 }}
+                    contentContainerStyle={{ gap: 10, paddingTop: 6, paddingBottom: 6, paddingHorizontal: 0 }}
                     renderItem={({ item: fb }) =>
                       renderFreeBarberItem({ item: fb })
                     }

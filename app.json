@@ -14,6 +14,7 @@
     },
     "ios": {
       "supportsTablet": false,
+      "requireFullScreen": true,
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "This app needs your location to show nearby barbershops and barbers.",
         "NSLocationAlwaysAndWhenInUseUsageDescription": "This app needs your location even when closed to keep free barbers' locations updated.",

@@ -602,9 +602,9 @@ export const NotificationItemOptimized = React.memo<NotificationItemProps>(
                   className={`p-1 ${isDeleting ? "opacity-60" : ""}`}
                 >
                   {isDeleting ? (
-                    <ActivityIndicator size="small" color="#ef4444" />
+                    <ActivityIndicator size="small" color="#f87171" />
                   ) : (
-                    <Icon source="delete-outline" size={18} color="#ef4444" />
+                    <Icon source="delete-outline" size={18} color="#f87171" />
                   )}
                 </TouchableOpacity>
               )}
@@ -828,37 +828,51 @@ export const NotificationItemOptimized = React.memo<NotificationItemProps>(
         {canShowButtons && (
           <View className="mt-3 pt-3 border-t" style={{ borderTopColor: colors.borderColor }}>
             {showOnlyRejectButton ? (
-              // FreeBarber için sadece REDDET butonu
               <TouchableOpacity
                 onPress={handleReject}
                 disabled={isProcessing}
-                className={`bg-red-600 rounded-xl py-3 items-center justify-center ${isProcessing ? "opacity-60" : ""}`}
+                className={`rounded-xl py-3 items-center justify-center ${isProcessing ? "opacity-60" : ""}`}
+                style={{
+                  backgroundColor: isDark ? "rgba(248,113,113,0.14)" : "rgba(254,202,202,0.55)",
+                  borderWidth: 1,
+                  borderColor: isDark ? "rgba(248,113,113,0.38)" : "rgba(220,38,38,0.22)",
+                }}
               >
                 {isProcessing ? (
-                  <ActivityIndicator color="white" size="small" />
+                  <ActivityIndicator color={isDark ? "#fca5a5" : "#dc2626"} size="small" />
                 ) : (
                   <View className="flex-row items-center gap-2">
-                    <Icon source="close-circle" size={18} color="white" />
-                    <Text className="text-white text-sm font-semibold">
+                    <Icon source="close-circle-outline" size={18} color={isDark ? "#fca5a5" : "#b91c1c"} />
+                    <Text
+                      className="text-sm font-semibold"
+                      style={{ color: isDark ? "#fecaca" : "#991b1b", fontFamily: "CenturyGothic-Bold" }}
+                    >
                       {t("common.reject")}
                     </Text>
                   </View>
                 )}
               </TouchableOpacity>
             ) : (
-              // ONAY/RED butonları
               <View className="flex-row gap-2">
                 <TouchableOpacity
                   onPress={handleReject}
                   disabled={isProcessing}
-                  className={`flex-1 bg-red-600 rounded-xl py-3 items-center justify-center ${isProcessing ? "opacity-60" : ""}`}
+                  className={`flex-1 rounded-xl py-3 items-center justify-center ${isProcessing ? "opacity-60" : ""}`}
+                  style={{
+                    backgroundColor: isDark ? "rgba(248,113,113,0.14)" : "rgba(254,202,202,0.55)",
+                    borderWidth: 1,
+                    borderColor: isDark ? "rgba(248,113,113,0.38)" : "rgba(220,38,38,0.22)",
+                  }}
                 >
                   {isProcessing ? (
-                    <ActivityIndicator color="white" size="small" />
+                    <ActivityIndicator color={isDark ? "#fca5a5" : "#dc2626"} size="small" />
                   ) : (
                     <View className="flex-row items-center gap-2">
-                      <Icon source="close-circle" size={18} color="white" />
-                      <Text className="text-white text-sm font-semibold">
+                      <Icon source="close-circle-outline" size={18} color={isDark ? "#fca5a5" : "#b91c1c"} />
+                      <Text
+                        className="text-sm font-semibold"
+                        style={{ color: isDark ? "#fecaca" : "#991b1b", fontFamily: "CenturyGothic-Bold" }}
+                      >
                         {t("common.reject")}
                       </Text>
                     </View>
@@ -867,14 +881,22 @@ export const NotificationItemOptimized = React.memo<NotificationItemProps>(
                 <TouchableOpacity
                   onPress={handleApprove}
                   disabled={isProcessing}
-                  className={`flex-1 bg-green-600 rounded-xl py-3 items-center justify-center ${isProcessing ? "opacity-60" : ""}`}
+                  className={`flex-1 rounded-xl py-3 items-center justify-center ${isProcessing ? "opacity-60" : ""}`}
+                  style={{
+                    backgroundColor: isDark ? "rgba(34,197,94,0.14)" : "rgba(187,247,208,0.65)",
+                    borderWidth: 1,
+                    borderColor: isDark ? "rgba(34,197,94,0.38)" : "rgba(22,163,74,0.28)",
+                  }}
                 >
                   {isProcessing ? (
-                    <ActivityIndicator color="white" size="small" />
+                    <ActivityIndicator color={isDark ? "#86efac" : "#15803d"} size="small" />
                   ) : (
                     <View className="flex-row items-center gap-2">
-                      <Icon source="check-circle" size={18} color="white" />
-                      <Text className="text-white text-sm font-semibold">
+                      <Icon source="check-circle-outline" size={18} color={isDark ? "#86efac" : "#15803d"} />
+                      <Text
+                        className="text-sm font-semibold"
+                        style={{ color: isDark ? "#bbf7d0" : "#166534", fontFamily: "CenturyGothic-Bold" }}
+                      >
                         {t("common.approve")}
                       </Text>
                     </View>

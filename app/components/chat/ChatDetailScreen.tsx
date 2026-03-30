@@ -20,6 +20,8 @@ import {
   Image,
   Linking,
 } from "react-native";
+import * as Clipboard from "expo-clipboard";
+import { BlurView } from "expo-blur";
 import { MotiView } from "moti";
 import { Text } from "../common/Text";
 import { useSafeNavigation } from "../../hook/useSafeNavigation";
@@ -71,27 +73,37 @@ interface ChatDetailScreenProps {
   threadId: string;
 }
 
-// Whisper transcription — backend proxy üzerinden (API key backend'de)
-async function transcribeWithWhisper(uri: string, authToken: string, baseUrl: string): Promise<string | null> {
+/** Whisper transcription — backend proxy; hata mesajı sunucudan iletilir (limit vb.). */
+async function transcribeWithWhisper(
+  uri: string,
+  authToken: string,
+  baseUrl: string,
+): Promise<{ text: string | null; serverMessage?: string }> {
   try {
     const filename = uri.split("/").pop() || "audio.m4a";
     const formData = new FormData();
-    formData.append("file", { uri, name: filename, type: "audio/m4a" } as any);
+    formData.append("file", { uri, name: filename, type: "audio/mp4" } as any);
 
     const res = await fetch(`${baseUrl}AI/transcribe`, {
       method: "POST",
       headers: { Authorization: `Bearer ${authToken}` },
       body: formData,
     });
-    if (!res.ok) return null;
-    const json = await res.json();
-    return json.data ?? null;
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      const msg = typeof json?.message === "string" ? json.message : undefined;
+      return { text: null, serverMessage: msg };
+    }
+    const text = json?.data ?? null;
+    return { text: typeof text === "string" ? text : null };
   } catch {
-    return null;
+    return { text: null };
   }
 }
 
 const UPLOAD_TIMEOUT_MS = 30_000;
+
+const GUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function fetchWithTimeout(url: string, options: RequestInit, timeoutMs = UPLOAD_TIMEOUT_MS): Promise<Response> {
   const controller = new AbortController();
@@ -99,12 +111,51 @@ function fetchWithTimeout(url: string, options: RequestInit, timeoutMs = UPLOAD_
   return fetch(url, { ...options, signal: controller.signal }).finally(() => clearTimeout(id));
 }
 
-// Upload image to backend, return URL
-async function uploadImageToBackend(uri: string, authToken: string, baseUrl: string, ownerId: string): Promise<string | null> {
+/** Backend upload returns image id (GUID string), not a public URL — resolve blob URL via GET Image/{id}. */
+async function fetchImageUrlById(imageId: string, authToken: string, baseUrl: string): Promise<string | null> {
+  try {
+    const res = await fetchWithTimeout(`${baseUrl}Image/${imageId}`, {
+      headers: { Authorization: `Bearer ${authToken}` },
+    });
+    if (!res.ok) return null;
+    const json = await res.json();
+    // Backend returns { success, data: ImageGetDto } where data.imageUrl is the blob URL
+    const d = json?.data;
+    const u = d?.imageUrl ?? d?.ImageUrl ?? d?.url ?? d?.Url;
+    return typeof u === "string" && u.length > 0 ? u : null;
+  } catch {
+    return null;
+  }
+}
+
+async function resolveMediaUrlFromUploadJson(json: unknown, authToken: string, baseUrl: string): Promise<string | null> {
+  const j = json as { data?: string | { imageUrl?: string; url?: string } };
+  const d = j?.data;
+  const directUrl =
+    typeof d === "string"
+      ? d
+      : typeof d === "object" && d != null
+        ? (d as { imageUrl?: string; url?: string }).imageUrl ?? (d as { url?: string }).url
+        : undefined;
+  if (typeof directUrl === "string" && directUrl.length > 0) {
+    if (directUrl.startsWith("http://") || directUrl.startsWith("https://")) return directUrl;
+    if (GUID_RE.test(directUrl)) return fetchImageUrlById(directUrl, authToken, baseUrl);
+  }
+  return null;
+}
+
+// Upload image to backend, return public blob URL for chat
+async function uploadImageToBackend(
+  uri: string,
+  authToken: string,
+  baseUrl: string,
+  ownerId: string,
+  mimeType = "image/jpeg",
+): Promise<string | null> {
   try {
     const filename = uri.split("/").pop() || "photo.jpg";
     const formData = new FormData();
-    formData.append("File", { uri, name: filename, type: "image/jpeg" } as any);
+    formData.append("File", { uri, name: filename, type: mimeType } as any);
     formData.append("OwnerId", ownerId);
     formData.append("OwnerType", "1");
 
@@ -115,13 +166,13 @@ async function uploadImageToBackend(uri: string, authToken: string, baseUrl: str
     });
     if (!res.ok) return null;
     const json = await res.json();
-    return json?.data?.url ?? json?.data ?? null;
+    return resolveMediaUrlFromUploadJson(json, authToken, baseUrl);
   } catch {
     return null;
   }
 }
 
-// Upload any file to backend, returns URL
+// Upload any file to backend, returns public URL for chat
 async function uploadFileToBackend(uri: string, name: string, mimeType: string, authToken: string, baseUrl: string, ownerId: string): Promise<string | null> {
   try {
     const formData = new FormData();
@@ -135,7 +186,7 @@ async function uploadFileToBackend(uri: string, name: string, mimeType: string, 
     });
     if (!res.ok) return null;
     const json = await res.json();
-    return json?.data?.url ?? json?.data ?? null;
+    return resolveMediaUrlFromUploadJson(json, authToken, baseUrl);
   } catch {
     return null;
   }
@@ -159,7 +210,7 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({
   const { userId: currentUserId, userType: currentUserType, token } = useAuth();
   const [typingUsers, setTypingUsers] = useState<Set<string>>(new Set());
   const { t, currentLanguage } = useLanguage();
-  const { alertError, confirm } = useAlert();
+  const { alertError, alertWarning, confirm } = useAlert();
   const participantsSheetRef = useRef<BottomSheetModal>(null);
   type OptimisticMessage = ChatMessageItemDto & { isPending: true };
   const [optimisticMessages, setOptimisticMessages] = useState<OptimisticMessage[]>([]);
@@ -402,10 +453,13 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({
       allowsEditing: false,
     });
     if (result.canceled || !result.assets?.[0]) return;
-    const uri = result.assets[0].uri;
+    const asset = result.assets[0];
+    const uri = asset.uri;
+    const mime = asset.mimeType ?? "image/jpeg";
+    if (!currentUserId || !token) { alertError(t("common.error"), t("chat.imageUploadFailed")); return; }
     setIsSendingMedia(true);
     try {
-      const url = await uploadImageToBackend(uri, token ?? "", API_CONFIG.BASE_URL, currentUserId ?? "");
+      const url = await uploadImageToBackend(uri, token, API_CONFIG.BASE_URL, currentUserId, mime);
       if (!url) { alertError(t("common.error"), t("chat.imageUploadFailed")); return; }
       await sendChatMedia({ threadId, messageType: ChatMessageType.Image, mediaUrl: url, replyToMessageId: replyingTo?.messageId ?? null });
       setReplyingTo(null);
@@ -414,7 +468,7 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({
     } finally {
       setIsSendingMedia(false);
     }
-  }, [canSendMessage, threadId, token, replyingTo, sendChatMedia, t, alertError]);
+  }, [canSendMessage, threadId, token, currentUserId, replyingTo, sendChatMedia, t, alertError]);
 
   // --- Location sender ---
   const handleSendLocation = useCallback(async () => {
@@ -450,9 +504,10 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({
     const uri = asset.uri;
     const name = asset.name || uri.split("/").pop() || "file";
     const mimeType = asset.mimeType || "application/octet-stream";
+    if (!currentUserId || !token) { alertError(t("common.error"), t("chat.fileUploadFailed")); return; }
     setIsSendingMedia(true);
     try {
-      const url = await uploadFileToBackend(uri, name, mimeType, token ?? "", API_CONFIG.BASE_URL, currentUserId ?? "");
+      const url = await uploadFileToBackend(uri, name, mimeType, token, API_CONFIG.BASE_URL, currentUserId);
       if (!url) { alertError(t("common.error"), t("chat.fileUploadFailed")); return; }
       await sendChatMedia({ threadId, messageType: ChatMessageType.File, mediaUrl: url, fileName: name, replyToMessageId: replyingTo?.messageId ?? null });
       setReplyingTo(null);
@@ -474,11 +529,14 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({
         const uri = recordingRef.current?.getURI();
         recordingRef.current = null;
         if (uri && token) {
-          const text = await transcribeWithWhisper(uri, token, API_CONFIG.BASE_URL);
-          if (text) {
+          const { text, serverMessage } = await transcribeWithWhisper(uri, token, API_CONFIG.BASE_URL);
+          if (text?.trim()) {
             setMessageText((prev) => (prev ? `${prev} ${text}` : text));
           } else {
-            alertError(t("common.error"), t("chat.transcriptionFailed"));
+            alertWarning(
+              t("chat.transcriptionUnavailableTitle"),
+              serverMessage?.trim() ? serverMessage : t("chat.transcriptionUnavailableBody"),
+            );
           }
         }
       } catch {
@@ -503,7 +561,7 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({
     } catch {
       alertError(t("common.error"), t("chat.recordingFailed"));
     }
-  }, [isRecording, token, t, alertError]);
+  }, [isRecording, token, t, alertError, alertWarning]);
 
   // --- Context menu ---
   const showContextMenu = useCallback((msg: ChatMessageItemDto) => {
@@ -536,6 +594,12 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({
       t("common.cancel"),
     );
   }, [contextMenuMessage, threadId, hideContextMenu, deleteChatMessage, confirm, t]);
+
+  const handleCopyFromMenu = useCallback(async () => {
+    if (!contextMenuMessage?.text) return;
+    hideContextMenu();
+    await Clipboard.setStringAsync(contextMenuMessage.text);
+  }, [contextMenuMessage, hideContextMenu]);
 
   const handleDeleteThread = useCallback(() => {
     setShowHeaderMenu(false);
@@ -1236,48 +1300,155 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({
         )}
       </View>
 
-      {/* Long-press context menu overlay */}
+      {/* Long-press context menu overlay — Zeego style */}
       {contextMenuMessage && (
-        <Modal transparent animationType="none" onRequestClose={hideContextMenu}>
-          <Pressable style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.45)" }} onPress={hideContextMenu}>
+        <Modal transparent animationType="none" statusBarTranslucent onRequestClose={hideContextMenu}>
+          <Pressable style={{ flex: 1 }} onPress={hideContextMenu}>
+            {/* Blurred backdrop */}
+            <BlurView
+              intensity={isDark ? 28 : 18}
+              tint={isDark ? "dark" : "light"}
+              style={{
+                position: "absolute",
+                top: 0, left: 0, right: 0, bottom: 0,
+              }}
+            />
             <Animated.View
               style={{
                 position: "absolute",
-                bottom: insets.bottom + 80,
-                alignSelf: "center",
-                width: 220,
-                borderRadius: 16,
-                overflow: "hidden",
-                backgroundColor: isDark ? "#1e293b" : "#ffffff",
-                transform: [{ scale: contextMenuAnim.interpolate({ inputRange: [0, 1], outputRange: [0.85, 1] }) }],
+                top: 0, left: 0, right: 0, bottom: 0,
+                backgroundColor: isDark ? "rgba(0,0,0,0.55)" : "rgba(0,0,0,0.28)",
                 opacity: contextMenuAnim,
-                shadowColor: "#000",
-                shadowOffset: { width: 0, height: 8 },
-                shadowOpacity: 0.25,
-                shadowRadius: 16,
-                elevation: 12,
+              }}
+            />
+
+            {/* Center container */}
+            <Animated.View
+              style={{
+                position: "absolute",
+                left: 0, right: 0,
+                bottom: insets.bottom + 60,
+                alignItems: "center",
+                paddingHorizontal: 24,
+                transform: [
+                  { translateY: contextMenuAnim.interpolate({ inputRange: [0, 1], outputRange: [30, 0] }) },
+                ],
+                opacity: contextMenuAnim,
               }}
             >
-              {/* Reply option */}
-              <TouchableOpacity
-                onPress={handleReplyFromMenu}
-                className="flex-row items-center gap-3 px-5 py-4"
-                style={{ borderBottomWidth: 1, borderBottomColor: colors.borderColor }}
-                activeOpacity={0.7}
-              >
-                <Icon source="reply" size={22} color={brandColor} />
-                <Text className="text-base font-century-gothic-sans-medium" style={{ color: colors.sectionHeaderText }}>{t("chat.reply")}</Text>
-              </TouchableOpacity>
+              {/* Message preview bubble */}
+              {contextMenuMessage.text ? (
+                <Animated.View
+                  style={{
+                    maxWidth: 280,
+                    borderRadius: 18,
+                    paddingHorizontal: 16,
+                    paddingVertical: 10,
+                    marginBottom: 14,
+                    backgroundColor: contextMenuMessage.senderUserId === currentUserId ? bubbleMeBg : bubbleOtherBg,
+                    borderWidth: contextMenuMessage.senderUserId === currentUserId ? 0 : 1,
+                    borderColor: bubbleOtherBorder,
+                    transform: [
+                      { scale: contextMenuAnim.interpolate({ inputRange: [0, 1], outputRange: [0.92, 1] }) },
+                    ],
+                    shadowColor: "#000",
+                    shadowOffset: { width: 0, height: 4 },
+                    shadowOpacity: 0.2,
+                    shadowRadius: 10,
+                    elevation: 6,
+                  }}
+                >
+                  <Text
+                    className="text-sm font-century-gothic"
+                    style={{ color: contextMenuMessage.senderUserId === currentUserId ? "#ffffff" : colors.sectionHeaderText }}
+                    numberOfLines={4}
+                  >
+                    {contextMenuMessage.text}
+                  </Text>
+                </Animated.View>
+              ) : null}
 
-              {/* Delete option (any participant can delete for themselves) */}
-              <TouchableOpacity
-                onPress={handleDeleteFromMenu}
-                className="flex-row items-center gap-3 px-5 py-4"
-                activeOpacity={0.7}
+              {/* Action items */}
+              <Animated.View
+                style={{
+                  width: "100%",
+                  maxWidth: 300,
+                  borderRadius: 16,
+                  overflow: "hidden",
+                  backgroundColor: isDark ? "#1e293b" : "#ffffff",
+                  shadowColor: "#000",
+                  shadowOffset: { width: 0, height: 10 },
+                  shadowOpacity: isDark ? 0.45 : 0.18,
+                  shadowRadius: 20,
+                  elevation: 14,
+                  transform: [
+                    { scale: contextMenuAnim.interpolate({ inputRange: [0, 1], outputRange: [0.88, 1] }) },
+                  ],
+                }}
               >
-                <Icon source="delete-outline" size={22} color="#ef4444" />
-                <Text className="text-base font-century-gothic-sans-medium" style={{ color: "#ef4444" }}>{t("chat.delete")}</Text>
-              </TouchableOpacity>
+                {/* Reply */}
+                <TouchableOpacity
+                  onPress={handleReplyFromMenu}
+                  activeOpacity={0.72}
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    paddingHorizontal: 20,
+                    paddingVertical: 14,
+                    borderBottomWidth: 0.5,
+                    borderBottomColor: isDark ? "rgba(148,163,184,0.18)" : "rgba(226,232,240,0.9)",
+                    gap: 14,
+                  }}
+                >
+                  <View style={{ width: 34, height: 34, borderRadius: 10, backgroundColor: isDark ? "rgba(240,94,35,0.15)" : "rgba(240,94,35,0.1)", alignItems: "center", justifyContent: "center" }}>
+                    <Icon source="reply" size={18} color={brandColor} />
+                  </View>
+                  <Text className="text-base font-century-gothic-sans-medium" style={{ color: colors.sectionHeaderText, flex: 1 }}>{t("chat.reply")}</Text>
+                  <Icon source="chevron-right" size={18} color={isDark ? "rgba(148,163,184,0.5)" : "rgba(100,116,139,0.5)"} />
+                </TouchableOpacity>
+
+                {/* Copy (only for text messages) */}
+                {contextMenuMessage.text && contextMenuMessage.messageType !== 3 /* not location */ && (
+                  <TouchableOpacity
+                    onPress={handleCopyFromMenu}
+                    activeOpacity={0.72}
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      paddingHorizontal: 20,
+                      paddingVertical: 14,
+                      borderBottomWidth: 0.5,
+                      borderBottomColor: isDark ? "rgba(148,163,184,0.18)" : "rgba(226,232,240,0.9)",
+                      gap: 14,
+                    }}
+                  >
+                    <View style={{ width: 34, height: 34, borderRadius: 10, backgroundColor: isDark ? "rgba(99,102,241,0.15)" : "rgba(99,102,241,0.1)", alignItems: "center", justifyContent: "center" }}>
+                      <Icon source="content-copy" size={18} color={isDark ? "#818cf8" : "#6366f1"} />
+                    </View>
+                    <Text className="text-base font-century-gothic-sans-medium" style={{ color: colors.sectionHeaderText, flex: 1 }}>{t("common.copy")}</Text>
+                    <Icon source="chevron-right" size={18} color={isDark ? "rgba(148,163,184,0.5)" : "rgba(100,116,139,0.5)"} />
+                  </TouchableOpacity>
+                )}
+
+                {/* Delete */}
+                <TouchableOpacity
+                  onPress={handleDeleteFromMenu}
+                  activeOpacity={0.72}
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    paddingHorizontal: 20,
+                    paddingVertical: 14,
+                    gap: 14,
+                  }}
+                >
+                  <View style={{ width: 34, height: 34, borderRadius: 10, backgroundColor: "rgba(239,68,68,0.12)", alignItems: "center", justifyContent: "center" }}>
+                    <Icon source="delete-outline" size={18} color="#ef4444" />
+                  </View>
+                  <Text className="text-base font-century-gothic-sans-medium" style={{ color: "#ef4444", flex: 1 }}>{t("chat.delete")}</Text>
+                  <Icon source="chevron-right" size={18} color="rgba(239,68,68,0.4)" />
+                </TouchableOpacity>
+              </Animated.View>
             </Animated.View>
           </Pressable>
         </Modal>

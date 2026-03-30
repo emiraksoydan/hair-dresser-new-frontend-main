@@ -15,6 +15,8 @@ interface ExtendedSearchBarProps extends SearchBarProps {
     forceBorderColor?: string;
     /** Arka plan ve border'ı kaldırır — bir container içinde kullanım için */
     transparent?: boolean;
+    /** Panel üstü: ikon ve yazı biraz küçük */
+    compact?: boolean;
 }
 
 const SearchBar: React.FC<ExtendedSearchBarProps> = ({
@@ -26,10 +28,14 @@ const SearchBar: React.FC<ExtendedSearchBarProps> = ({
     showButtons = true,
     forceBorderColor,
     transparent = false,
+    compact = false,
 }) => {
     const { t } = useLanguage();
     const { colors } = useTheme();
     const [isFocused, setIsFocused] = useState(false);
+    const iconSz = compact ? 19 : 22;
+    const inputFs = compact ? 14 : 15;
+    const btnSz = compact ? 19 : 22;
 
     const shouldShowLayoutToggle = showButtons && !!setIsList;
     const shouldShowFilter = showButtons && !!onFilterPress;
@@ -38,14 +44,14 @@ const SearchBar: React.FC<ExtendedSearchBarProps> = ({
 
     return (
         <View
-            className={`flex-row items-center px-3 rounded-xl h-14`}
+            className={`flex-row items-center px-3 rounded-xl ${compact ? "h-12" : "h-14"}`}
             style={{
                 backgroundColor: transparent ? 'transparent' : colors.cardBg,
                 borderWidth: transparent ? 0 : 1.5,
                 borderColor: transparent ? 'transparent' : borderColor,
             }}
         >
-            <Icon source="magnify" size={22} color="#9aa1ae" />
+            <Icon source="magnify" size={iconSz} color="#9aa1ae" />
 
             <TextInput
                 placeholder={t('common.searchPlaceholder')}
@@ -54,7 +60,7 @@ const SearchBar: React.FC<ExtendedSearchBarProps> = ({
                 value={searchQuery}
                 onFocus={() => setIsFocused(true)}
                 onBlur={() => setIsFocused(false)}
-                style={{ flex: 1, marginLeft: 8, fontSize: 15, color: colors.sectionHeaderText, fontFamily: 'CenturyGothic' }}
+                style={{ flex: 1, marginLeft: 8, fontSize: inputFs, color: colors.sectionHeaderText, fontFamily: 'CenturyGothic' }}
             />
 
             {(shouldShowLayoutToggle || shouldShowFilter) && (
@@ -63,7 +69,7 @@ const SearchBar: React.FC<ExtendedSearchBarProps> = ({
                         <IconButton
                             icon={isList ? "format-list-bulleted" : "view-grid-outline"}
                             iconColor={'#9aa1ae'}
-                            size={22}
+                            size={btnSz}
                             onPress={() => setIsList(!isList)}
                             style={{ margin: 0 }}
                         />
@@ -72,7 +78,7 @@ const SearchBar: React.FC<ExtendedSearchBarProps> = ({
                         <IconButton
                             icon="filter-variant"
                             iconColor="#9aa1ae"
-                            size={22}
+                            size={btnSz}
                             onPress={onFilterPress}
                             style={{ margin: 0 }}
                         />

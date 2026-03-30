@@ -1,14 +1,17 @@
 import { useLocalSearchParams } from "expo-router";
 import { useSafeNavigation } from "../../hook/useSafeNavigation";
 import { useActionGuard } from "../../hook/useActionGuard";
-import React, { useEffect, useMemo, useState, useCallback } from "react";
+import React, { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import {
   FlatList,
   Image,
   ScrollView,
   StatusBar,
+  StyleSheet,
   TouchableOpacity,
   View,
+  PanResponder,
+  Dimensions,
 } from "react-native";
 import { BottomSheetScrollView } from "@gorhom/bottom-sheet";
 import { Text } from "../common/Text";
@@ -64,6 +67,8 @@ interface Props {
   preselectedServices?: string[]; // Önceden seçilmiş hizmetler (serbest berber randevusu için)
   note?: string; // Randevu notu (Customer -> FreeBarber + Store senaryosu için)
   storeSelectionType?: StoreSelectionType; // StoreSelectionType (Dükkan Seç senaryosu için)
+  /** Liste kaydırmalı detay sayfasında üst görsel carousel ile jest çakışmasın */
+  disableHeaderImageSwipe?: boolean;
 }
 
 const StoreBookingContent = ({
@@ -77,6 +82,7 @@ const StoreBookingContent = ({
   storeSelectionType,
   mode,
   appointmentId,
+  disableHeaderImageSwipe = false,
 }: Props) => {
   const { colors, isDark } = useTheme();
   // store header info
@@ -240,81 +246,99 @@ const StoreBookingContent = ({
   const ScrollContainer = isBottomSheet ? BottomSheetScrollView : ScrollView;
 
   return (
-    <>
-      <View className="relative">
-        <ImageCarousel
-          images={storeData?.imageList ?? []}
-          mode={"default"}
-          height={250}
-        />
-        <View className="absolute top-0 left-0 right-0 bottom-0 bg-black opacity-50" />
-        <View className="absolute bottom-0 left-0 right-0 px-4 pb-3">
-          <View className="flex-row justify-between items-start">
-            <View className="flex-shrink flex-wrap gap-2 flex-row">
-              <Text
-                className="font-century-gothic text-white"
-                numberOfLines={1}
-                style={{ fontSize: 24 }}
-              >
-                {storeData?.storeName ?? "İşletme"}
-              </Text>
-              <View className="flex-row items-center gap-2 mt-1">
-                <Icon
-                  size={20}
-                  color={storeData?.type === 0 ? "#60a5fa" : "#f472b6"}
-                  source={storeData?.type === 0 ? "face-man" : "face-woman"}
-                />
+    <ScrollContainer
+      nestedScrollEnabled
+      contentContainerStyle={{ paddingBottom: 140 }}
+      showsVerticalScrollIndicator={false}
+      stickyHeaderIndices={isBottomSheet ? undefined : [0]}
+    >
+      {/* Yapışkan: görsel + işletme bilgisi + Randevu Al + gün şeridi (tam ekran tek blok) */}
+      <View style={{ backgroundColor: colors.sheetBg }}>
+        <View style={{ overflow: "hidden", backgroundColor: colors.sheetBg }}>
+          <View className="relative">
+            <ImageCarousel
+              images={storeData?.imageList ?? []}
+              mode={"default"}
+              height={250}
+              enableSwipe={!disableHeaderImageSwipe}
+            />
+            <View className="absolute top-0 left-0 right-0 bottom-0 bg-black opacity-50" />
+            <View className="absolute bottom-0 left-0 right-0 px-4 pb-3">
+              <View className="flex-row justify-between items-start">
+                <View className="flex-shrink flex-wrap gap-2 flex-row">
+                  <Text
+                    className="font-century-gothic text-white"
+                    numberOfLines={1}
+                    style={{ fontSize: 24 }}
+                  >
+                    {storeData?.storeName ?? "İşletme"}
+                  </Text>
+                  <View className="flex-row items-center gap-2 mt-1">
+                    <Icon
+                      size={20}
+                      color={storeData?.type === 0 ? "#60a5fa" : "#f472b6"}
+                      source={storeData?.type === 0 ? "face-man" : "face-woman"}
+                    />
+                    <Text
+                      className="text-white font-century-gothic"
+                      style={{ fontSize: 15 }}
+                    >
+                      - {getBarberTypeName(storeData?.type!)}
+                    </Text>
+                  </View>
+                </View>
+
+                <View className="flex-row items-center mt-2 gap-1">
+                  <Icon size={20} color="#FFA500" source="star" />
+                  <Text
+                    className="font-century-gothic text-white"
+                    style={{ fontSize: 15 }}
+                  >
+                    {Number(storeData?.rating ?? 0).toFixed(1)}
+                  </Text>
+                </View>
+              </View>
+              <View className="flex-row items-center gap-2 mt-2">
+                <Icon size={20} color="#FFA500" source="map-marker" />
                 <Text
-                  className="text-white font-century-gothic"
+                  className="font-century-gothic flex-shrink text-white"
+                  numberOfLines={1}
                   style={{ fontSize: 15 }}
                 >
-                  - {getBarberTypeName(storeData?.type!)}
+                  {storeData?.addressDescription ?? "Adres"}
                 </Text>
               </View>
             </View>
-
-            <View className="flex-row items-center mt-2 gap-1">
-              <Icon size={20} color="#FFA500" source="star" />
-              <Text
-                className="font-century-gothic text-white"
-                style={{ fontSize: 15 }}
+            {!isBottomSheet && (
+              <TouchableOpacity
+                onPress={() => router.back()}
+                className="absolute top-9 left-5 z-10 rounded-[40px] p-3"
+                style={{ backgroundColor: "rgba(0,0,0,0.4)" }}
               >
-                {Number(storeData?.rating ?? 0).toFixed(1)}
-              </Text>
-            </View>
-          </View>
-          <View className="flex-row items-center gap-2 mt-2">
-            <Icon size={20} color="#FFA500" source="map-marker" />
-            <Text
-              className="font-century-gothic flex-shrink text-white"
-              numberOfLines={1}
-              style={{ fontSize: 15 }}
-            >
-              {storeData?.addressDescription ?? "Adres"}
-            </Text>
+                <Icon source="chevron-left" size={25} color="white" />
+              </TouchableOpacity>
+            )}
           </View>
         </View>
-        {!isBottomSheet && (
-          <TouchableOpacity
-            onPress={() => router.back()}
-            className="absolute top-9 left-5 z-10 rounded-[40px] p-3"
-            style={{ backgroundColor: "rgba(0,0,0,0.4)" }}
-          >
-            <Icon source="chevron-left" size={25} color="white" />
-          </TouchableOpacity>
-        )}
-      </View>
 
-      <ScrollContainer nestedScrollEnabled contentContainerStyle={{ paddingBottom: 140 }}>
-        <View className="p-4 z-0 gap-3">
+        <View
+          style={{
+            backgroundColor: colors.sheetBg,
+            paddingHorizontal: 16,
+            paddingTop: 12,
+            paddingBottom: 12,
+            borderBottomWidth: StyleSheet.hairlineWidth,
+            borderBottomColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.07)",
+          }}
+        >
           <View className="flex-row justify-between items-center">
-            <Text className="font-century-gothic mt-3 text-xl" style={{ color: colors.sectionHeaderText }}>
+            <Text className="font-century-gothic text-xl" style={{ color: colors.sectionHeaderText }}>
               Randevu Al
             </Text>
           </View>
 
           {availabilityError ? (
-            <View className="rounded-xl p-3" style={{ backgroundColor: isDark ? "rgba(239,68,68,0.12)" : "rgba(254,202,202,0.35)" }}>
+            <View className="rounded-xl p-3 mt-3" style={{ backgroundColor: isDark ? "rgba(239,68,68,0.12)" : "rgba(254,202,202,0.35)" }}>
               <Text className="text-sm font-century-gothic" style={{ color: "#b91c1c" }}>
                 {getErrorMessage(availabilityError)}
               </Text>
@@ -325,6 +349,7 @@ const StoreBookingContent = ({
             horizontal
             showsHorizontalScrollIndicator={false}
             nestedScrollEnabled
+            style={{ marginTop: availabilityError ? 10 : 12 }}
           >
             <View className="flex-row gap-2 items-center pb-1">
               {days.map((d) => {
@@ -382,7 +407,10 @@ const StoreBookingContent = ({
               })}
             </View>
           </ScrollView>
+        </View>
+      </View>
 
+      <View className="px-4 pt-3 z-0 gap-3">
           {(isLoading || (isFetching && !availabilityByDay)) && (
             <View className="py-10">
               <ActivityIndicator />
@@ -973,8 +1001,7 @@ const StoreBookingContent = ({
             </Text>
           </TouchableOpacity>
         </View>
-      </ScrollContainer>
-    </>
+    </ScrollContainer>
   );
 };
 

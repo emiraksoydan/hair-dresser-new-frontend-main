@@ -1,22 +1,35 @@
 import { useLocalSearchParams } from "expo-router";
-import React from "react";
+import React, { useCallback, useEffect, useMemo } from "react";
 import { StatusBar, View } from "react-native";
 
 import StoreBookingContent from "../../components/store/storebooking";
+import { BookingSwipePager } from "../../components/common/BookingSwipePager";
 import { useGetAllNotificationsQuery } from "../../store/api";
 import { useAuth } from "../../hook/useAuth";
 import { AppointmentStatus, StoreSelectionType, UserType } from "../../types";
 import { useTheme } from "../../hook/useTheme";
+import { useSafeNavigation } from "../../hook/useSafeNavigation";
+import { useAppDispatch, useAppSelector } from "../../store/hook";
+import { clearStoreSwipeIds } from "../../store/bookingSwipeSlice";
 
 
 
 export default function StoreDetail() {
     const { colors, isDark } = useTheme();
+    const router = useSafeNavigation();
+    const dispatch = useAppDispatch();
     const { storeId, mode, appointmentId } = useLocalSearchParams<{ storeId: string; mode?: string; appointmentId?: string }>();
+    const swipeStoreIds = useAppSelector((s) => s.bookingSwipe.storeIds);
     const { userType } = useAuth();
     const { data: notifications = [] } = useGetAllNotificationsQuery(undefined, {
         skip: userType !== UserType.FreeBarber,
     });
+
+    useEffect(() => {
+        return () => {
+            dispatch(clearStoreSwipeIds());
+        };
+    }, [dispatch]);
 
     const activeStoreSelectionAppointment = React.useMemo(() => {
         if (userType !== UserType.FreeBarber) return null;
@@ -72,17 +85,56 @@ export default function StoreDetail() {
     const isCustomer = effectiveMode === "customer" || (!effectiveMode && userType === UserType.Customer);
     const isAddStoreMode = effectiveMode === "add-store";
 
+    const showSwipePager = useMemo(
+        () =>
+            !!swipeStoreIds &&
+            swipeStoreIds.length > 1 &&
+            !!storeId &&
+            swipeStoreIds.includes(storeId),
+        [swipeStoreIds, storeId],
+    );
+
+    const onSwipeCommit = useCallback(
+        (_index: number, id: string) => {
+            router.setParams({ storeId: id });
+        },
+        [router],
+    );
+
+    const bookingProps = useMemo(
+        () => ({
+            isCustomer,
+            isFreeBarber,
+            isBottomSheet: false as const,
+            mode: isAddStoreMode ? ("add-store" as const) : undefined,
+            appointmentId: effectiveAppointmentId,
+            disableHeaderImageSwipe: !!showSwipePager,
+        }),
+        [isCustomer, isFreeBarber, isAddStoreMode, effectiveAppointmentId, showSwipePager],
+    );
+
     return (
         <View style={{ flex: 1, backgroundColor: colors.screenBg }}>
             <StatusBar translucent backgroundColor="transparent" barStyle={isDark ? "light-content" : "dark-content"} />
-            <StoreBookingContent
-                storeId={storeId}
-                isCustomer={isCustomer}
-                isFreeBarber={isFreeBarber}
-                isBottomSheet={false}
-                mode={isAddStoreMode ? "add-store" : undefined}
-                appointmentId={effectiveAppointmentId}
-            />
+            {showSwipePager && swipeStoreIds ? (
+                <BookingSwipePager
+                    ids={swipeStoreIds}
+                    initialId={storeId}
+                    onCommittedIndex={onSwipeCommit}
+                >
+                    {(id) => (
+                        <StoreBookingContent
+                            storeId={id}
+                            {...bookingProps}
+                        />
+                    )}
+                </BookingSwipePager>
+            ) : (
+                <StoreBookingContent
+                    storeId={storeId}
+                    {...bookingProps}
+                />
+            )}
         </View>
     );
 }

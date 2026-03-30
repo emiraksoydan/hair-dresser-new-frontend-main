@@ -12,6 +12,14 @@ const np =
 
 module.exports = {
   expo: {
+    /**
+     * Mağaza / yön / tablet:
+     * - orientation: "portrait" → Üretim build'inde iOS ve Android manifest'te yalnızca dikey; yatay döndürme kapalı.
+     * - ios.supportsTablet: false → App Store listesinde iPad için ayrı "universal" optimizasyonu yok (telefon odaklı).
+     * - ios.requireFullScreen: true → iPad'de Split View / Slide Over ile küçük pencerede çoklu görev kısıtlı (Info.plist UIRequiresFullScreen).
+     * Google Play'de tableti tamamen dışlamak: Play Console → Üretim → Cihaz kataloğu / form faktörü (telefon seç, tablet hariç tut).
+     * Değişiklikten sonra: npx expo prebuild --clean veya EAS yeni native build.
+     */
     scheme: "hairdresser",
     name: "Gümüş Makas",
     slug: "HairDresser",
@@ -27,6 +35,7 @@ module.exports = {
     },
     ios: {
       supportsTablet: false,
+      requireFullScreen: true,
       infoPlist: {
         NSLocationWhenInUseUsageDescription: np.locationWhenInUse,
         NSLocationAlwaysAndWhenInUseUsageDescription: np.locationAlways,

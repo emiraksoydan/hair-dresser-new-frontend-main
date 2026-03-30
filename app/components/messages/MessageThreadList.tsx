@@ -30,7 +30,7 @@ interface MessageThreadListProps {
     iconSource: string; // Icon name for the avatar (react-native-paper icon name)
 }
 
-const THREAD_ROW_STRIDE = 132;
+const THREAD_ROW_STRIDE = 152;
 
 export const MessageThreadList: React.FC<MessageThreadListProps> = ({ routePrefix, iconSource }) => {
     const router = useSafeNavigation();
@@ -209,10 +209,10 @@ export const MessageThreadList: React.FC<MessageThreadListProps> = ({ routePrefi
         };
 
         return (
-            <ScrollStackItem index={index} scroll={scrollY} itemStride={THREAD_ROW_STRIDE}>
+            <ScrollStackItem index={index} scroll={scrollY} itemStride={THREAD_ROW_STRIDE} vanish>
             <TouchableOpacity
                 onPress={handlePress}
-                className="rounded-2xl pt-2 p-4 mb-3"
+                className={`rounded-2xl mb-3 ${hasUnread ? "pt-3 px-4 pb-4" : "pt-2 p-4"}`}
                 activeOpacity={0.82}
                 style={{
                     backgroundColor: hasUnread ? threadBackground : colors.cardBg,
@@ -237,7 +237,7 @@ export const MessageThreadList: React.FC<MessageThreadListProps> = ({ routePrefi
                     </View>
                 ) : null}
                 <View className="flex-row items-start" style={{ minWidth: 0 }}>
-                    <View className="flex-1 pr-4" style={{ minWidth: 0, flexShrink: 1 }}>
+                    <View className="flex-1 pr-3" style={{ minWidth: 0, flexShrink: 1 }}>
                         {item.participants.length > 1 ? (
                             renderOverlappingParticipants(item.participants)
                         ) : item.participants.length === 1 ? (
@@ -250,21 +250,29 @@ export const MessageThreadList: React.FC<MessageThreadListProps> = ({ routePrefi
 
                         {item.lastMessagePreview && (
                             <View
-                                className="flex-row items-center gap-2 mt-2.5 px-2.5 py-2 rounded-lg"
+                                className={`flex-row items-start rounded-xl ${hasUnread ? "mt-3 gap-3 px-3 py-3" : "mt-2.5 gap-2 px-2.5 py-2 rounded-lg"}`}
                                 style={{
                                     marginLeft: item.participants.length > 0 ? 42 : 0,
                                     minWidth: 0,
                                     maxWidth: '100%',
-                                    backgroundColor: isDark ? '#111827' : '#f1f5f9',
+                                    backgroundColor: hasUnread
+                                        ? (isDark ? 'rgba(240,94,35,0.08)' : 'rgba(254,243,199,0.45)')
+                                        : (isDark ? '#111827' : '#f1f5f9'),
                                     borderWidth: 1,
-                                    borderColor: colors.borderColor,
+                                    borderColor: hasUnread ? `${unreadAccent}40` : colors.borderColor,
                                 }}
                             >
-                                <Icon source="message-text" size={12} color={hasUnread ? unreadAccent : mutedTextColor} />
+                                <View style={{ paddingTop: hasUnread ? 2 : 0 }}>
+                                    <Icon
+                                        source="message-text"
+                                        size={hasUnread ? 14 : 12}
+                                        color={hasUnread ? unreadAccent : mutedTextColor}
+                                    />
+                                </View>
                                 <Text
-                                    className={`text-sm mb-0 ${hasUnread ? 'font-century-gothic-sans-medium' : 'font-century-gothic-sans-regular'}`}
-                                    style={hasUnread ? { color: colors.sectionHeaderText, flexShrink: 1, minWidth: 0, maxWidth: '100%' } : { color: mutedTextColor, flexShrink: 1, minWidth: 0, maxWidth: '100%' }}
-                                    numberOfLines={2}
+                                    className={`mb-0 ${hasUnread ? 'text-[15px] leading-5 font-century-gothic-sans-medium' : 'text-sm font-century-gothic-sans-regular'}`}
+                                    style={hasUnread ? { color: colors.sectionHeaderText, flex: 1, minWidth: 0 } : { color: mutedTextColor, flexShrink: 1, minWidth: 0, maxWidth: '100%' }}
+                                    numberOfLines={hasUnread ? 4 : 2}
                                 >
                                     {item.lastMessagePreview}
                                 </Text>
@@ -272,27 +280,27 @@ export const MessageThreadList: React.FC<MessageThreadListProps> = ({ routePrefi
                         )}
                     </View>
 
-                    <View className="items-end ml-3" style={{ minWidth: 70 }}>
+                    <View className="items-end shrink-0" style={{ minWidth: 72, paddingLeft: 4 }}>
                         {item.lastMessageAt && (
-                            <Text className="text-xs mb-1" style={{ color: tertiaryTextColor }}>
+                            <Text className="text-xs mb-2" style={{ color: tertiaryTextColor }}>
                                 {formatTime(item.lastMessageAt)}
                             </Text>
                         )}
                         {hasUnread && (
                             <View
-                                className="px-2 py-0.5 rounded-full mb-1"
+                                className="px-2.5 py-1.5 rounded-full mb-2"
                                 style={{ backgroundColor: unreadAccent + COLORS.OPACITY.LIGHT, borderWidth: 1, borderColor: unreadAccent + COLORS.OPACITY.MEDIUM }}
                             >
-                                <Text className="text-[10px] font-century-gothic-sans-bold" style={{ color: unreadAccent }}>
+                                <Text className="text-[11px] font-century-gothic-sans-bold" style={{ color: unreadAccent }}>
                                     {t('chat.newMessage')} ({item.unreadCount > 99 ? '99+' : item.unreadCount})
                                 </Text>
                             </View>
                         )}
-                        <View className="relative items-center justify-center">
-                            <Icon source="message-text" size={18} color={hasUnread ? unreadAccent : mutedTextColor} />
+                        <View className="relative items-center justify-center mt-1">
+                            <Icon source="message-text" size={20} color={hasUnread ? unreadAccent : mutedTextColor} />
                             {hasUnread && item.unreadCount > 0 && (
-                                <View className="absolute -top-1 -right-1 rounded-full w-4 h-4 items-center justify-center" style={{ backgroundColor: unreadAccent }}>
-                                    <Text className="text-white text-[8px] font-bold">
+                                <View className="absolute -top-1.5 -right-1.5 rounded-full min-w-[18px] h-[18px] px-1 items-center justify-center" style={{ backgroundColor: unreadAccent }}>
+                                    <Text className="text-white text-[9px] font-bold">
                                         {item.unreadCount > 9 ? '9+' : item.unreadCount}
                                     </Text>
                                 </View>

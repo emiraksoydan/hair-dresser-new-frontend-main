@@ -14,6 +14,8 @@ interface ImageCarouselProps {
   containerStyle?: StyleProp<ViewStyle>;
   showPagination?: boolean;
   mode?: any; // Allow any mode supported by the carousel library
+  /** false: üst seviye yatay sayfa kaydırması ile çakışmayı önlemek için tek görsel */
+  enableSwipe?: boolean;
 }
 
 const emptyImage = require('../../../assets/images/empty.png');
@@ -28,6 +30,7 @@ export const ImageCarousel: React.FC<ImageCarouselProps> = React.memo(({
   containerStyle,
   showPagination = true,
   mode,
+  enableSwipe = true,
 }) => {
   const { isDark } = useTheme();
   const width = widthProp ?? Dimensions.get('window').width;
@@ -56,6 +59,24 @@ export const ImageCarousel: React.FC<ImageCarouselProps> = React.memo(({
         <Image
           source={emptyImage}
           style={{ width: '100%', height: '100%', borderRadius: borderRadiusValue }}
+          resizeMode="cover"
+        />
+      </View>
+    );
+  }
+
+  if (!enableSwipe) {
+    const first = imageData[0];
+    return (
+      <View style={[{ width, height, overflow: 'hidden', borderRadius: borderRadiusValue }, containerStyle]}>
+        <Image
+          source={first?.imageUrl ? { uri: first.imageUrl } : emptyImage}
+          defaultSource={emptyImage}
+          style={{
+            width: '100%',
+            height: '100%',
+            borderRadius: borderRadiusValue,
+          }}
           resizeMode="cover"
         />
       </View>
@@ -126,7 +147,8 @@ export const ImageCarousel: React.FC<ImageCarouselProps> = React.memo(({
   const sameHeight = prevProps.height === nextProps.height;
   const samePagination = prevProps.showPagination === nextProps.showPagination;
 
-  return sameImages && sameAutoPlay && sameBorderRadius && sameWidth && sameHeight && samePagination;
+  const sameSwipe = prevProps.enableSwipe === nextProps.enableSwipe;
+  return sameImages && sameAutoPlay && sameBorderRadius && sameWidth && sameHeight && samePagination && sameSwipe;
 });
 
 ImageCarousel.displayName = 'ImageCarousel';

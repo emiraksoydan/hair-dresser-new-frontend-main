@@ -191,8 +191,8 @@ export const CustomCurvedTabBar: React.FC<CustomCurvedTabBarProps> = ({
           </AnimatedView>
         </View>
 
-        {/* Badge */}
-        {tab.badgeCount !== undefined && tab.badgeCount > 0 && (
+        {/* Badge: aktif sekmede yüzen butonda gösterilir; burada yalnızca pasif */}
+        {tab.badgeCount !== undefined && tab.badgeCount > 0 && !isActive && (
           <View style={styles.badge}>
             <Text style={styles.badgeText}>
               {tab.badgeCount > 99 ? '99+' : tab.badgeCount}
@@ -247,6 +247,16 @@ export const CustomCurvedTabBar: React.FC<CustomCurvedTabBarProps> = ({
               color={activeIconColor}
             />
           </AnimatedView>
+          {tabs[activeIndex]?.badgeCount !== undefined &&
+            tabs[activeIndex]!.badgeCount! > 0 && (
+              <View style={styles.floatBadge}>
+                <Text style={styles.floatBadgeText}>
+                  {tabs[activeIndex]!.badgeCount! > 99
+                    ? '99+'
+                    : tabs[activeIndex]!.badgeCount}
+                </Text>
+              </View>
+            )}
         </View>
       </AnimatedView>
 
@@ -282,11 +292,31 @@ const styles = StyleSheet.create({
   floatButton: {
     alignItems: 'center',
     justifyContent: 'center',
+    position: 'relative',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 8,
+  },
+  floatBadge: {
+    position: 'absolute',
+    top: -2,
+    right: -2,
+    backgroundColor: '#EF4444',
+    borderRadius: 10,
+    minWidth: 18,
+    height: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 4,
+    borderWidth: 2,
+    borderColor: '#ffffff',
+  },
+  floatBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: 'bold',
   },
   tabsContainer: {
     flexDirection: 'row',

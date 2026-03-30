@@ -10,7 +10,17 @@ import {
   Switch,
   TouchableOpacity,
   View,
+  type ViewStyle,
 } from "react-native";
+import Animated, {
+  Extrapolation,
+  interpolate,
+  type AnimatedStyle,
+  type SharedValue,
+  useAnimatedScrollHandler,
+  useAnimatedStyle,
+  useSharedValue,
+} from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { BottomSheetModal, BottomSheetScrollView } from "@gorhom/bottom-sheet";
@@ -40,6 +50,23 @@ import { AnimatedMoneyText } from "../../components/common/AnimatedMoneyText";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const CURRENCY = "₺";
+
+/** Kazanç kartları yatay liste: Movie slider ile aynı stride (kart + aralık) */
+const EARNINGS_SLIDE_WIDTH = Math.round(SCREEN_WIDTH * 0.78);
+const EARNINGS_CAROUSEL_GAP = 10;
+const EARNINGS_ITEM_STRIDE = EARNINGS_SLIDE_WIDTH + EARNINGS_CAROUSEL_GAP;
+const EARNINGS_CARD_HEIGHT = 152;
+
+type ShopInsightsEarningsCardModel = {
+  label: string;
+  value: number;
+  valueOverride?: string;
+  subText?: string;
+  icon: string;
+  accentColor: string;
+  lottieSource?: number;
+  animateNumbers?: boolean;
+};
 
 const LOTTIE_EARNINGS_COIN = require("../../../assets/animations/coin.json");
 const LOTTIE_EARNINGS_TREASURE = require("../../../assets/animations/treasurercoin.json");
@@ -164,6 +191,7 @@ const EarningsCard = ({
   lottieSource,
   animateNumbers,
   valueSuffix,
+  detailAnimatedStyle,
 }: {
   label: string;
   value: number;
@@ -178,48 +206,85 @@ const EarningsCard = ({
   animateNumbers?: boolean;
   /** Varsayılan ₺ yerine özel sonek (örn. %) */
   valueSuffix?: string;
+  /** Carousel: alt metin + Lottie için merkez odaklı opacity */
+  detailAnimatedStyle?: AnimatedStyle<ViewStyle>;
 }) => {
-  /** #RRGGBB + AA: kartları biraz daha belirgin (önceki 0f/16 çok soluktu) */
-  const bgColor = isDark ? `${accentColor}3a` : `${accentColor}26`;
-  const borderColor = `${accentColor}5a`;
+  const cardBg = isDark ? "rgba(20,26,46,0.92)" : "rgba(255,255,255,0.95)";
+  const accentBg = `${accentColor}22`;
   const suffix = valueSuffix ?? CURRENCY;
+  const subTextStyle = {
+    color: isDark ? "rgba(255,255,255,0.45)" : "rgba(30,41,59,0.45)",
+    fontSize: 10,
+    marginTop: 5,
+    fontFamily: "CenturyGothic",
+  } as const;
+
   return (
     <View
       style={{
         flex: 1,
         minWidth: 0,
-        borderRadius: 18,
-        padding: 12,
-        backgroundColor: bgColor,
-        borderWidth: 1.5,
-        borderColor,
+        borderRadius: 20,
+        padding: 16,
+        backgroundColor: cardBg,
+        borderWidth: 1,
+        borderColor: `${accentColor}45`,
         overflow: "hidden",
+        ...(Platform.OS === "ios"
+          ? { shadowColor: accentColor, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.28, shadowRadius: 14 }
+          : { elevation: 6 }),
       }}
     >
+      {/* Top accent line */}
+      <View
+        style={{
+          position: "absolute",
+          top: 0, left: 0, right: 0,
+          height: 3,
+          borderTopLeftRadius: 20,
+          borderTopRightRadius: 20,
+          backgroundColor: accentColor,
+          opacity: 0.7,
+        }}
+      />
       <View style={{ flexDirection: "row", alignItems: "flex-start" }}>
         <View style={{ flex: 1, minWidth: 0, paddingRight: showLottie && lottieSource != null ? 6 : 0 }}>
-          <View style={{ flexDirection: "row", alignItems: "flex-start", marginBottom: 6 }}>
-            <Icon source={icon} size={16} color={accentColor} />
+          {/* Icon + label */}
+          <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 10, gap: 8 }}>
+            <View
+              style={{
+                width: 32,
+                height: 32,
+                borderRadius: 10,
+                backgroundColor: accentBg,
+                alignItems: "center",
+                justifyContent: "center",
+                flexShrink: 0,
+              }}
+            >
+              <Icon source={icon} size={18} color={accentColor} />
+            </View>
             <Text
               style={{
-                color: accentColor,
+                color: isDark ? "rgba(255,255,255,0.75)" : "rgba(30,41,59,0.75)",
                 fontFamily: "CenturyGothic-Bold",
                 fontSize: 11,
-                marginLeft: 6,
                 flex: 1,
+                lineHeight: 15,
               }}
-              numberOfLines={3}
+              numberOfLines={2}
             >
               {label}
             </Text>
           </View>
+
+          {/* Value */}
           {valueOverride != null ? (
             <Text
               style={{
                 color: accentColor,
                 fontFamily: "CenturyGothic-Bold",
-                fontSize: 18,
-                marginTop: 0,
+                fontSize: 22,
               }}
               numberOfLines={1}
               adjustsFontSizeToFit
@@ -234,8 +299,7 @@ const EarningsCard = ({
               style={{
                 color: accentColor,
                 fontFamily: "CenturyGothic-Bold",
-                fontSize: 18,
-                marginTop: 0,
+                fontSize: 22,
               }}
               enabled={animateNumbers}
             />
@@ -244,8 +308,7 @@ const EarningsCard = ({
               style={{
                 color: accentColor,
                 fontFamily: "CenturyGothic-Bold",
-                fontSize: 18,
-                marginTop: 0,
+                fontSize: 22,
               }}
               numberOfLines={1}
               adjustsFontSizeToFit
@@ -255,24 +318,159 @@ const EarningsCard = ({
               {suffix}
             </Text>
           )}
-          {!!subText && (
-            <Text style={{ color: accentColor, fontSize: 9, marginTop: 4, opacity: 0.95 }} numberOfLines={2}>
-              {subText}
-            </Text>
-          )}
+
+          {!!subText &&
+            (detailAnimatedStyle ? (
+              <Animated.View style={detailAnimatedStyle}>
+                <Text style={subTextStyle} numberOfLines={2}>
+                  {subText}
+                </Text>
+              </Animated.View>
+            ) : (
+              <Text style={subTextStyle} numberOfLines={2}>
+                {subText}
+              </Text>
+            ))}
         </View>
         {showLottie && lottieSource != null ? (
-          <LottieView
-            source={lottieSource as any}
-            autoPlay
-            loop
-            style={{ width: 40, height: 40, flexShrink: 0 }}
-          />
+          detailAnimatedStyle ? (
+            <Animated.View style={detailAnimatedStyle}>
+              <LottieView
+                source={lottieSource as any}
+                autoPlay
+                loop
+                style={{ width: 48, height: 48, flexShrink: 0, marginLeft: 4 }}
+              />
+            </Animated.View>
+          ) : (
+            <LottieView
+              source={lottieSource as any}
+              autoPlay
+              loop
+              style={{ width: 48, height: 48, flexShrink: 0, marginLeft: 4 }}
+            />
+          )
         ) : null}
       </View>
     </View>
   );
 };
+
+function EarningsCarouselSlide({
+  item,
+  index,
+  currentIndex,
+  isDark,
+  showLottie,
+}: {
+  item: ShopInsightsEarningsCardModel;
+  index: number;
+  currentIndex: SharedValue<number>;
+  isDark: boolean;
+  showLottie: boolean;
+}) {
+  const itemScaleStyle = useAnimatedStyle(() => ({
+    transform: [
+      {
+        scale: interpolate(
+          currentIndex.value,
+          [index - 1, index, index + 1],
+          [0.85, 1, 0.9],
+          Extrapolation.CLAMP
+        ),
+      },
+    ],
+  }));
+
+  const detailOpacityStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(
+      currentIndex.value,
+      [index - 1, index - 0.5, index, index + 1],
+      [0, 0, 1, 0],
+      Extrapolation.CLAMP
+    ),
+  }));
+
+  return (
+    <View
+      style={{
+        width: EARNINGS_ITEM_STRIDE,
+        height: EARNINGS_CARD_HEIGHT + 14,
+        justifyContent: "center",
+      }}
+    >
+      <Animated.View
+        style={[
+          {
+            width: EARNINGS_SLIDE_WIDTH,
+            height: EARNINGS_CARD_HEIGHT,
+            paddingHorizontal: 6,
+            justifyContent: "center",
+            alignSelf: "flex-start",
+          },
+          itemScaleStyle,
+        ]}
+      >
+        <EarningsCard
+          label={item.label}
+          value={item.value}
+          valueOverride={item.valueOverride}
+          subText={item.subText}
+          icon={item.icon}
+          accentColor={item.accentColor}
+          isDark={isDark}
+          showLottie={showLottie}
+          lottieSource={item.lottieSource}
+          animateNumbers={item.animateNumbers}
+          detailAnimatedStyle={detailOpacityStyle}
+        />
+      </Animated.View>
+    </View>
+  );
+}
+
+function ShopInsightsEarningsCarousel({
+  cards,
+  isDark,
+  showLottie,
+}: {
+  cards: ShopInsightsEarningsCardModel[];
+  isDark: boolean;
+  showLottie: boolean;
+}) {
+  const currentIndex = useSharedValue(0);
+  const onScroll = useAnimatedScrollHandler({
+    onScroll: (e) => {
+      currentIndex.value = e.contentOffset.x / EARNINGS_ITEM_STRIDE;
+    },
+  });
+
+  return (
+    <Animated.FlatList
+      data={cards}
+      keyExtractor={(_, i) => `earnings-slide-${i}`}
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      snapToInterval={EARNINGS_ITEM_STRIDE}
+      decelerationRate="fast"
+      onScroll={onScroll}
+      scrollEventThrottle={16}
+      contentContainerStyle={{
+        paddingLeft: 16,
+        paddingRight: SCREEN_WIDTH - EARNINGS_ITEM_STRIDE,
+      }}
+      renderItem={({ item, index }) => (
+        <EarningsCarouselSlide
+          item={item}
+          index={index}
+          currentIndex={currentIndex}
+          isDark={isDark}
+          showLottie={showLottie}
+        />
+      )}
+    />
+  );
+}
 
 const FilterChip = ({
   label,
@@ -693,6 +891,7 @@ export default function ShopInsightsPage() {
       <ScrollView
         contentContainerStyle={{ paddingBottom: 60 }}
         showsVerticalScrollIndicator={false}
+        stickyHeaderIndices={[0]}
       >
         <View
           style={{
@@ -702,6 +901,7 @@ export default function ShopInsightsPage() {
             backgroundColor: isDark ? "#0f0f1a" : "#f1f5f9",
             borderBottomWidth: 1,
             borderBottomColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.07)",
+            zIndex: 10,
           }}
         >
           <Text
@@ -841,61 +1041,54 @@ export default function ShopInsightsPage() {
           )}
         </View>
 
-        <View style={{ paddingHorizontal: 12, paddingTop: 12 }}>
+        <View style={{ paddingTop: 8, paddingBottom: 2 }}>
           {loadingStore && (
             <View style={{ alignItems: "center", marginBottom: 12 }}>
               <ActivityIndicator color="#ffb900" />
             </View>
           )}
 
-          <View style={{ gap: 10 }}>
-            <View style={{ flexDirection: "row", gap: 10 }}>
-              <EarningsCard
-                label={t("profile.dailyEarnings")}
-                value={earnings?.dailyEarnings ?? 0}
-                icon="cash-multiple"
-                accentColor="#5eead4"
-                isDark={isDark}
-                showLottie={showImageAnimationSetting}
-                lottieSource={LOTTIE_EARNINGS_COIN}
-                animateNumbers={showPriceAnimationSetting}
-              />
-              <EarningsCard
-                label={t("profile.totalEarnings")}
-                value={earnings?.totalEarnings ?? 0}
-                subText={prevText}
-                icon="finance"
-                accentColor="#7dd3fc"
-                isDark={isDark}
-                showLottie={showImageAnimationSetting}
-                lottieSource={LOTTIE_EARNINGS_TREASURE}
-                animateNumbers={showPriceAnimationSetting}
-              />
-            </View>
-            <View style={{ flexDirection: "row", gap: 10 }}>
-              <EarningsCard
-                label={t("profile.profitRate")}
-                value={0}
-                valueOverride={pctText}
-                icon={pct >= 0 ? "trending-up" : "trending-down"}
-                accentColor={profitFg}
-                isDark={isDark}
-                showLottie={showImageAnimationSetting}
-                lottieSource={LOTTIE_EARNINGS_GROWTH}
-                animateNumbers={false}
-              />
-              <EarningsCard
-                label={t("profile.allTimeTotalLabel")}
-                value={allTimeTotalEarnings}
-                icon="chart-timeline-variant"
-                accentColor="#fcd34d"
-                isDark={isDark}
-                showLottie={showImageAnimationSetting}
-                lottieSource={LOTTIE_EARNINGS_TREASURE}
-                animateNumbers={showPriceAnimationSetting}
-              />
-            </View>
-          </View>
+          {/* Kazanç kartları: scroll offset → SharedValue index; scale + detay opacity (Movie slider mantığı) */}
+          <ShopInsightsEarningsCarousel
+            cards={[
+              {
+                label: t("profile.dailyEarnings"),
+                value: earnings?.dailyEarnings ?? 0,
+                icon: "cash-multiple",
+                accentColor: "#5eead4",
+                lottieSource: LOTTIE_EARNINGS_COIN,
+                animateNumbers: showPriceAnimationSetting,
+              },
+              {
+                label: t("profile.totalEarnings"),
+                value: earnings?.totalEarnings ?? 0,
+                subText: prevText,
+                icon: "finance",
+                accentColor: "#7dd3fc",
+                lottieSource: LOTTIE_EARNINGS_TREASURE,
+                animateNumbers: showPriceAnimationSetting,
+              },
+              {
+                label: t("profile.profitRate"),
+                value: 0,
+                valueOverride: pctText,
+                icon: pct >= 0 ? "trending-up" : "trending-down",
+                accentColor: profitFg,
+                lottieSource: LOTTIE_EARNINGS_GROWTH,
+                animateNumbers: false,
+              },
+              {
+                label: t("profile.allTimeTotalLabel"),
+                value: allTimeTotalEarnings,
+                icon: "chart-timeline-variant",
+                accentColor: "#fcd34d",
+                lottieSource: LOTTIE_EARNINGS_TREASURE,
+                animateNumbers: showPriceAnimationSetting,
+              },
+            ]}
+            isDark={isDark}
+            showLottie={showImageAnimationSetting}
+          />
         </View>
 
         <View

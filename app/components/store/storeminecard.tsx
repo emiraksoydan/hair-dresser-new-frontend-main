@@ -25,10 +25,14 @@ type Props = {
     onPressRatings?: (storeId: string, storeName: string) => void;
     showImageAnimation?: boolean;
     panelCompare?: { selected: boolean; onPress: () => void; hidden?: boolean };
+    /** Profil «İşletmelerim» ekranı: başlık, rozet, puan vb. küçük; hizmet listesi aynı */
+    profileCompact?: boolean;
 };
 
-const StoreMineCard: React.FC<Props> = ({ store, isList, expanded, cardWidthStore, onPressUpdate, onPressRatings, showImageAnimation = true, panelCompare }) => {
-    const carouselWidth = Math.max(0, cardWidthStore - 20);
+const StoreMineCard: React.FC<Props> = ({ store, isList, expanded, cardWidthStore, onPressUpdate, onPressRatings, showImageAnimation = true, panelCompare, profileCompact = false }) => {
+    const carouselWidth = Math.max(0, cardWidthStore - (profileCompact ? 16 : 20));
+    const listImageH = profileCompact ? 296 : 320;
+    const gridImageS = profileCompact ? 104 : 112;
     const { colors } = useTheme();
     const { data: me } = useGetMeQuery();
     const ownerUserId = me?.data?.id ?? null;
@@ -54,13 +58,14 @@ const StoreMineCard: React.FC<Props> = ({ store, isList, expanded, cardWidthStor
             style={{ width: cardWidthStore, overflow: 'hidden' }}
             className="mt-4"
         >
-            <View style={{ backgroundColor: colors.cardBg }} className={` ${!isList ? "pl-4 py-2 rounded-lg" : "rounded-xl p-3"
+            <View style={{ backgroundColor: colors.cardBg }} className={` ${!isList ? "pl-4 py-2 rounded-lg" : profileCompact ? "rounded-xl p-2.5" : "rounded-xl p-3"
                 }`}>
                 {!isList && (
                     <View className='flex-row justify-end px-2 pb-0'>
                         <StatusBadge
                             type={store.isOpenNow ? 'open' : 'closed'}
                             isList={false}
+                            dense={profileCompact}
                         />
                     </View>
                 )}
@@ -70,8 +75,8 @@ const StoreMineCard: React.FC<Props> = ({ store, isList, expanded, cardWidthStor
                             images={store.imageList}
                             onPress={handlePressCard}
                             isList={isList}
-                            width={isList ? carouselWidth : 112}
-                            height={isList ? 320 : 112}
+                            width={isList ? carouselWidth : gridImageS}
+                            height={isList ? listImageH : gridImageS}
                             autoPlay={showImageAnimation}
                             className={!isList ? 'mr-2' : ''}
                         />
@@ -88,10 +93,12 @@ const StoreMineCard: React.FC<Props> = ({ store, isList, expanded, cardWidthStor
                                     type="barber-type"
                                     barberType={store.type}
                                     isList={true}
+                                    dense={profileCompact}
                                 />
                                 <StatusBadge
                                     type={store.isOpenNow ? 'open' : 'closed'}
                                     isList={true}
+                                    dense={profileCompact}
                                 />
                             </View>
                         )}
@@ -106,6 +113,7 @@ const StoreMineCard: React.FC<Props> = ({ store, isList, expanded, cardWidthStor
                                 isList={isList}
                                 barberType={store.type}
                                 className="flex-1"
+                                compact={profileCompact}
                             />
                             {isList && (
                                 <FavoriteButton
@@ -116,13 +124,14 @@ const StoreMineCard: React.FC<Props> = ({ store, isList, expanded, cardWidthStor
                                     onPress={toggleFavorite}
                                     variant="icon"
                                     className="pb-2"
+                                    compact={profileCompact}
                                 />
                             )}
                         </View>
 
                         {!isList && (
                             <View className="flex-row justify-between pr-2">
-                                <Text style={{ color: colors.textSecondary }} className='text-base'>{getBarberTypeLabel(store.type)}</Text>
+                                <Text style={{ color: colors.textSecondary }} className={profileCompact ? 'text-base' : 'text-lg'}>{getBarberTypeLabel(store.type)}</Text>
                                 <FavoriteButton
                                     isFavorite={isFavorite}
                                     favoriteCount={favoriteCount}
@@ -131,6 +140,7 @@ const StoreMineCard: React.FC<Props> = ({ store, isList, expanded, cardWidthStor
                                     onPress={toggleFavorite}
                                     variant="button"
                                     className="pb-1"
+                                    compact={profileCompact}
                                 />
                             </View>
                         )}
@@ -143,6 +153,7 @@ const StoreMineCard: React.FC<Props> = ({ store, isList, expanded, cardWidthStor
                                 reviewCount={store.reviewCount}
                                 onPressRatings={handlePressRatings}
                                 className="flex-1"
+                                compact={profileCompact}
                             />
                         </View>
                     </View>
@@ -170,5 +181,6 @@ export const StoreMineCardComp = React.memo(
         prev.showImageAnimation === next.showImageAnimation &&
         prev.panelCompare?.selected === next.panelCompare?.selected &&
         prev.panelCompare?.hidden === next.panelCompare?.hidden &&
-        prev.panelCompare?.onPress === next.panelCompare?.onPress
+        prev.panelCompare?.onPress === next.panelCompare?.onPress &&
+        prev.profileCompact === next.profileCompact
 );

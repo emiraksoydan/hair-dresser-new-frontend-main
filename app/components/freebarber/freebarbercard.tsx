@@ -34,6 +34,7 @@ type Props = {
   storeId?: string;
   showImageAnimation?: boolean;
   panelCompare?: { selected: boolean; onPress: () => void; hidden?: boolean };
+  compactMeta?: boolean;
 };
 
 const FreeBarberCard: React.FC<Props> = ({
@@ -50,6 +51,7 @@ const FreeBarberCard: React.FC<Props> = ({
   storeId,
   showImageAnimation = true,
   panelCompare,
+  compactMeta = false,
 }) => {
   const { colors } = useTheme();
   const carouselWidth = Math.max(0, cardWidthFreeBarber - 20);
@@ -173,8 +175,8 @@ const FreeBarberCard: React.FC<Props> = ({
         {!isList && (
           <View className="flex-row justify-end items-center gap-1 px-2 pb-2">
             {hasBeautySalonCertificate && (
-              <View className="bg-purple-600/90 px-2 py-0.5 rounded-full">
-                <Text className="text-white text-xs font-century-gothic-sans-semibold">
+              <View className={`bg-purple-600/90 rounded-full ${compactMeta ? "px-1.5 py-0.5" : "px-2 py-0.5"}`}>
+                <Text className={`text-white font-century-gothic-sans-semibold ${compactMeta ? "text-[10px]" : "text-xs"}`}>
                   {t("card.beautyExpert")}
                 </Text>
               </View>
@@ -219,8 +221,8 @@ const FreeBarberCard: React.FC<Props> = ({
                 pointerEvents="box-none"
               >
                 {hasBeautySalonCertificate && (
-                  <View className="bg-purple-600/90 px-2.5 py-1 rounded-full self-start max-w-full">
-                    <Text className="text-white text-sm font-century-gothic-sans-semibold">
+                  <View className={`bg-purple-600/90 rounded-full self-start max-w-full ${compactMeta ? "px-2 py-0.5" : "px-2.5 py-1"}`}>
+                    <Text className={`text-white font-century-gothic-sans-semibold ${compactMeta ? "text-xs" : "text-sm"}`}>
                       {t("card.beautyExpert")}
                     </Text>
                   </View>
@@ -245,9 +247,9 @@ const FreeBarberCard: React.FC<Props> = ({
                   <TouchableOpacity
                     onPress={handleCallFreeBarber}
                     disabled={isCalling}
-                    className="bg-[#ffb900] flex-row items-center px-2.5 py-1 rounded-full"
+                    className={`bg-[#ffb900] flex-row items-center rounded-full ${compactMeta ? "px-2 py-0.5" : "px-2.5 py-1"}`}
                   >
-                    <Text className="text-white text-sm font-century-gothic-sans-semibold">
+                    <Text className={`text-white font-century-gothic-sans-semibold ${compactMeta ? "text-xs" : "text-sm"}`}>
                       {isCalling ? t("card.calling") : t("card.callBarber")}
                     </Text>
                   </TouchableOpacity>
@@ -264,6 +266,7 @@ const FreeBarberCard: React.FC<Props> = ({
                 title={freeBarber.fullName}
                 isList={isList}
                 barberType={freeBarber.type}
+                compact={compactMeta}
               />
               {isList && (
                 <FavoriteButton
@@ -279,7 +282,7 @@ const FreeBarberCard: React.FC<Props> = ({
             </View>
             {!isList && (
               <View className="flex-row justify-between pr-2">
-                <Text style={{ color: colors.textSecondary }} className="text-base">
+                <Text style={{ color: colors.textSecondary }} className={compactMeta ? "text-sm" : "text-base"}>
                   {getShortBarberTypeLabel(freeBarber.type)}
                 </Text>
                 <FavoriteButton
@@ -301,11 +304,12 @@ const FreeBarberCard: React.FC<Props> = ({
                 rating={freeBarber.rating}
                 reviewCount={freeBarber.reviewCount}
                 onPressRatings={handlePressRatings}
+                compact={compactMeta}
               />
             </View>
             {freeBarber.customerNumber && (
               <View className="flex-row items-center mt-1">
-                <Text style={{ color: colors.textSecondary, fontSize: 11, fontFamily: 'CenturyGothic' }}>
+                <Text style={{ color: colors.textSecondary, fontSize: compactMeta ? 10 : 11, fontFamily: 'CenturyGothic' }}>
                   {'#'}{freeBarber.customerNumber}
                 </Text>
               </View>
@@ -355,6 +359,7 @@ export const FreeBarberCardInner = React.memo(FreeBarberCard, (prev, next) => {
     (prev.freeBarber.beautySalonCertificateImageId ?? null) === (next.freeBarber.beautySalonCertificateImageId ?? null);
 
   const sameProps =
+    (prev.compactMeta ?? false) === (next.compactMeta ?? false) &&
     prev.isList === next.isList &&
     prev.expanded === next.expanded &&
     prev.cardWidthFreeBarber === next.cardWidthFreeBarber &&

@@ -29,9 +29,11 @@ type Props = {
     showImageAnimation?: boolean;
     /** Panel: karşılaştırma seçimi (sol üst) */
     panelCompare?: { selected: boolean; onPress: () => void; hidden?: boolean };
+    /** Panel keşif listeleri: hizmetler aynı, üst meta (isim, puan vb.) daha küçük */
+    compactMeta?: boolean;
 };
 
-const StoreCard: React.FC<Props> = ({ store, isList, expanded, cardWidthStore, isViewerFromFreeBr = false, typeLabel, typeLabelColor = 'bg-blue-500', onPressUpdate, onPressRatings, showImageAnimation = true, panelCompare }) => {
+const StoreCard: React.FC<Props> = ({ store, isList, expanded, cardWidthStore, isViewerFromFreeBr = false, typeLabel, typeLabelColor = 'bg-blue-500', onPressUpdate, onPressRatings, showImageAnimation = true, panelCompare, compactMeta = false }) => {
     const { colors } = useTheme();
     const carouselWidth = Math.max(0, cardWidthStore - 20);
     const { isFavorite, favoriteCount, isLoading, favoriteDisabled, toggleFavorite } = useFavoriteToggle({
@@ -109,6 +111,7 @@ const StoreCard: React.FC<Props> = ({ store, isList, expanded, cardWidthStore, i
                                 isList={isList}
                                 barberType={store.type}
                                 className="flex-1"
+                                compact={compactMeta}
                             />
                             {isList && (
                                 <FavoriteButton
@@ -125,7 +128,7 @@ const StoreCard: React.FC<Props> = ({ store, isList, expanded, cardWidthStore, i
 
                         {!isList && (
                             <View className="flex-row justify-between pr-2">
-                                <Text style={{ color: colors.textSecondary }} className='text-base'>{getBarberTypeLabel(store.type)}</Text>
+                                <Text style={{ color: colors.textSecondary }} className={compactMeta ? 'text-sm' : 'text-base'}>{getBarberTypeLabel(store.type)}</Text>
                                 <FavoriteButton
                                     isFavorite={isFavorite}
                                     favoriteCount={favoriteCount}
@@ -146,11 +149,12 @@ const StoreCard: React.FC<Props> = ({ store, isList, expanded, cardWidthStore, i
                                 reviewCount={store.reviewCount}
                                 onPressRatings={handlePressRatings}
                                 className="flex-1"
+                                compact={compactMeta}
                             />
                         </View>
                         {store.storeNo && (
                             <View className="flex-row items-center mt-1">
-                                <Text style={{ color: colors.textSecondary, fontSize: 11, fontFamily: 'CenturyGothic' }}>
+                                <Text style={{ color: colors.textSecondary, fontSize: compactMeta ? 10 : 11, fontFamily: 'CenturyGothic' }}>
                                     {'#'}{store.storeNo}
                                 </Text>
                             </View>
@@ -195,6 +199,7 @@ export const StoreCardInner = React.memo(
             prev.store.pricingValue === next.store.pricingValue;
 
         const sameProps =
+            (prev.compactMeta ?? false) === (next.compactMeta ?? false) &&
             (prev.isViewerFromFreeBr ?? false) === (next.isViewerFromFreeBr ?? false) &&
             prev.isList === next.isList &&
             prev.expanded === next.expanded &&

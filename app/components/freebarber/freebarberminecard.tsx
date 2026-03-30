@@ -1,6 +1,6 @@
 // app/components/FreeBarberMineCard.tsx
 import React, { useCallback, useMemo } from "react";
-import { View } from "react-native";
+import { View, TouchableOpacity, ActivityIndicator } from "react-native";
 import { Text } from "../common/Text";
 import { FreeBarberPanelDto, FavoriteTargetType } from "../../types";
 import { useFavoriteToggle } from "../../hook/useFavoriteToggle";
@@ -14,7 +14,6 @@ import { getShortBarberTypeLabel } from "../../utils/card-helpers";
 import { useUpdateFreeBarberAvailabilityMutation } from "../../store/api";
 import { useAppDispatch } from "../../store/hook";
 import { showSnack } from "../../store/snackbarSlice";
-import { TouchableOpacity, ActivityIndicator } from "react-native";
 import { useLanguage } from "../../hook/useLanguage";
 import { useCategoryHierarchy } from "../../hook/useCategoryHierarchy";
 import { useTheme } from "../../hook/useTheme";
@@ -28,6 +27,8 @@ type Props = {
   onPressUpdate?: (store: FreeBarberPanelDto) => void;
   onPressRatings?: (freeBarberId: string, freeBarberName: string) => void;
   showImageAnimation?: boolean;
+  /** Profil «Panelim» ekranı: başlık, rozet, puan vb. küçük; hizmet listesi aynı */
+  profileCompact?: boolean;
 };
 
 const FreeBarberMineCard: React.FC<Props> = ({
@@ -38,8 +39,11 @@ const FreeBarberMineCard: React.FC<Props> = ({
   onPressUpdate,
   onPressRatings,
   showImageAnimation = true,
+  profileCompact = false,
 }) => {
-  const carouselWidth = Math.max(0, cardWidthFreeBarber - 20);
+  const carouselWidth = Math.max(0, cardWidthFreeBarber - (profileCompact ? 16 : 20));
+  const listImageH = profileCompact ? 296 : 320;
+  const gridImageS = profileCompact ? 104 : 112;
   const { t } = useLanguage();
   const { getAllServicesForType } = useCategoryHierarchy({});
   const { colors } = useTheme();
@@ -106,7 +110,7 @@ const FreeBarberMineCard: React.FC<Props> = ({
   return (
     <View
       style={{ width: cardWidthFreeBarber, backgroundColor: colors.cardBg }}
-      className={`mt-4 ${!isList ? "pl-4 py-2 rounded-lg" : "rounded-xl p-3"
+      className={`mt-4 ${!isList ? "pl-4 py-2 rounded-lg" : profileCompact ? "rounded-xl p-2.5" : "rounded-xl p-3"
         }`}
     >
       {!isList && (
@@ -121,6 +125,7 @@ const FreeBarberMineCard: React.FC<Props> = ({
           <StatusBadge
             type={freeBarber.isAvailable ? "available" : "busy"}
             isList={false}
+            dense={profileCompact}
           />
         </View>
       )}
@@ -130,8 +135,8 @@ const FreeBarberMineCard: React.FC<Props> = ({
             images={freeBarber.imageList}
             onPress={handlePressCard}
             isList={isList}
-            width={isList ? carouselWidth : 112}
-            height={isList ? 320 : 112}
+            width={isList ? carouselWidth : gridImageS}
+            height={isList ? listImageH : gridImageS}
             autoPlay={showImageAnimation}
             className={!isList ? "mr-2" : ""}
           />
@@ -139,7 +144,7 @@ const FreeBarberMineCard: React.FC<Props> = ({
             <View className="absolute top-3 right-3 flex-row gap-2 z-10">
               {hasBeautySalonCertificate && (
                 <View className="bg-purple-600/90 px-2 py-0.5 rounded-full">
-                  <Text className="text-white text-sm font-century-gothic-sans-semibold">
+                  <Text className={`text-white font-century-gothic-sans-semibold ${profileCompact ? "text-xs" : "text-sm"}`}>
                     {t("card.beautyExpert")}
                   </Text>
                 </View>
@@ -148,6 +153,7 @@ const FreeBarberMineCard: React.FC<Props> = ({
             type="barber-type"
             barberType={freeBarber.type}
             isList={isList}
+            dense={profileCompact}
           />
               <TouchableOpacity
                 onPress={handleToggleAvailability}
@@ -157,8 +163,8 @@ const FreeBarberMineCard: React.FC<Props> = ({
                 {isUpdatingAvailability ? (
                   <View
                     style={{
-                      width: 80,
-                      height: 24,
+                      width: profileCompact ? 72 : 80,
+                      height: profileCompact ? 22 : 24,
                       backgroundColor: colors.cardBg,
                       borderRadius: 12,
                       justifyContent: "center",
@@ -171,6 +177,7 @@ const FreeBarberMineCard: React.FC<Props> = ({
                   <StatusBadge
                     type={freeBarber.isAvailable ? "available" : "busy"}
                     isList={isList}
+                    dense={profileCompact}
                   />
                 )}
               </TouchableOpacity>
@@ -185,6 +192,7 @@ const FreeBarberMineCard: React.FC<Props> = ({
               title={freeBarber.fullName}
               isList={isList}
               barberType={freeBarber.type}
+              compact={profileCompact}
             />
             {isList && (
               <FavoriteButton
@@ -195,12 +203,13 @@ const FreeBarberMineCard: React.FC<Props> = ({
                 onPress={toggleFavorite}
                 variant="icon"
                 className="pb-2"
+                compact={profileCompact}
               />
             )}
           </View>
           {!isList && (
             <View className="flex-row pr-2 justify-between">
-              <Text style={{ color: colors.textSecondary }} className="text-base">
+              <Text style={{ color: colors.textSecondary }} className={profileCompact ? "text-base" : "text-lg"}>
                 {getShortBarberTypeLabel(freeBarber.type)}
               </Text>
               <FavoriteButton
@@ -211,6 +220,7 @@ const FreeBarberMineCard: React.FC<Props> = ({
                 onPress={toggleFavorite}
                 variant="button"
                 className="pb-1"
+                compact={profileCompact}
               />
             </View>
           )}
@@ -222,11 +232,12 @@ const FreeBarberMineCard: React.FC<Props> = ({
               rating={freeBarber.rating}
               reviewCount={freeBarber.reviewCount}
               onPressRatings={handlePressRatings}
+              compact={profileCompact}
             />
           </View>
           {freeBarber.customerNumber && (
             <View className="flex-row items-center mt-1">
-              <Text style={{ color: colors.textSecondary, fontSize: 11, fontFamily: 'CenturyGothic' }}>
+              <Text style={{ color: colors.textSecondary, fontSize: profileCompact ? 12 : 13, fontFamily: 'CenturyGothic' }}>
                 {'#'}{freeBarber.customerNumber}
               </Text>
             </View>
@@ -244,7 +255,7 @@ const FreeBarberMineCard: React.FC<Props> = ({
         )}
         {beautyOfferings.length > 0 && (
           <View className="mt-3">
-            <Text style={{ color: colors.textSecondary }} className="text-sm mb-1.5 font-century-gothic-sans-semibold">
+            <Text style={{ color: colors.textSecondary }} className="text-base mb-1.5 font-century-gothic-sans-semibold">
               {t("form.beautySalonServices")}
             </Text>
             <ServiceOfferingsList
@@ -267,8 +278,11 @@ export const FreeBarberMineCardComp = React.memo(
     prev.freeBarber.favoriteCount === next.freeBarber.favoriteCount &&
     prev.freeBarber.fullName === next.freeBarber.fullName &&
     prev.freeBarber.isAvailable === next.freeBarber.isAvailable &&
+    (prev.freeBarber.imageList?.map((i) => i.id).join(",") ?? "") ===
+      (next.freeBarber.imageList?.map((i) => i.id).join(",") ?? "") &&
     prev.isList === next.isList &&
     prev.expanded === next.expanded &&
     prev.cardWidthFreeBarber === next.cardWidthFreeBarber &&
-    prev.showImageAnimation === next.showImageAnimation,
+    prev.showImageAnimation === next.showImageAnimation &&
+    prev.profileCompact === next.profileCompact,
 );

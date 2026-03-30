@@ -20,7 +20,10 @@
     "timeRemaining": "Time: {{time}}",
     "resendCode": "Resend code",
     "codeSent": "Verification code sent",
-    "selectLanguage": "Select Language"
+    "invalidCode": "Invalid verification code",
+    "rateLimitExceeded": "Too many requests. Please wait a few minutes and try again.",
+    "selectLanguage": "Select Language",
+    "backToOtpVerification": "Back to verification"
   },
   "profile": {
     "title": "Profile Information",
@@ -262,6 +265,8 @@
       "makeComment": "Make Comment",
       "noAppointmentsInCategory": "No appointments found in this category.",
       "timePassed": "Time Passed",
+      "swipeDetail": "Swipe left/right to browse appointments",
+      "swipeHint": "Swipe to view other appointments",
       "storeBarber": "Store Barber",
       "storeName": "Store Name",
       "serviceProvider": "Service Provider",
@@ -364,6 +369,7 @@
     "confirm": "Confirm",
     "save": "Save",
     "delete": "Delete",
+    "copy": "Copy",
     "edit": "Edit",
     "close": "Close",
     "search": "Search...",
@@ -406,7 +412,10 @@
     "overflowCompare": "Compare",
     "overflowPhotos": "View photos",
     "overflowMenuA11y": "Panel actions",
-    "locationDeniedShort": "Location is off; discovery is disabled, your panel data still loads."
+    "locationDeniedShort": "Location is off; discovery is disabled, your panel data still loads.",
+    "emptyStateHintFreeBarber": "Add your panel so customers can find you in discovery.",
+    "emptyStateHintStore": "Open the barber store tab and use the + button to add your first business.",
+    "openStorePanelToAdd": "Open store panel"
   },
   "labels": {
     "freeBarber": "Free Barber",
@@ -570,6 +579,11 @@
     "beautySalonSubHeadingsRequired": "Beauty salon sub headings are required",
     "mainHeadingsRequired": "Main headings are required",
     "subHeadingsRequired": "Sub headings are required",
+    "categoryStepHelperMainCategoryFreeBarber": "Select exactly one main category from the list to continue.",
+    "categoryStepHelperMainHeadings": "Select at least one main heading to continue.",
+    "categoryStepHelperSubHeadings": "Select at least one sub-heading to continue.",
+    "categoryStepHelperServicesStore": "Select at least one service you offer before continuing.",
+    "categoryStepHelperServicesFreeBarber": "Pick at least one service here, or add beauty-salon services on the next step—you must define at least one service in total.",
     "mainCategories": "Main Categories",
     "beautySalonCategories": "Beauty Salon Categories",
     "priceRequired": "Price is required",
@@ -631,7 +645,7 @@
     "stepMainHeadings": "Main Headings",
     "stepSubHeadings": "Sub Headings",
     "stepServices": "Services",
-    "stepBeautySalon": "Beauty Salon",
+    "stepBeautySalon": "Beauty Expert",
     "stepPrices": "Prices",
     "stepPreview": "Preview",
     "stepAvailability": "Availability",
@@ -665,6 +679,9 @@
     "closed": "Closed",
     "closedDays": "Closed Days",
     "closedDaysHint": "Tap a closed day to reopen it",
+    "holidayAndSpecialDays": "holidays, special days",
+    "startTime": "Opens",
+    "endTime": "Closes",
     "setAddress": "Set Address",
     "addressDescription": "Address description",
     "storeNameLabel": "Business Name",
@@ -741,7 +758,8 @@
     "weekGridBooked": "Booked",
     "weekGridPast": "Past",
     "weekGridClosed": "Closed",
-    "selectedTime": "Selected"
+    "selectedTime": "Selected",
+    "swipeDays": "Swipe content to change day"
   },
   "complaint": {
     "title": "Make a Complaint",
@@ -801,6 +819,8 @@
     "locationFailed": "Could not get location. Please try again.",
     "recordingFailed": "Could not start voice recording.",
     "transcriptionFailed": "Could not convert voice to text.",
+    "transcriptionUnavailableTitle": "Speech could not be transcribed",
+    "transcriptionUnavailableBody": "The service may be rate-limited or offline. You can type your message and send it as usual.",
     "uploadingMedia": "Uploading media...",
     "locationShared": "Location shared",
     "photo": "Photo",
@@ -824,6 +844,7 @@
     "error_recording_failed": "Could not start recording.",
     "error_transcription_empty": "No speech detected. Please try again.",
     "error_whisper_failed": "Could not convert speech to text.",
+    "error_whisper_rate_limit": "Transcription quota exceeded or service busy. You can type your request instead.",
     "error_ai_error": "AI assistant could not respond.",
     "error_unknown": "An unexpected error occurred."
   },

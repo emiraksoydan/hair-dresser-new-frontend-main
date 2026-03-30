@@ -5,6 +5,8 @@ export type UseBottomSheetOptions = {
     snapPoints?: (string | number)[];
     enablePanDownToClose?: boolean;
     enableOverDrag?: boolean;
+    /** false: tutacakla sheet konumu değişmez (CRUD formları için) */
+    enableHandlePanningGesture?: boolean;
     appearsOnIndex?: number;
     disappearsOnIndex?: number;
     pressBehavior?: 'close' | 'collapse' | 'none';
@@ -18,6 +20,7 @@ export const useBottomSheet = (options: UseBottomSheetOptions = {}) => {
         snapPoints = ['50%'],
         enablePanDownToClose = true,
         enableOverDrag = false,
+        enableHandlePanningGesture,
         appearsOnIndex = 0,
         disappearsOnIndex = -1,
         pressBehavior = 'close',
@@ -69,6 +72,7 @@ export const useBottomSheet = (options: UseBottomSheetOptions = {}) => {
         snapPoints,
         enablePanDownToClose,
         enableOverDrag,
+        enableHandlePanningGesture,
     };
 };
 

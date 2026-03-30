@@ -17,7 +17,7 @@ import {
   useUpdateManuelBarberMutation,
   useUploadImageMutation,
 } from "../../store/api";
-import { handlePickImage } from "../../utils/form/pick-document";
+import { handlePickImage, resolveMimeType } from "../../utils/form/pick-document";
 import { getErrorMessage } from "../../utils/errorHandler";
 import { MESSAGES } from "../../constants/messages";
 import { useLanguage } from "../../hook/useLanguage";
@@ -131,7 +131,7 @@ export const BarberEditModal: React.FC<Props> = ({
     formData.append("file", {
       uri: file.uri,
       name: file.name ?? "photo.jpg",
-      type: file.type ?? "image/jpeg",
+      type: resolveMimeType(file.type, file.name),
     } as any);
     formData.append("ownerType", String(ImageOwnerType.ManuelBarber));
     formData.append("ownerId", ownerId);

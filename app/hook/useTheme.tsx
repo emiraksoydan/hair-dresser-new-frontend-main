@@ -64,8 +64,8 @@ export const useTheme = () => {
         border: '#333333',
         inputBackground: '#2a2a2a',
         inputBorder: '#444444',
-        primary: '#2a2a2a',
-        primaryText: '#ffffff',
+        primary: '#ffb900',
+        primaryText: '#1f2937',
         tagline: '#c2a523',
         taglineLine: '#c2a523',
 
@@ -98,8 +98,8 @@ export const useTheme = () => {
         border: '#d0d0d0',
         inputBackground: '#ffffff',
         inputBorder: '#d0d0d0',
-        primary: '#1a1a1a',
-        primaryText: '#ffffff',
+        primary: '#ffb900',
+        primaryText: '#1f2937',
         tagline: '#8b7355',
         taglineLine: '#8b7355',
 

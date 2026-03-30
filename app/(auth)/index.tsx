@@ -7,6 +7,7 @@ import {
   ScrollView,
   Pressable,
   useWindowDimensions,
+  Dimensions,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Text } from "../components/common/Text";
@@ -17,6 +18,7 @@ import {
   TextInput,
   Portal,
   Modal,
+  DefaultTheme,
 } from "react-native-paper";
 import { showSnack } from "../store/snackbarSlice";
 import { useForm, Controller } from "react-hook-form";
@@ -41,7 +43,20 @@ import { LanguageSelector } from "../components/common/LanguageSelector";
 import { LegalAgreementCheckbox } from "../components/auth/LegalAgreementCheckbox";
 import { useSafeNavigation } from "../hook/useSafeNavigation";
 
-const OTP_COUNTDOWN_SECONDS = 120;
+const OTP_COUNTDOWN_SECONDS = 120; // Backend OTP_VALIDITY_SECONDS ile eşleşmeli (120 sn)
+
+/** #RRGGBB → yarı saydam OTP modal backdrop (ekran zeminiyle uyumlu). */
+function backdropFromScreenBg(screenBg: string, isDark: boolean): string {
+  const hex = screenBg.replace(/^#/, "").trim();
+  if (hex.length !== 6 || !/^[a-fA-F0-9]+$/.test(hex)) {
+    return isDark ? "rgba(0,0,0,0.78)" : "rgba(245,247,250,0.9)";
+  }
+  const r = parseInt(hex.slice(0, 2), 16);
+  const g = parseInt(hex.slice(2, 4), 16);
+  const b = parseInt(hex.slice(4, 6), 16);
+  const a = isDark ? 0.88 : 0.9;
+  return `rgba(${r},${g},${b},${a})`;
+}
 
 // Schema'yı dinamik olarak oluşturmak için fonksiyon
 const createSchemas = (t: (key: string) => string) => {
@@ -181,21 +196,13 @@ const Index = () => {
   const [sendOtp, { isLoading, isError, data, error }] = useSendOtpMutation();
   const [verifyOtp] = useVerifyOtpMutation();
 
+  /** Modal kapalıyken de geri saysın; kapatıp "Doğrulama ekranına dön" ile süre doğru kalır. */
+  const otpCountdownActive = left > 0;
   useEffect(() => {
-    if (!modalVisible || left <= 0) return;
-    const t = setInterval(() => setLeft((s) => (s > 0 ? s - 1 : 0)), 1000);
+    if (!otpCountdownActive) return;
+    const t = setInterval(() => setLeft((s) => (s <= 1 ? 0 : s - 1)), 1000);
     return () => clearInterval(t);
-  }, [modalVisible, left]);
-
-  // Reset timer when modal opens
-  // Twilio OTP kodları 10 dakika (600 saniye) geçerlidir
-  // Bu süre boyunca resend butonu devre dışı olmalı
-  useEffect(() => {
-    if (modalVisible) {
-      setLeft(OTP_COUNTDOWN_SECONDS);
-      setOtpResetSignal((s) => s + 1);
-    }
-  }, [modalVisible]);
+  }, [otpCountdownActive]);
 
   const onSubmit = async (data: FormData) => {
     try {
@@ -222,13 +229,15 @@ const Index = () => {
 
       if ("error" in result) {
         let errorMessage = t("common.error");
-        if (result.error && 'data' in result.error) {
-          const errorData = result.error.data as any;
-          errorMessage = errorData?.message || errorMessage;
-        } else if (result.error && 'message' in result.error) {
-          errorMessage = (result.error as any).message || errorMessage;
-        } else if (result.error && 'error' in result.error) {
-          errorMessage = (result.error as any).error || errorMessage;
+        const err = result.error as any;
+        if (err?.status === 429) {
+          errorMessage = err?.data?.message || t("auth.rateLimitExceeded") || "Çok fazla istek gönderildiniz. Lütfen birkaç dakika bekleyin.";
+        } else if (err?.data?.message) {
+          errorMessage = err.data.message;
+        } else if (err?.message) {
+          errorMessage = err.message;
+        } else if (err?.error) {
+          errorMessage = err.error;
         }
         dispatch(
           showSnack({
@@ -267,9 +276,7 @@ const Index = () => {
   };
 
   const mmss = useMemo(() => {
-    const m = Math.floor(left / 60)
-      .toString()
-      .padStart(2, "0");
+    const m = Math.floor(left / 60).toString().padStart(2, "0");
     const s = (left % 60).toString().padStart(2, "0");
     return `${m}:${s}`;
   }, [left]);
@@ -289,6 +296,18 @@ const Index = () => {
   // Modal inner width: screen - 40 (modal outer padding) - 44 (card inner padding)
   // 6 boxes with 6px gap between = 5 * 6 = 30px total gap
   const otpBoxSize = Math.floor((Math.min(screenWidth, 380) - 40 - 44 - 30) / 6);
+
+  /** Paper Modal arka planı `theme.colors.backdrop` ile boyanır; `screenBg` ile aynı tonda yarı saydam. */
+  const otpModalPaperTheme = useMemo(
+    () => ({
+      ...DefaultTheme,
+      colors: {
+        ...DefaultTheme.colors,
+        backdrop: backdropFromScreenBg(colors.screenBg, isDark),
+      },
+    }),
+    [colors.screenBg, isDark],
+  );
 
   const closeOtpModal = () => {
     setModalVisible(false);
@@ -324,16 +343,27 @@ const Index = () => {
 
       if ("error" in result) {
         const errPayload = result.error as { data?: unknown; status?: unknown };
-        const raw = errPayload?.data;
-        const msg =
-          typeof raw === "string"
-            ? raw
-            : raw && typeof raw === "object" && "message" in raw
-              ? String((raw as { message?: string }).message ?? "")
-              : "";
+        let msg = "";
+        if ((errPayload?.status as any) === 429) {
+          const d = errPayload?.data as any;
+          msg = d?.message || t("auth.rateLimitExceeded") || "Çok fazla deneme yapıldı. Lütfen birkaç dakika bekleyin.";
+        } else {
+          const raw = errPayload?.data;
+          msg =
+            typeof raw === "string"
+              ? raw
+              : raw && typeof raw === "object" && "message" in raw
+                ? String((raw as { message?: string }).message ?? "")
+                : "";
+        }
+        const lower = msg.toLowerCase();
+        const isWrongCode =
+          lower.includes("geçersiz") ||
+          lower.includes("invalid") ||
+          lower.includes("doğrulama kodu");
         dispatch(
           showSnack({
-            message: msg || t("common.error"),
+            message: isWrongCode ? (msg || t("auth.invalidCode")) : (msg || t("common.error")),
             isError: true,
           }),
         );
@@ -361,6 +391,7 @@ const Index = () => {
         );
 
         setModalVisible(false);
+        setPhone("");
         reset(); // Formu temizle
 
         // Kullanıcı türüne göre doğru sayfaya yönlendir
@@ -428,13 +459,15 @@ const Index = () => {
 
       if ("error" in result) {
         let errorMessage = t("common.error");
-        if (result.error && 'data' in result.error) {
-          const errorData = result.error.data as any;
-          errorMessage = errorData?.message || errorMessage;
-        } else if (result.error && 'message' in result.error) {
-          errorMessage = (result.error as any).message || errorMessage;
-        } else if (result.error && 'error' in result.error) {
-          errorMessage = (result.error as any).error || errorMessage;
+        const err = result.error as any;
+        if (err?.status === 429) {
+          errorMessage = err?.data?.message || t("auth.rateLimitExceeded") || "Çok fazla istek gönderildiniz. Lütfen birkaç dakika bekleyin.";
+        } else if (err?.data?.message) {
+          errorMessage = err.data.message;
+        } else if (err?.message) {
+          errorMessage = err.message;
+        } else if (err?.error) {
+          errorMessage = err.error;
         }
         dispatch(
           showSnack({
@@ -805,29 +838,49 @@ const Index = () => {
             <TouchableOpacity
               className="w-full rounded-lg py-3  items-center justify-center"
               style={{
-                backgroundColor: "#1a1a1a",
+                backgroundColor: colors.primary,
                 opacity: isLoading ? 0.6 : 1,
-                shadowColor: '#000000',
+                shadowColor: '#ffb900',
                 shadowOffset: { width: 0, height: 3 },
-                shadowOpacity: 0.15,
-                shadowRadius: 3,
-                elevation: 3,
+                shadowOpacity: 0.35,
+                shadowRadius: 6,
+                elevation: 4,
               }}
               onPress={handleSubmit(onSubmit)}
               disabled={isLoading}
               activeOpacity={0.8}
             >
               {isLoading ? (
-                <ActivityIndicator color="#ffffff" size="small" />
+                <ActivityIndicator color={colors.primaryText} size="small" />
               ) : (
                 <Text
                   className="text-lg font-bold"
-                  style={{ color: "#ffffff" }}
+                  style={{ color: colors.primaryText }}
                 >
                   {t("auth.start")}
                 </Text>
               )}
             </TouchableOpacity>
+
+            {phone.length > 0 && !modalVisible ? (
+              <TouchableOpacity
+                onPress={() => setModalVisible(true)}
+                activeOpacity={0.8}
+                className="w-full mt-3 py-2.5 items-center justify-center rounded-lg"
+                style={{
+                  borderWidth: 1,
+                  borderColor: colors.border,
+                  backgroundColor: colors.inputBackground,
+                }}
+              >
+                <Text
+                  className="text-base font-century-gothic-bold"
+                  style={{ color: otpAccentPrimary }}
+                >
+                  {t("auth.backToOtpVerification")}
+                </Text>
+              </TouchableOpacity>
+            ) : null}
 
             {/* Login/Register Toggle */}
             <View className="flex-row items-center justify-center gap-2 mt-4">
@@ -857,36 +910,42 @@ const Index = () => {
               <LanguageSelector showLabel={true} />
             </View>
           </View>
+        </View>
+      </ScrollView>
 
-          <Portal>
-            <Modal
-              visible={modalVisible}
-              dismissable={false}
-              contentContainerStyle={{
-                alignItems: "center",
-                paddingHorizontal: 20,
-                margin: 0,
-                backgroundColor: isDark
-                  ? "rgba(0,0,0,0.78)"
-                  : "rgba(17,24,39,0.48)",
-              }}
-            >
-              <View
-                style={{
-                  width: "100%",
-                  maxWidth: 380,
-                  borderRadius: 20,
-                  overflow: "hidden",
-                  backgroundColor: colors.card,
-                  borderWidth: 1,
-                  borderColor: colors.border,
-                  shadowColor: "#000",
-                  shadowOffset: { width: 0, height: 10 },
-                  shadowOpacity: isDark ? 0.45 : 0.15,
-                  shadowRadius: 20,
-                  elevation: 16,
-                }}
-              >
+      <Portal>
+        <Modal
+          visible={modalVisible}
+          dismissable={false}
+          theme={otpModalPaperTheme}
+          contentContainerStyle={{
+            flexGrow: 1,
+            width: "100%",
+            minHeight: Dimensions.get("window").height,
+            justifyContent: "center",
+            alignItems: "center",
+            paddingHorizontal: 20,
+            margin: 0,
+            backgroundColor: "transparent",
+          }}
+        >
+          <View
+            style={{
+              width: "100%",
+              maxWidth: 380,
+              alignSelf: "center",
+              borderRadius: 20,
+              overflow: "hidden",
+              backgroundColor: colors.card,
+              borderWidth: 1,
+              borderColor: colors.border,
+              shadowColor: "#000",
+              shadowOffset: { width: 0, height: 10 },
+              shadowOpacity: isDark ? 0.45 : 0.15,
+              shadowRadius: 20,
+              elevation: 16,
+            }}
+          >
                 <LinearGradient
                   colors={[otpAccentSecondary, otpAccentPrimary]}
                   start={{ x: 0, y: 0 }}
@@ -930,6 +989,7 @@ const Index = () => {
                         borderRadius: 16,
                         alignItems: "center",
                         justifyContent: "center",
+                        opacity: 1,
                         backgroundColor: pressed ? colors.inputBackground : "transparent",
                       })}
                     >
@@ -1030,10 +1090,8 @@ const Index = () => {
                   </View>
                 </View>
               </View>
-            </Modal>
-          </Portal>
-        </View>
-      </ScrollView>
+        </Modal>
+      </Portal>
     </KeyboardAvoidingView>
   );
 };

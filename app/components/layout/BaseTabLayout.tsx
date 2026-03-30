@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback, useRef } from "react";
+import React, { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import { View, Pressable, ActivityIndicator } from "react-native";
 import { AIAssistantSheet } from "../ai/AIAssistantSheet";
 import { useSegments } from "expo-router";
@@ -20,8 +20,10 @@ import {
   type HeaderDeleteAction,
 } from "./MoreFabContext";
 import { InfoModal } from "../common/infomodal";
-import { useAppDispatch } from "../../store/hook";
+import { useAppDispatch, useAppSelector } from "../../store/hook";
 import { showSnack } from "../../store/snackbarSlice";
+import { resetSubscriptionExpired } from "../../store/subscriptionSlice";
+import { useSafeNavigation } from "../../hook/useSafeNavigation";
 import { useAuth } from "../../hook/useAuth";
 import { useBottomSheet } from "../../hook/useBottomSheet";
 import { useNotificationSound } from "../../hook/useNotificationSound";
@@ -53,6 +55,11 @@ export interface BaseTabLayoutProps {
   /** Dükkan: mağaza ekle vb. (Üstten alta: önce bunlar, sonra ortak öğeler, en sonda panel satırları.) */
   fabExtraItems?: MoreFabMenuItem[];
   renderAdditionalBottomSheets?: () => React.ReactNode;
+  /**
+   * Layout seviyesindeki tam ekran sheet (FormStoreAdd / FormFreeBarberOperation vb.) açıkken FAB gizlensin.
+   * Provider dışında olduğu için `reportOverlayOpen` buraya prop ile bağlanır.
+   */
+  layoutSheetOpen?: boolean;
 }
 
 export const BaseTabLayout: React.FC<BaseTabLayoutProps> = ({
@@ -62,6 +69,7 @@ export const BaseTabLayout: React.FC<BaseTabLayoutProps> = ({
   children,
   fabExtraItems,
   renderAdditionalBottomSheets,
+  layoutSheetOpen = false,
 }) => {
   const { colors, isDark } = useTheme();
   const { t } = useLanguage();
@@ -89,6 +97,13 @@ export const BaseTabLayout: React.FC<BaseTabLayoutProps> = ({
     const s = segments as string[];
     if (s.length === 0) return true;
     if (s[0] === "(screens)" || s[0] === "(auth)") return false;
+    const msgIdx = s.indexOf("(messages)");
+    if (msgIdx >= 0 && s[msgIdx + 1] && s[msgIdx + 1] !== "index") {
+      return false;
+    }
+    if (s.includes("chat")) {
+      return false;
+    }
     const tabNames = new Set([
       "(panel)",
       "(appointment)",
@@ -112,6 +127,22 @@ export const BaseTabLayout: React.FC<BaseTabLayoutProps> = ({
   const [headerDeleteAction, setHeaderDeleteAction] = useState<HeaderDeleteAction>(null);
   const dispatch = useAppDispatch();
   const { userName, isAuthenticated } = useAuth();
+  const router = useSafeNavigation();
+  const subscriptionExpired = useAppSelector(
+    (state) => state.subscription.expired,
+  );
+
+  // Abonelik süresi dolmuş / ban: baseQuery bu flag'i set ediyor.
+  // Aksiyonu alan kullanıcı subscription sayfasına yönlendirilir (geri dönebilir).
+  // Sadece FreeBarber ve BarberStore için geçerli.
+  useEffect(() => {
+    const isSubscriptionUser =
+      userType === UserType.FreeBarber || userType === UserType.BarberStore;
+    if (subscriptionExpired && isSubscriptionUser) {
+      dispatch(resetSubscriptionExpired());
+      router.push('/(screens)/subscription' as any);
+    }
+  }, [subscriptionExpired, userType, router, dispatch]);
 
   // Bottom sheet hook
   const notificationsSheet = useBottomSheet({
@@ -424,7 +455,12 @@ export const BaseTabLayout: React.FC<BaseTabLayoutProps> = ({
           items={mergedFabItems}
           accentColor={accentColor}
           fabNudgeDown={fabNudgeDown}
-          hidden={notiSheetOpen || aiSheetOpen || overlaySheetOpen}
+          hidden={
+            notiSheetOpen ||
+            aiSheetOpen ||
+            overlaySheetOpen ||
+            layoutSheetOpen
+          }
         />
       ) : null}
 

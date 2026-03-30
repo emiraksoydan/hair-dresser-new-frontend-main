@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useRef, useState } from "react";
+import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import {
   Dimensions,
   RefreshControl,
@@ -26,6 +26,7 @@ import { DeferredRender } from "../../components/common/deferredrender";
 import { CrudSkeletonComponent } from "../../components/common/crudskeleton";
 import { SkeletonComponent } from "../../components/common/skeleton";
 import { RatingsBottomSheet } from "../../components/rating/ratingsbottomsheet";
+import { MoreFabPanelContext } from "../../components/layout/MoreFabContext";
 
 /**
  * Serbest berberin kendi paneli: arama/filtre yok; liste/yatay geçiş ve üst özet burada.
@@ -65,13 +66,20 @@ export default function MyPanelScreen() {
 
   const freeBarberPanelSheet = useBottomSheet({
     snapPoints: ["100%"],
-    enablePanDownToClose: true,
+    enablePanDownToClose: false,
     enableOverDrag: false,
+    enableHandlePanningGesture: false,
   });
   const ratingsSheet = useBottomSheet({
     snapPoints: ["50%", "85%"],
     enablePanDownToClose: true,
   });
+
+  const fabPanelCtx = useContext(MoreFabPanelContext);
+  useEffect(() => {
+    fabPanelCtx?.reportOverlayOpen(freeBarberPanelSheet.isOpen);
+    return () => fabPanelCtx?.reportOverlayOpen(false);
+  }, [freeBarberPanelSheet.isOpen, fabPanelCtx]);
 
   const [freeBarberId, setFreeBarberId] = useState<string | null>(null);
   const [selectedRatingsTarget, setSelectedRatingsTarget] = useState<{
@@ -139,7 +147,7 @@ export default function MyPanelScreen() {
           <IconButton
             icon="arrow-left"
             iconColor="#ffb900"
-            size={22}
+            size={20}
             onPress={() => router.back()}
             accessibilityLabel={t("common.goBack")}
             style={{ margin: 0 }}
@@ -188,6 +196,7 @@ export default function MyPanelScreen() {
         snapPoints={freeBarberPanelSheet.snapPoints}
         enableOverDrag={freeBarberPanelSheet.enableOverDrag}
         enablePanDownToClose={freeBarberPanelSheet.enablePanDownToClose}
+        enableHandlePanningGesture={freeBarberPanelSheet.enableHandlePanningGesture}
       >
         <BottomSheetView className="h-full pt-2">
           <DeferredRender

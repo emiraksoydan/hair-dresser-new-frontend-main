@@ -20,7 +20,10 @@
     "timeRemaining": "Süre: {{time}}",
     "resendCode": "Kodu yeniden gönder",
     "codeSent": "Doğrulama kodu gönderildi",
-    "selectLanguage": "Dil Seçin"
+    "invalidCode": "Doğrulama kodu hatalı",
+    "rateLimitExceeded": "Çok fazla istek gönderildi. Lütfen birkaç dakika bekleyip tekrar deneyin.",
+    "selectLanguage": "Dil Seçin",
+    "backToOtpVerification": "Doğrulama ekranına dön"
   },
   "profile": {
     "title": "Profil Bilgileri",
@@ -262,6 +265,8 @@
       "makeComment": "Yorum Yap",
       "noAppointmentsInCategory": "Bu kategoride randevu bulunamadı.",
       "timePassed": "Zaman Geçti",
+      "swipeDetail": "Sola/sağa kaydırarak diğer randevuları görün",
+      "swipeHint": "Kaydırarak diğer randevuları görün",
       "storeBarber": "Dükkan Berberi",
       "storeName": "Dükkan Adı",
       "serviceProvider": "İşlemi Yapan",
@@ -364,6 +369,7 @@
     "confirm": "Onayla",
     "save": "Kaydet",
     "delete": "Sil",
+    "copy": "Kopyala",
     "edit": "Düzenle",
     "close": "Kapat",
     "search": "Ara...",
@@ -552,6 +558,11 @@
     "beautySalonSubHeadingsRequired": "Güzellik salonu alt başlıkları zorunludur",
     "mainHeadingsRequired": "Ana başlıklar zorunludur",
     "subHeadingsRequired": "Alt başlıklar zorunludur",
+    "categoryStepHelperMainCategoryFreeBarber": "İleri adıma geçmek için listeden tam olarak bir ana kategori seçmelisiniz.",
+    "categoryStepHelperMainHeadings": "Devam etmek için en az bir ana başlık seçmelisiniz.",
+    "categoryStepHelperSubHeadings": "Devam etmek için en az bir alt başlık seçmelisiniz.",
+    "categoryStepHelperServicesStore": "Mağazanızda sunacağınız hizmetlerden en az birini seçmeden ilerleyemezsiniz.",
+    "categoryStepHelperServicesFreeBarber": "En az bir hizmet seçin veya bir sonraki adımda güzellik salonu hizmetlerinizi ekleyin; toplamda en az bir hizmet tanımlanmalıdır.",
     "mainCategories": "Ana Kategoriler",
     "beautySalonCategories": "Güzellik Salonu Kategorileri",
     "priceRequired": "Fiyat zorunlu",
@@ -613,7 +624,7 @@
     "stepMainHeadings": "Ana Başlıklar",
     "stepSubHeadings": "Alt Başlıklar",
     "stepServices": "Hizmetler",
-    "stepBeautySalon": "Güzellik Salonu",
+    "stepBeautySalon": "Güzellik Uzmanı",
     "stepPrices": "Fiyatlar",
     "stepPreview": "Önizleme",
     "stepAvailability": "Müsaitlik",
@@ -651,6 +662,9 @@
     "closed": "Kapalı",
     "closedDays": "Kapalı Günler",
     "closedDaysHint": "Kapalı güne dokunarak açabilirsiniz",
+    "holidayAndSpecialDays": "tatil günleri, özel günler",
+    "startTime": "Açılış",
+    "endTime": "Kapanış",
     "setAddress": "Adres Belirle",
     "addressDescription": "Adres açıklaması",
     "storeNameLabel": "İşletme Adı",
@@ -727,7 +741,8 @@
     "weekGridBooked": "Dolu",
     "weekGridPast": "Geçmiş",
     "weekGridClosed": "Kapalı",
-    "selectedTime": "Seçili"
+    "selectedTime": "Seçili",
+    "swipeDays": "İçeriği kaydırarak gün değiştirin"
   },
   "complaint": {
     "title": "Şikayet Et",
@@ -787,6 +802,8 @@
     "locationFailed": "Konum alınamadı. Lütfen tekrar deneyin.",
     "recordingFailed": "Ses kaydı başlatılamadı.",
     "transcriptionFailed": "Ses metne dönüştürülemedi.",
+    "transcriptionUnavailableTitle": "Ses metne çevrilemedi",
+    "transcriptionUnavailableBody": "Servis kotası veya bağlantı nedeniyle çeviri yapılamadı. Mesajınızı yazarak göndermeye devam edebilirsiniz.",
     "uploadingMedia": "Medya yükleniyor...",
     "locationShared": "Konum paylaşıldı",
     "photo": "Fotoğraf",
@@ -810,6 +827,7 @@
     "error_recording_failed": "Ses kaydı başlatılamadı.",
     "error_transcription_empty": "Ses algılanamadı. Lütfen tekrar konuşun.",
     "error_whisper_failed": "Ses metne dönüştürülemedi.",
+    "error_whisper_rate_limit": "Ses çevirme kotası doldu veya servis yoğun. Yazarak devam edebilirsiniz.",
     "error_ai_error": "AI asistanı yanıt veremedi.",
     "error_unknown": "Beklenmedik bir hata oluştu."
   },
@@ -1051,7 +1069,10 @@
     "overflowCompare": "Karşılaştır",
     "overflowPhotos": "Fotoğrafları gör",
     "overflowMenuA11y": "Panel işlemleri",
-    "locationDeniedShort": "Konum izni kapalı; keşif kapalı, panel verileriniz yine de yüklenir."
+    "locationDeniedShort": "Konum izni kapalı; keşif kapalı, panel verileriniz yine de yüklenir.",
+    "emptyStateHintFreeBarber": "Müşterilerin sizi keşifte görebilmesi için panelinizi ekleyin.",
+    "emptyStateHintStore": "İlk işletmenizi eklemek için berber dükkanı sekmesindeki + düğmesini kullanın.",
+    "openStorePanelToAdd": "Dükkan paneline git"
   },
   "moderation": {
     "inappropriateText": "Mesajınız uygunsuz içerik barındırmaktadır. Lütfen küfür, hakaret veya uygunsuz ifadeler kullanmayınız.",

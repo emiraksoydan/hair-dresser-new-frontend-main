@@ -11,7 +11,18 @@ import {
   BackHandler,
   Platform,
   Dimensions,
+  Modal,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
+  type LayoutChangeEvent,
 } from "react-native";
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  interpolate,
+  Extrapolation,
+} from "react-native-reanimated";
+import { PerplexityListItem } from "../panel/PerplexityListItem";
 import { MotiView } from "moti";
 import { Text } from "../common/Text";
 import { LegendList } from "@legendapp/list";
@@ -53,6 +64,24 @@ export default function SharedAppointmentScreen() {
   const [activeFilter, setActiveFilter] = useState<AppointmentFilter>(
     AppointmentFilter.Active,
   );
+
+  // Scroll-linked header animation (Reanimated)
+  // LegendList onScroll gerçek bir JS fonksiyonu bekler; useAnimatedScrollHandler worklet nesnesi verir → "Object is not a function"
+  const listScrollY = useSharedValue(0);
+  const onListScroll = useCallback(
+    (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+      listScrollY.value = e.nativeEvent.contentOffset.y;
+    },
+    [listScrollY],
+  );
+  const filterBarAnimStyle = useAnimatedStyle(() => {
+    const opacity = interpolate(listScrollY.value, [0, 30], [0, isDark ? 0.35 : 0.1], Extrapolation.CLAMP);
+    const border = interpolate(listScrollY.value, [0, 30], [0, 1], Extrapolation.CLAMP);
+    return {
+      borderBottomWidth: border,
+      shadowOpacity: opacity,
+    };
+  });
   const ratingSheet = useBottomSheet({
     enablePanDownToClose: true,
   });
@@ -115,6 +144,19 @@ export default function SharedAppointmentScreen() {
     isError,
   } = useGetAllAppointmentByFilterQuery(activeFilter);
 
+  /** LegendList satır yüksekliği değişken; Perplexity scroll eşlemesi için ölçülen stride */
+  const appointmentRowStrideRef = useRef<Map<string, number>>(new Map());
+  const [appointmentLayoutVersion, setAppointmentLayoutVersion] = useState(0);
+
+  useEffect(() => {
+    appointmentRowStrideRef.current.clear();
+    setAppointmentLayoutVersion((v) => v + 1);
+  }, [activeFilter]);
+
+  const APPT_LIST_PAD = 10;
+  const APPT_LIST_GAP = 12;
+  const APPT_ROW_DEFAULT_STRIDE = 292;
+
   const filteredAppointments = useMemo(() => {
     const items = appointments ?? [];
 
@@ -143,6 +185,21 @@ export default function SharedAppointmentScreen() {
 
     return items;
   }, [appointments, activeFilter]);
+
+  const appointmentListScrollLayout = useMemo(() => {
+    const starts: number[] = [];
+    const lengths: number[] = [];
+    let y = APPT_LIST_PAD;
+    filteredAppointments.forEach((app) => {
+      starts.push(y);
+      const stride =
+        appointmentRowStrideRef.current.get(app.id) ?? APPT_ROW_DEFAULT_STRIDE;
+      const L = Math.max(stride, 1);
+      lengths.push(L);
+      y += L;
+    });
+    return { starts, lengths };
+  }, [filteredAppointments, appointmentLayoutVersion]);
 
   const [cancelAppointment, { isLoading: isCancelling }] =
     useCancelAppointmentMutation();
@@ -895,7 +952,30 @@ export default function SharedAppointmentScreen() {
           : currentLanguage === "ar"
             ? "ar-SA"
             : "en-US";
+    const itemStart =
+      appointmentListScrollLayout.starts[index] ??
+      APPT_LIST_PAD + index * APPT_ROW_DEFAULT_STRIDE;
+    const itemLength =
+      appointmentListScrollLayout.lengths[index] ?? APPT_ROW_DEFAULT_STRIDE;
+
     return (
+    <PerplexityListItem
+      scrollPos={listScrollY}
+      itemStart={itemStart}
+      itemLength={itemLength}
+    >
+      <View
+        onLayout={(e: LayoutChangeEvent) => {
+          const innerH = e.nativeEvent.layout.height;
+          const stride = innerH + APPT_LIST_GAP;
+          const id = item.id;
+          const prev = appointmentRowStrideRef.current.get(id);
+          if (prev === undefined || Math.abs(prev - stride) > 2) {
+            appointmentRowStrideRef.current.set(id, stride);
+            setAppointmentLayoutVersion((v) => v + 1);
+          }
+        }}
+      >
       <View
         className="rounded-2xl mb-3 overflow-hidden"
         style={{
@@ -1063,21 +1143,22 @@ export default function SharedAppointmentScreen() {
                 <TouchableOpacity
                   onPress={() => handleComplete(item.id)}
                   disabled={isCompleting}
-                  className="bg-green-600 flex-1 py-2.5 rounded-xl flex-row items-center justify-center"
+                  className="flex-1 py-2.5 rounded-xl flex-row items-center justify-center"
                   style={{
-                    shadowColor: "#15803d",
-                    shadowOffset: { width: 0, height: 2 },
-                    shadowOpacity: 0.22,
-                    shadowRadius: 4,
-                    elevation: 2,
+                    backgroundColor: isDark ? "rgba(34,197,94,0.14)" : "rgba(187,247,208,0.65)",
+                    borderWidth: 1,
+                    borderColor: isDark ? "rgba(34,197,94,0.38)" : "rgba(22,163,74,0.28)",
                   }}
                 >
                   {isCompleting ? (
-                    <ActivityIndicator color="white" size="small" />
+                    <ActivityIndicator color={isDark ? "#86efac" : "#15803d"} size="small" />
                   ) : (
                     <>
-                      <Icon source="check-all" size={16} color="white" />
-                      <Text className="text-white text-sm font-semibold ml-2">
+                      <Icon source="check-all" size={16} color={isDark ? "#86efac" : "#15803d"} />
+                      <Text
+                        className="text-sm font-semibold ml-2"
+                        style={{ color: isDark ? "#bbf7d0" : "#166534", fontFamily: "CenturyGothic-Bold" }}
+                      >
                         {t("appointment.actions.complete")}
                       </Text>
                     </>
@@ -1088,23 +1169,22 @@ export default function SharedAppointmentScreen() {
                 <TouchableOpacity
                   onPress={() => handleCancel(item.id)}
                   disabled={isCancelling}
-                  className="bg-red-600 flex-1 py-2.5 rounded-xl flex-row items-center justify-center"
+                  className="flex-1 py-2.5 rounded-xl flex-row items-center justify-center"
                   style={{
+                    backgroundColor: isDark ? "rgba(248,113,113,0.14)" : "rgba(254,202,202,0.55)",
                     borderWidth: 1,
-                    borderColor: "rgba(127, 29, 29, 0.45)",
-                    shadowColor: "#b91c1c",
-                    shadowOffset: { width: 0, height: 2 },
-                    shadowOpacity: 0.2,
-                    shadowRadius: 4,
-                    elevation: 2,
+                    borderColor: isDark ? "rgba(248,113,113,0.38)" : "rgba(220,38,38,0.22)",
                   }}
                 >
                   {isCancelling ? (
-                    <ActivityIndicator color="#ef4444" size="small" />
+                    <ActivityIndicator color={isDark ? "#fca5a5" : "#dc2626"} size="small" />
                   ) : (
                     <>
-                      <Icon source="close-circle-outline" size={16} color="#fff" />
-                      <Text className="text-white text-sm font-semibold ml-2">
+                      <Icon source="close-circle-outline" size={16} color={isDark ? "#fca5a5" : "#b91c1c"} />
+                      <Text
+                        className="text-sm font-semibold ml-2"
+                        style={{ color: isDark ? "#fecaca" : "#991b1b", fontFamily: "CenturyGothic-Bold" }}
+                      >
                         {t("appointment.actions.cancel")}
                       </Text>
                     </>
@@ -1301,7 +1381,7 @@ export default function SharedAppointmentScreen() {
                       }
                     />
                   </View>
-                ) : (
+                ) : (item.chairId || item.chairName) ? (
                   <View className="flex-row items-center">
                     <View
                       className="w-14 h-14 rounded-xl items-center justify-center"
@@ -1328,7 +1408,7 @@ export default function SharedAppointmentScreen() {
                       </Text>
                     </View>
                   </View>
-                )}
+                ) : null}
               </View>
             </View>
           )}
@@ -1682,7 +1762,7 @@ export default function SharedAppointmentScreen() {
                       }
                     />
                   </View>
-                ) : (
+                ) : (item.chairId || item.chairName) ? (
                   <View className="flex-row items-center">
                     <View
                       className="w-14 h-14 rounded-xl items-center justify-center"
@@ -1709,7 +1789,7 @@ export default function SharedAppointmentScreen() {
                       </Text>
                     </View>
                   </View>
-                )}
+                ) : null}
               </View>
             </View>
           )}
@@ -1868,6 +1948,8 @@ export default function SharedAppointmentScreen() {
         )}
         </View>
       </View>
+      </View>
+    </PerplexityListItem>
     );
   };
 
@@ -1877,11 +1959,26 @@ export default function SharedAppointmentScreen() {
       collapsable={false}
       style={{ flex: 1, backgroundColor: colors.screenBg }}
     >
-      <View className="pt-2 pb-2">
+      <Animated.View
+        style={[
+          {
+            paddingTop: 8,
+            paddingBottom: 8,
+            backgroundColor: colors.screenBg,
+            borderBottomColor: colors.borderColor,
+            shadowColor: "#000",
+            shadowOffset: { width: 0, height: 3 },
+            shadowRadius: 6,
+            elevation: 0,
+            zIndex: 10,
+          },
+          filterBarAnimStyle,
+        ]}
+      >
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
-          contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 8, gap: 8, alignItems: "center" }}
+          contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 0, gap: 8, alignItems: "center" }}
         >
           <FilterChip
             itemKey="pending"
@@ -1920,7 +2017,7 @@ export default function SharedAppointmentScreen() {
             {t("appointment.filters.cancelled")}
           </FilterChip>
         </ScrollView>
-      </View>
+      </Animated.View>
 
       {isLoading ? (
         <View className="flex-1 pt-4 px-4">
@@ -1962,8 +2059,9 @@ export default function SharedAppointmentScreen() {
           keyExtractor={((item: AppointmentGetDto) => item.id) as any}
           renderItem={renderItem as any}
           extraData={openCardMenuId}
-          estimatedItemSize={250}
+          estimatedItemSize={292}
           scrollEventThrottle={16}
+          onScroll={onListScroll}
           contentContainerStyle={{
             paddingHorizontal: 16,
             paddingBottom: 100,

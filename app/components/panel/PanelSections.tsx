@@ -1,21 +1,24 @@
 import React, { useState, useMemo } from 'react';
-import { View, Dimensions, FlatList } from 'react-native';
+import { View, Dimensions } from 'react-native';
 import Animated, { useAnimatedScrollHandler, useSharedValue } from 'react-native-reanimated';
 import { PerplexityListItem } from './PerplexityListItem';
+import { PerplexityHorizontalList } from './PerplexityHorizontalList';
 import { Text } from '../common/Text';
 import MotiViewExpand from '../../components/common/motiviewexpand';
 import { SkeletonComponent } from '../../components/common/skeleton';
 import { EmptyState } from '../../components/common/emptystateresult';
 import { LottieViewComponent } from '../../components/common/lottieview';
+import { UnifiedStateManager } from '../../components/common/UnifiedStateManager';
 import { StoreCardInner } from '../../components/store/storecard';
 import { FreeBarberCardInner } from '../../components/freebarber/freebarbercard';
 import { getErrorMessage } from '../../utils/errorHandler';
 import { useLanguage } from '../../hook/useLanguage';
+import { BarberStoreGetDto, FreeBarGetDto } from '../../types';
 
 export const SectionHeader = ({ title, expanded, onToggle }: any) => (
     <View className="flex flex-row justify-between items-center mt-4">
-        <Text className="font-century-gothic-sans-regular text-xl text-white">{title}</Text>
-        <MotiViewExpand expanded={expanded} onPress={onToggle} />
+        <Text className="font-century-gothic-sans-regular text-lg text-white">{title}</Text>
+        <MotiViewExpand expanded={expanded} onPress={onToggle} size={20} />
     </View>
 );
 
@@ -40,8 +43,6 @@ export const EmptyStateFunc = ({ loading, hasData, hasLocation, locationStatus, 
     </View>
 );
 
-const STORE_LIST_STRIDE = 460;
-const FB_LIST_STRIDE = 440;
 
 export const StoresSection = React.memo(({ stores, loading, hasLocation, locationStatus, fetchedOnce, isList, onPressStore, onPressRatings, searchQuery, appliedFilters, error, showImageAnimation = true, onRetry }: any) => {
     const { t } = useLanguage();
@@ -55,28 +56,34 @@ export const StoresSection = React.memo(({ stores, loading, hasLocation, locatio
         },
     });
 
-    // Network/Server error durumu - öncelikli göster
+    // Network/Server error — panel keşif ile aynı kart + tekrar dene
     if (error) {
-        const errorMessage = getErrorMessage(error);
-
         return (
             <View style={{ minHeight: 200, maxHeight: 400 }}>
-                <LottieViewComponent
-                    animationSource={require('../../../assets/animations/error.json')}
-                    message={errorMessage}
+                <UnifiedStateManager
+                    error={error}
+                    message={getErrorMessage(error)}
+                    state="error"
                     onRetry={onRetry}
+                    loading={false}
+                    fetchedOnce={true}
+                    hasData={stores.length > 0}
                 />
             </View>
         );
     }
 
-    // Location permission denied durumu - error animasyonu göster
     if (locationStatus === "denied") {
         return (
             <View style={{ minHeight: 200, maxHeight: 400 }}>
-                <LottieViewComponent
-                    animationSource={require('../../../assets/animations/Location.json')}
-                    message="Konum izni verilmedi. Lütfen ayarlardan konum iznini açın."
+                <UnifiedStateManager
+                    locationStatus="denied"
+                    state="location-denied"
+                    message={t('location.permissionDeniedSettings')}
+                    onRetry={onRetry}
+                    loading={false}
+                    fetchedOnce={true}
+                    hasData={stores.length > 0}
                 />
             </View>
         );
@@ -121,6 +128,8 @@ export const StoresSection = React.memo(({ stores, loading, hasLocation, locatio
         );
     }
 
+    const storeRowStride = isList ? 300 : 270;
+
     return (
         <View>
             <SectionHeader title="İşletmeler" expanded={expanded} onToggle={() => setExpanded(!expanded)} />
@@ -134,31 +143,25 @@ export const StoresSection = React.memo(({ stores, loading, hasLocation, locatio
                     renderItem={({ item: s, index }: { item: any; index: number }) => (
                         <PerplexityListItem
                             scrollPos={scrollY}
-                            itemStart={index * STORE_LIST_STRIDE}
-                            itemLength={STORE_LIST_STRIDE}
+                            itemStart={index * storeRowStride}
+                            itemLength={storeRowStride}
                             horizontal={false}
                         >
-                            <StoreCardInner store={s} isList={isList} expanded={expanded} cardWidthStore={cardWidth} onPressUpdate={onPressStore} onPressRatings={onPressRatings} showImageAnimation={showImageAnimation} />
+                            <StoreCardInner store={s} isList={isList} expanded={expanded} cardWidthStore={cardWidth} compactMeta onPressUpdate={onPressStore} onPressRatings={onPressRatings} showImageAnimation={showImageAnimation} />
                         </PerplexityListItem>
                     )}
                     contentContainerStyle={{ paddingTop: 8 }}
                 />
             ) : (
-                <FlatList
-                    data={stores}
+                <PerplexityHorizontalList<BarberStoreGetDto>
+                    data={stores as BarberStoreGetDto[]}
                     keyExtractor={(item) => item.id}
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    renderItem={({ item }) => (
-                        <StoreCardInner store={item} isList={isList} expanded={false} cardWidthStore={cardWidth} onPressUpdate={onPressStore} onPressRatings={onPressRatings} showImageAnimation={showImageAnimation} />
-                    )}
-                    contentContainerStyle={{ paddingTop: 8 }}
-                    ItemSeparatorComponent={() => <View style={{ width: 12 }} />}
+                    snapInterval={cardWidth + 12}
+                    contentContainerStyle={{ paddingTop: 8, gap: 12, paddingHorizontal: 10 }}
                     nestedScrollEnabled
-                    initialNumToRender={3}
-                    maxToRenderPerBatch={5}
-                    windowSize={7}
-                    removeClippedSubviews={true}
+                    renderItem={({ item }) => (
+                        <StoreCardInner store={item} isList={isList} expanded={false} cardWidthStore={cardWidth} compactMeta onPressUpdate={onPressStore} onPressRatings={onPressRatings} showImageAnimation={showImageAnimation} />
+                    )}
                 />
             )}
         </View>
@@ -177,28 +180,33 @@ export const FreeBarbersSection = React.memo(({ freeBarbers, loading, hasLocatio
         },
     });
 
-    // Network/Server error durumu - öncelikli göster
     if (error) {
-        const errorMessage = getErrorMessage(error);
-
         return (
             <View style={{ minHeight: 200, maxHeight: 400 }}>
-                <LottieViewComponent
-                    animationSource={require('../../../assets/animations/error.json')}
-                    message={errorMessage}
+                <UnifiedStateManager
+                    error={error}
+                    message={getErrorMessage(error)}
+                    state="error"
                     onRetry={onRetry}
+                    loading={false}
+                    fetchedOnce={true}
+                    hasData={freeBarbers.length > 0}
                 />
             </View>
         );
     }
 
-    // Location permission denied durumu - error animasyonu göster
     if (locationStatus === "denied") {
         return (
             <View style={{ minHeight: 200, maxHeight: 400 }}>
-                <LottieViewComponent
-                    animationSource={require('../../../assets/animations/Location.json')}
+                <UnifiedStateManager
+                    locationStatus="denied"
+                    state="location-denied"
                     message={t('location.permissionDeniedSettings')}
+                    onRetry={onRetry}
+                    loading={false}
+                    fetchedOnce={true}
+                    hasData={freeBarbers.length > 0}
                 />
             </View>
         );
@@ -243,6 +251,8 @@ export const FreeBarbersSection = React.memo(({ freeBarbers, loading, hasLocatio
         );
     }
 
+    const fbRowStride = isList ? 300 : 270;
+
     return (
         <View>
             <SectionHeader title="Serbest Berberler" expanded={expanded} onToggle={() => setExpanded(!expanded)} />
@@ -256,31 +266,25 @@ export const FreeBarbersSection = React.memo(({ freeBarbers, loading, hasLocatio
                     renderItem={({ item: fb, index }: { item: any; index: number }) => (
                         <PerplexityListItem
                             scrollPos={scrollYFb}
-                            itemStart={index * FB_LIST_STRIDE}
-                            itemLength={FB_LIST_STRIDE}
+                            itemStart={index * fbRowStride}
+                            itemLength={fbRowStride}
                             horizontal={false}
                         >
-                            <FreeBarberCardInner freeBarber={fb} isList={isList} expanded={expanded} cardWidthFreeBarber={cardWidth} onPressUpdate={onPressFreeBarber} onPressRatings={onPressRatings} showImageAnimation={showImageAnimation} />
+                            <FreeBarberCardInner freeBarber={fb} isList={isList} expanded={expanded} cardWidthFreeBarber={cardWidth} compactMeta onPressUpdate={onPressFreeBarber} onPressRatings={onPressRatings} showImageAnimation={showImageAnimation} />
                         </PerplexityListItem>
                     )}
                     contentContainerStyle={{ paddingTop: 8 }}
                 />
             ) : (
-                <FlatList
-                    data={freeBarbers}
-                    keyExtractor={(item) => (item as any).id}
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    renderItem={({ item }) => (
-                        <FreeBarberCardInner freeBarber={item} isList={isList} expanded={false} cardWidthFreeBarber={cardWidth} onPressUpdate={onPressFreeBarber} onPressRatings={onPressRatings} showImageAnimation={showImageAnimation} />
-                    )}
-                    contentContainerStyle={{ paddingTop: 8 }}
-                    ItemSeparatorComponent={() => <View style={{ width: 12 }} />}
+                <PerplexityHorizontalList<FreeBarGetDto>
+                    data={freeBarbers as FreeBarGetDto[]}
+                    keyExtractor={(item) => item.id}
+                    snapInterval={cardWidth + 12}
+                    contentContainerStyle={{ paddingTop: 8, gap: 12, paddingHorizontal: 10 }}
                     nestedScrollEnabled
-                    initialNumToRender={3}
-                    maxToRenderPerBatch={5}
-                    windowSize={7}
-                    removeClippedSubviews={true}
+                    renderItem={({ item }) => (
+                        <FreeBarberCardInner freeBarber={item} isList={isList} expanded={false} cardWidthFreeBarber={cardWidth} compactMeta onPressUpdate={onPressFreeBarber} onPressRatings={onPressRatings} showImageAnimation={showImageAnimation} />
+                    )}
                 />
             )}
         </View>

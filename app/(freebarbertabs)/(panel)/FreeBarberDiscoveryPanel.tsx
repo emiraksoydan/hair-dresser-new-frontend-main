@@ -43,12 +43,14 @@ import {
   useUpdateSavedFilterMutation,
 } from "../../store/api";
 import { useAppDispatch } from "../../store/hook";
+import { setStoreSwipeIds } from "../../store/bookingSwipeSlice";
 import { showSnack } from "../../store/snackbarSlice";
 import { getErrorMessage, getMessage } from "../../utils/errorHandler";
 import { SavedFilterChips } from "../../components/common/savedfilterchips";
 import { RatingsBottomSheet } from "../../components/rating/ratingsbottomsheet";
 import { useBackendFilters } from "../../hook/useBackendFilters";
 import { useActionGuard } from "../../hook/useActionGuard";
+import { useSubscriptionGuard } from "../../hook/useSubscriptionGuard";
 import { StoreMarker } from "../../components/common/storemarker";
 import { DeferredRender } from "../../components/common/deferredrender";
 import { isOtherUsersStore } from "../../utils/compare-eligibility";
@@ -64,8 +66,10 @@ import Animated, {
   useAnimatedScrollHandler,
   useSharedValue,
 } from "react-native-reanimated";
-import { ScrollStackItem } from "../../components/common/ScrollStackItem";
+import { PerplexityListItem } from "../../components/panel/PerplexityListItem";
 import { PerplexityHorizontalList } from "../../components/panel/PerplexityHorizontalList";
+import { PanelEmptyCta } from "../../components/common/PanelEmptyCta";
+import { useFreeBarberPanelSheet } from "../../context/FreeBarberPanelSheetContext";
 
 const Index = () => {
   const insets = useSafeAreaInsets();
@@ -79,6 +83,8 @@ const Index = () => {
   const cmpM = useCompareMetrics();
   const router = useSafeNavigation();
   const guard = useActionGuard();
+  const { withSubscription } = useSubscriptionGuard();
+  const freeBarberPanelSheet = useFreeBarberPanelSheet();
 
   const { data: notifications = [], refetch: refetchNotifications } =
     useGetAllNotificationsQuery();
@@ -327,6 +333,12 @@ const Index = () => {
     [presentRatings],
   );
 
+  const handleViewMyPanelPress = useCallback(() => {
+    withSubscription(() => {
+      router.push("/(screens)/profile/free-barber-panel");
+    });
+  }, [router, withSubscription]);
+
   // Filter fonksiyonları - filters are applied instantly, no apply button needed
   const handleClearFilters = useCallback(() => {
     clearFilters();
@@ -370,7 +382,8 @@ const Index = () => {
 
   const goStoreDetail = useCallback(
     (store: BarberStoreGetDto) => {
-      const params: any = {
+      dispatch(setStoreSwipeIds(filteredStores.map((s) => s.id)));
+      const params: Record<string, string> = {
         storeId: store.id,
         mode: effectiveAppointmentId ? "add-store" : "free-barber",
       };
@@ -384,7 +397,7 @@ const Index = () => {
         params,
       });
     },
-    [router, effectiveAppointmentId],
+    [router, effectiveAppointmentId, dispatch, filteredStores],
   );
 
   const renderItem = useCallback(
@@ -394,6 +407,7 @@ const Index = () => {
         isList={isList}
         expanded={expandedStoreBarber}
         cardWidthStore={cardWidthStores}
+        compactMeta
         isViewerFromFreeBr={true}
         onPressUpdate={goStoreDetail}
         onPressRatings={handlePressRatings}
@@ -580,6 +594,7 @@ const Index = () => {
         <View style={{ backgroundColor: colors.cardBg, borderRadius: 14, borderWidth: 1.5, borderColor: colors.cardBg, overflow: "hidden" }}>
           <SearchBar
             transparent
+            compact
             searchQuery={searchQuery}
             setSearchQuery={setSearchQuery}
             isList={isList}
@@ -588,20 +603,20 @@ const Index = () => {
           />
           <TouchableOpacity
             activeOpacity={0.7}
-            onPress={() => router.push("/(screens)/profile/free-barber-panel")}
+            onPress={handleViewMyPanelPress}
             style={{
               flexDirection: "row",
               alignItems: "center",
-              minHeight: 46,
-              paddingHorizontal: 14,
-              paddingVertical: 10,
+              minHeight: 40,
+              paddingHorizontal: 12,
+              paddingVertical: 8,
               borderTopWidth: StyleSheet.hairlineWidth,
               borderTopColor: colors.borderColor2,
             }}
           >
             <Text
-              numberOfLines={1}
-              style={{ flex: 1, fontSize: 13, color: colors.textSecondary, fontFamily: "CenturyGothic-Bold" }}
+              numberOfLines={2}
+              style={{ flex: 1, fontSize: 13, lineHeight: 18, color: colors.textSecondary, fontFamily: "CenturyGothic-Bold" }}
             >
               {t("panel.viewMyPanel")}
             </Text>
@@ -610,12 +625,12 @@ const Index = () => {
           {savedFilters.length > 0 && (
             <View
               style={{
-                marginHorizontal: 10,
-                marginBottom: 12,
+                marginHorizontal: 8,
+                marginBottom: 10,
                 marginTop: 2,
-                paddingHorizontal: 12,
-                paddingTop: 12,
-                paddingBottom: 12,
+                paddingHorizontal: 10,
+                paddingTop: 10,
+                paddingBottom: 10,
                 borderRadius: 12,
                 backgroundColor: colors.cardBg2,
                 borderWidth: StyleSheet.hairlineWidth,
@@ -664,7 +679,7 @@ const Index = () => {
             if (item.type === "stores-header") {
               return (
                 <View className="flex flex-row justify-between items-center mt-4">
-                  <Text className="font-century-gothic text-2xl" style={{ color: colors.sectionHeaderText }}>
+                  <Text className="font-century-gothic text-xl" style={{ color: colors.sectionHeaderText }}>
                     {t("panel.nearbyStores")}
                   </Text>
                   {hasStoreBarbers && (
@@ -676,6 +691,7 @@ const Index = () => {
                           setExpandedStoreBarber,
                         )
                       }
+                      size={20}
                     />
                   )}
                 </View>
@@ -708,7 +724,22 @@ const Index = () => {
               );
             }
             if (item.type === "stores-empty") {
-              // Veri yok durumu - uygun boş mesaj göster
+              if (!hasFreeBarberPanel) {
+                return (
+                  <View className="mt-2 pr-2">
+                    <PanelEmptyCta
+                      title={t("empty.addPanelToSeeNearbyStores")}
+                      subtitle={t("panel.emptyStateHintFreeBarber")}
+                      buttonLabel={t("common.add")}
+                      onPress={() =>
+                        withSubscription(() =>
+                          freeBarberPanelSheet?.openPanel?.(null),
+                        )
+                      }
+                    />
+                  </View>
+                );
+              }
               return (
                 <View className="mt-2" style={{ minHeight: 350, maxHeight: 400, overflow: 'hidden' }}>
                   <UnifiedStateWrapper
@@ -719,9 +750,8 @@ const Index = () => {
                     fetchedOnce={true}
                     onRetry={manualFetch}
                     customMessages={{
-                      empty: !hasFreeBarberPanel
-                        ? t("empty.addPanelToSeeNearbyStores")
-                        : searchQuery || hasActiveFilters
+                      empty:
+                        searchQuery || hasActiveFilters
                           ? t("empty.noResultsFound")
                           : t("empty.noNearbyStores"),
                     }}
@@ -733,17 +763,17 @@ const Index = () => {
             }
             if (item.type === "store-row") {
               return (
-                <ScrollStackItem
-                  scroll={scrollY}
-                  itemStride={item._scrollLen}
-                  scrollAnchor={item._scrollStart}
-                  bandLength={item._scrollLen}
+                <PerplexityListItem
+                  scrollPos={scrollY}
+                  itemStart={item._scrollStart}
+                  itemLength={item._scrollLen}
                 >
                   <StoreCardInner
                     store={item.data}
                     isList={isList}
                     expanded={expandedStoreBarber}
                     cardWidthStore={cardWidthStores}
+                    compactMeta
                     isViewerFromFreeBr={true}
                     onPressUpdate={goStoreDetail}
                     onPressRatings={handlePressRatings}
@@ -759,7 +789,7 @@ const Index = () => {
                         : undefined
                     }
                   />
-                </ScrollStackItem>
+                </PerplexityListItem>
               );
             }
             if (item.type === "stores-content-horizontal") {
@@ -770,9 +800,10 @@ const Index = () => {
                     keyExtractor={(store) => store.id}
                     snapInterval={cardWidthStores + 12}
                     contentContainerStyle={{
-                      gap: 12,
-                      paddingTop: 8,
-                      paddingBottom: 8,
+                      gap: 10,
+                      paddingTop: 6,
+                      paddingBottom: 6,
+                      paddingHorizontal: 0,
                     }}
                     renderItem={({ item: store }) => renderItem({ item: store })}
                   />

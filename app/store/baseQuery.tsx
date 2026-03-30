@@ -4,6 +4,7 @@ import { tokenStore } from '../lib/tokenStore';
 import { saveTokens, clearStoredTokens, loadTokens } from '../lib/tokenStorage';
 import { jwtDecode } from 'jwt-decode';
 import { API_CONFIG } from '../constants/api';
+import { triggerSubscriptionExpired } from './subscriptionSlice';
 
 export const API = API_CONFIG.BASE_URL;
 
@@ -129,6 +130,17 @@ export const baseQueryWithReauth: BaseQueryFn<any, unknown, FetchBaseQueryError>
               res.error.data = { message: errorMessage };
             }
           }
+        }
+      }
+
+      // Abonelik süresi dolmuş veya ban: 403 + backend mesajı kontrol et.
+      // Bu durumda token refresh denemesi yapma — subscription expired event'i yayınla.
+      if (res.error?.status === 403) {
+        const errData = res.error.data as any;
+        const msg: string = errData?.message || errData?.Message || '';
+        if (msg.includes('Deneme süreniz') || msg.includes('abone')) {
+          (api as any).dispatch(triggerSubscriptionExpired());
+          return res;
         }
       }
 

@@ -3,6 +3,8 @@ import {
   ActivityIndicator,
   Animated,
   Image,
+  KeyboardAvoidingView,
+  Platform,
   ScrollView,
   TouchableOpacity,
   View,
@@ -20,6 +22,7 @@ import {
   handlePickMultipleImages,
   handlePickImage,
   truncateFileName,
+  resolveMimeType,
 } from "../../utils/form/pick-document";
 import { parseTR } from "../../utils/form/money-helper";
 import {
@@ -294,6 +297,7 @@ export const FormFreeBarberOperation = React.memo(
       React.useState(false);
     const [isCertificateLoading, setIsCertificateLoading] =
       React.useState(false);
+    const [isSubmitting, setIsSubmitting] = React.useState(false);
     const [loadedImages, setLoadedImages] = React.useState<Set<number>>(
       new Set(),
     );
@@ -900,11 +904,11 @@ export const FormFreeBarberOperation = React.memo(
 
     const OnSubmit = React.useCallback(
       async (form: FormFreeBarberValues) => {
-        // Error veya location denied kontrolü
         if (!checkCanPerformAction()) {
           return;
         }
-
+        setIsSubmitting(true);
+        try {
         if (isEdit) {
           const ok = await setLocationNow();
           if (!ok) return;
@@ -1027,7 +1031,7 @@ export const FormFreeBarberOperation = React.memo(
 
         const makeCertFormData = (file: { uri: string; name?: string | null; type?: string | null }, defaultName: string) => {
           const fd = new FormData();
-          fd.append("file", { uri: file.uri, name: file.name ?? defaultName, type: file.type ?? "image/jpeg" } as any);
+          fd.append("file", { uri: file.uri, name: file.name ?? defaultName, type: resolveMimeType(file.type ?? undefined, file.name ?? undefined) } as any);
           fd.append("ownerType", String(ImageOwnerType.User));
           fd.append("ownerId", userId!);
           return fd;
@@ -1148,7 +1152,7 @@ export const FormFreeBarberOperation = React.memo(
                       formData.append("file", {
                         uri: img.uri,
                         name: img.name ?? "photo.jpg",
-                        type: img.type ?? "image/jpeg",
+                        type: resolveMimeType(img.type, img.name),
                       } as any);
                       const updateBlobResult = await updateImageBlob({
                         imageId: img.id!,
@@ -1178,7 +1182,7 @@ export const FormFreeBarberOperation = React.memo(
                   formData.append("files", {
                     uri: img.uri,
                     name: img.name ?? "photo.jpg",
-                    type: img.type ?? "image/jpeg",
+                    type: resolveMimeType(img.type, img.name),
                   } as any);
                 });
                 formData.append("ownerType", String(ImageOwnerType.FreeBarber));
@@ -1241,6 +1245,9 @@ export const FormFreeBarberOperation = React.memo(
               isError: true,
             }),
           );
+        }
+        } finally {
+          setIsSubmitting(false);
         }
       },
       [
@@ -1317,7 +1324,13 @@ export const FormFreeBarberOperation = React.memo(
     const showSkeleton = isEdit && (isLoading || !data);
 
     return (
-      <View className="h-full">
+      <KeyboardAvoidingView
+        className="h-full"
+        style={{ flex: 1 }}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 64 : 0}
+      >
+      <View className="h-full flex-1">
         <View className="flex-row justify-between items-center px-2 py-2">
           <Text className="flex-1 font-century-gothic text-2xl" style={{ color: colors.sectionHeaderText }}>
             {!isEdit ? t("form.createPanel") : t("form.editPanel")}
@@ -1509,7 +1522,7 @@ export const FormFreeBarberOperation = React.memo(
                               />
                             </TouchableOpacity>
                             {value?.uri && !isCertificateLoading && (
-                              <View className="mt-2 mb-2 w-full">
+                              <View className="mt-2 mb-2 w-full relative">
                                 <Image
                                   source={{ uri: value.uri }}
                                   style={{
@@ -1519,6 +1532,13 @@ export const FormFreeBarberOperation = React.memo(
                                   }}
                                   resizeMode="cover"
                                 />
+                                <TouchableOpacity
+                                  onPress={() => onChange(undefined as any)}
+                                  className="absolute top-2 right-2 bg-red-500 rounded-full p-1.5"
+                                  activeOpacity={0.85}
+                                >
+                                  <Icon source="close" size={18} color="white" />
+                                </TouchableOpacity>
                               </View>
                             )}
                             <HelperText
@@ -1607,6 +1627,9 @@ export const FormFreeBarberOperation = React.memo(
                       <Text className="text-xl mb-3 font-century-gothic-bold" style={{ color: colors.sectionHeaderText }}>
                         {t("form.mainCategories")} *
                       </Text>
+                      <HelperText type="info" visible style={{ fontFamily: "CenturyGothic", marginTop: -8, marginBottom: 8 }}>
+                        {t("form.categoryStepHelperMainCategoryFreeBarber")}
+                      </HelperText>
                       <View className="rounded-xl p-3" style={{ borderWidth: 1, borderColor: colors.borderColor, backgroundColor: colors.cardBg }}>
                         <Controller
                           control={control}
@@ -1633,14 +1656,25 @@ export const FormFreeBarberOperation = React.memo(
                   <>
                     <View className="mt-2">
                       {selectedMainCategories.length === 0 || mainHeadingOptions.length === 0 ? (
-                        <Text className="text-gray-400 text-center py-8">
-                          {t("form.stepMainHeadings")} - {t("form.selectMainCategories")}
-                        </Text>
+                        <>
+                          <Text className="text-gray-400 text-center py-8">
+                            {t("form.stepMainHeadings")} - {t("form.selectMainCategories")}
+                          </Text>
+                          <HelperText type="info" visible style={{ fontFamily: "CenturyGothic" }}>
+                            {t("form.categoryStepHelperMainHeadings")}
+                          </HelperText>
+                          <HelperText type="error" visible={!!errors.selectedMainHeadings} style={{ fontFamily: "CenturyGothic" }}>
+                            {errors.selectedMainHeadings?.message as string}
+                          </HelperText>
+                        </>
                       ) : (
                         <>
                           <Text className="text-xl mb-3 font-century-gothic-bold" style={{ color: colors.sectionHeaderText }}>
-                            {t("form.mainHeadings")}
+                            {t("form.mainHeadings")} *
                           </Text>
+                          <HelperText type="info" visible style={{ fontFamily: "CenturyGothic", marginTop: -8, marginBottom: 8 }}>
+                            {t("form.categoryStepHelperMainHeadings")}
+                          </HelperText>
                           <View className="rounded-xl p-3" style={{ borderWidth: 1, borderColor: colors.borderColor, backgroundColor: colors.cardBg }}>
                             <Controller
                               control={control}
@@ -1654,7 +1688,8 @@ export const FormFreeBarberOperation = React.memo(
                                   />
                                   <HelperText
                                     type="error"
-                                    visible={!selectedMainHeadings.length && !!errors.selectedMainHeadings}
+                                    visible={!!errors.selectedMainHeadings}
+                                    style={{ fontFamily: "CenturyGothic" }}
                                   >
                                     {errors.selectedMainHeadings?.message}
                                   </HelperText>
@@ -1671,14 +1706,25 @@ export const FormFreeBarberOperation = React.memo(
                   <>
                     <View className="mt-2">
                       {selectedMainHeadings.length === 0 || subHeadingOptions.length === 0 ? (
-                        <Text className="text-gray-400 text-center py-8">
-                          {t("form.stepSubHeadings")} - {t("form.selectMainHeadings")}
-                        </Text>
+                        <>
+                          <Text className="text-gray-400 text-center py-8">
+                            {t("form.stepSubHeadings")} - {t("form.selectMainHeadings")}
+                          </Text>
+                          <HelperText type="info" visible style={{ fontFamily: "CenturyGothic" }}>
+                            {t("form.categoryStepHelperSubHeadings")}
+                          </HelperText>
+                          <HelperText type="error" visible={!!errors.selectedSubHeadings} style={{ fontFamily: "CenturyGothic" }}>
+                            {errors.selectedSubHeadings?.message as string}
+                          </HelperText>
+                        </>
                       ) : (
                         <>
                           <Text className="text-xl mb-3 font-century-gothic-bold" style={{ color: colors.sectionHeaderText }}>
-                            {t("form.subHeadings")}
+                            {t("form.subHeadings")} *
                           </Text>
+                          <HelperText type="info" visible style={{ fontFamily: "CenturyGothic", marginTop: -8, marginBottom: 8 }}>
+                            {t("form.categoryStepHelperSubHeadings")}
+                          </HelperText>
                           <View className="rounded-xl p-3" style={{ borderWidth: 1, borderColor: colors.borderColor, backgroundColor: colors.cardBg }}>
                             <Controller
                               control={control}
@@ -1692,7 +1738,8 @@ export const FormFreeBarberOperation = React.memo(
                                   />
                                   <HelperText
                                     type="error"
-                                    visible={!selectedSubHeadings.length && !!errors.selectedSubHeadings}
+                                    visible={!!errors.selectedSubHeadings}
+                                    style={{ fontFamily: "CenturyGothic" }}
                                   >
                                     {errors.selectedSubHeadings?.message}
                                   </HelperText>
@@ -1709,14 +1756,25 @@ export const FormFreeBarberOperation = React.memo(
                   <>
                     <View className="mt-2">
                       {selectedSubHeadings.length === 0 || categoryOptions.length === 0 ? (
-                        <Text className="text-gray-400 text-center py-8">
-                          {t("form.stepServices")} - {t("form.selectSubHeadings")}
-                        </Text>
+                        <>
+                          <Text className="text-gray-400 text-center py-8">
+                            {t("form.stepServices")} - {t("form.selectSubHeadings")}
+                          </Text>
+                          <HelperText type="info" visible style={{ fontFamily: "CenturyGothic" }}>
+                            {t("form.categoryStepHelperServicesFreeBarber")}
+                          </HelperText>
+                          <HelperText type="error" visible={!!errors.selectedCategories} style={{ fontFamily: "CenturyGothic" }}>
+                            {errors.selectedCategories?.message as string}
+                          </HelperText>
+                        </>
                       ) : (
                         <>
                           <Text className="text-xl mb-3 font-century-gothic-bold" style={{ color: colors.sectionHeaderText }}>
-                            {t("form.servicesTitle")}
+                            {t("form.servicesTitle")} *
                           </Text>
+                          <HelperText type="info" visible style={{ fontFamily: "CenturyGothic", marginTop: -8, marginBottom: 8 }}>
+                            {t("form.categoryStepHelperServicesFreeBarber")}
+                          </HelperText>
                           <View className="rounded-xl p-3" style={{ borderWidth: 1, borderColor: colors.borderColor, backgroundColor: colors.cardBg }}>
                             <Controller
                               control={control}
@@ -1730,7 +1788,8 @@ export const FormFreeBarberOperation = React.memo(
                                   />
                                   <HelperText
                                     type="error"
-                                    visible={!selectedCategories.length && !!errors.selectedCategories}
+                                    visible={!!errors.selectedCategories}
+                                    style={{ fontFamily: "CenturyGothic" }}
                                   >
                                     {errors.selectedCategories?.message}
                                   </HelperText>
@@ -1811,7 +1870,7 @@ export const FormFreeBarberOperation = React.memo(
                                 />
                               </TouchableOpacity>
                               {value?.uri && !isCertificateLoading && (
-                                <View className="mt-2 mb-2 w-full">
+                                <View className="mt-2 mb-2 w-full relative">
                                   <Image
                                     source={{ uri: value.uri }}
                                     style={{
@@ -1821,6 +1880,13 @@ export const FormFreeBarberOperation = React.memo(
                                     }}
                                     resizeMode="cover"
                                   />
+                                  <TouchableOpacity
+                                    onPress={() => onChange(undefined as any)}
+                                    className="absolute top-2 right-2 bg-red-500 rounded-full p-1.5"
+                                    activeOpacity={0.85}
+                                  >
+                                    <Icon source="close" size={18} color="white" />
+                                  </TouchableOpacity>
                                 </View>
                               )}
                               <HelperText
@@ -2187,8 +2253,8 @@ export const FormFreeBarberOperation = React.memo(
                   ) : (
                     <Button
                       className="flex-1 font-century-gothic"
-                      disabled={addFreeBarberLoad || updateFreeBarberLoad}
-                      loading={addFreeBarberLoad || updateFreeBarberLoad}
+                      disabled={isSubmitting || addFreeBarberLoad || updateFreeBarberLoad}
+                      loading={isSubmitting || addFreeBarberLoad || updateFreeBarberLoad}
                       mode="contained"
                       onPress={handleSubmit((form) => guard(() => OnSubmit(form)), onErrors)}
                       buttonColor="#10B981"
@@ -2204,6 +2270,7 @@ export const FormFreeBarberOperation = React.memo(
           </>
         )}
       </View>
+      </KeyboardAvoidingView>
     );
   },
 );

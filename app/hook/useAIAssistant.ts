@@ -94,15 +94,22 @@ export function useAIAssistant(): AIAssistantState {
       if (!token) throw new Error("whisper_failed");
 
       const formData = new FormData();
-      formData.append("file", { uri, name: "audio.m4a", type: "audio/m4a" } as any);
+      formData.append("file", { uri, name: "audio.m4a", type: "audio/mp4" } as any);
 
       const whisperRes = await fetch(`${API_CONFIG.BASE_URL}AI/transcribe`, {
         method: "POST",
         headers: { Authorization: `Bearer ${token}` },
         body: formData,
       });
-      if (!whisperRes.ok) throw new Error("whisper_failed");
-      const whisperJson = await whisperRes.json();
+      const whisperJson = await whisperRes.json().catch(() => ({}));
+      if (!whisperRes.ok) {
+        const serverMsg = typeof whisperJson?.message === "string" ? whisperJson.message : "";
+        setPhase("error");
+        setErrorMessage(
+          /kotası|yoğun|quota|rate.?limit|limit|exceeded|dolmuş|ücretsiz/i.test(serverMsg) ? "whisper_rate_limit" : "whisper_failed",
+        );
+        return;
+      }
       let text = (whisperJson.data as string) ?? "";
 
       if (!text.trim()) {

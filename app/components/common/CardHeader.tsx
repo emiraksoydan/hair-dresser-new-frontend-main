@@ -11,6 +11,8 @@ interface CardHeaderProps {
   barberType?: BarberType;
   icon?: string;
   className?: string;
+  /** Panel listelerinde başlık ve ikon biraz küçük */
+  compact?: boolean;
 }
 
 /**
@@ -22,8 +24,11 @@ export const CardHeader: React.FC<CardHeaderProps> = ({
   barberType,
   icon,
   className = '',
+  compact = false,
 }) => {
   const { colors } = useTheme();
+  const titleSize = compact ? 19 : 23;
+  const iconSize = compact ? 18 : 22;
   const getIcon = () => {
     if (icon) return icon;
     if (barberType === BarberType.MaleHairdresser) return 'face-man';
@@ -36,14 +41,14 @@ export const CardHeader: React.FC<CardHeaderProps> = ({
       <Text
         numberOfLines={1}
         ellipsizeMode="tail"
-        style={{ fontSize: 20, color: colors.sectionHeaderText }}
-        className="font-century-gothic-sans-semibold text-xl flex-shrink"
+        style={{ fontSize: titleSize, color: colors.sectionHeaderText }}
+        className="font-century-gothic-sans-semibold flex-shrink"
       >
         {title}
       </Text>
       <IconButton
         iconColor={colors.textSecondary}
-        size={20}
+        size={iconSize}
         style={{
           marginTop: 0,
           paddingRight: 5,

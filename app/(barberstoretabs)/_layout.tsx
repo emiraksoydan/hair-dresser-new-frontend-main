@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { useCallback, useMemo } from "react";
 import { View } from "react-native";
 import { BottomSheetModal, BottomSheetView } from "@gorhom/bottom-sheet";
 import { BaseTabLayout } from "../components/layout/BaseTabLayout";
@@ -10,6 +10,7 @@ import { CrudSkeletonComponent } from "../components/common/crudskeleton";
 import FormStoreAdd from "../components/store/formstoreadd";
 import { getCommonTabs, panelTabConfigs, accentColors } from "../config/tabConfig";
 import { useTheme } from "../hook/useTheme";
+import { BarberStoreSheetContext } from "../context/BarberStoreSheetContext";
 
 const BarberStoreLayout = () => {
   const { t } = useLanguage();
@@ -20,6 +21,7 @@ const BarberStoreLayout = () => {
     snapPoints: ["100%"],
     enablePanDownToClose: false,
     enableOverDrag: false,
+    enableHandlePanningGesture: false,
   });
 
   const tabs = useMemo(() => getCommonTabs(t, {
@@ -28,16 +30,23 @@ const BarberStoreLayout = () => {
     label: t(panelTabConfigs.barberStore.labelKey),
   }), [t]);
 
+  const openAddStore = useCallback(() => addStoreSheet.present(), [addStoreSheet]);
+
+  const storeSheetApi = useMemo(
+    () => ({ openAddStore }),
+    [openAddStore],
+  );
+
   const fabExtraItems = useMemo(
     () => [
       {
         id: "add-store",
         icon: "plus",
         label: t("navigation.addStore"),
-        onPress: () => addStoreSheet.present(),
+        onPress: openAddStore,
       },
     ],
-    [t, addStoreSheet],
+    [t, openAddStore],
   );
 
   // Add Store Bottom Sheet
@@ -51,6 +60,7 @@ const BarberStoreLayout = () => {
       snapPoints={addStoreSheet.snapPoints}
       enableOverDrag={addStoreSheet.enableOverDrag}
       enablePanDownToClose={addStoreSheet.enablePanDownToClose}
+      enableHandlePanningGesture={addStoreSheet.enableHandlePanningGesture}
     >
       <BottomSheetView className="h-full pt-2">
         <DeferredRender
@@ -68,13 +78,16 @@ const BarberStoreLayout = () => {
   );
 
   return (
-    <BaseTabLayout
-      userType={UserType.BarberStore}
-      accentColor={accentColors.barberStore}
-      tabs={tabs}
-      fabExtraItems={fabExtraItems}
-      renderAdditionalBottomSheets={renderAdditionalBottomSheets}
-    />
+    <BarberStoreSheetContext.Provider value={storeSheetApi}>
+      <BaseTabLayout
+        userType={UserType.BarberStore}
+        accentColor={accentColors.barberStore}
+        tabs={tabs}
+        fabExtraItems={fabExtraItems}
+        layoutSheetOpen={addStoreSheet.isOpen}
+        renderAdditionalBottomSheets={renderAdditionalBottomSheets}
+      />
+    </BarberStoreSheetContext.Provider>
   );
 };
 

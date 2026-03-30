@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useRef, useState } from "react";
+import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import {
   Dimensions,
   RefreshControl,
@@ -44,12 +44,14 @@ import { DeferredRender } from "../../components/common/deferredrender";
 import { CrudSkeletonComponent } from "../../components/common/crudskeleton";
 import { useLanguage } from "../../hook/useLanguage";
 import { UnifiedStateWrapper } from "../../components/common/UnifiedStateManager";
+import { PanelEmptyCta } from "../../components/common/PanelEmptyCta";
 import { useTheme } from "../../hook/useTheme";
 import { useActionGuard } from "../../hook/useActionGuard";
 import { useSafeNavigation } from "../../hook/useSafeNavigation";
 import { isOtherUsersFreeBarber } from "../../utils/compare-eligibility";
 import { PanelCollapsibleTop } from "../../components/panel/PanelCollapsibleTop";
 import { usePanelMoreFab } from "../../hook/usePanelMoreFab";
+import { MoreFabPanelContext } from "../../components/layout/MoreFabContext";
 import { getCompareStripBottom } from "../../components/layout/panelBottomOverlays";
 import {
   compareStripCtaStyle,
@@ -60,7 +62,7 @@ import Animated, {
   useAnimatedScrollHandler,
   useSharedValue,
 } from "react-native-reanimated";
-import { ScrollStackItem } from "../../components/common/ScrollStackItem";
+import { PerplexityListItem } from "../../components/panel/PerplexityListItem";
 import { PerplexityHorizontalList } from "../../components/panel/PerplexityHorizontalList";
 
 const Index = () => {
@@ -180,19 +182,22 @@ const Index = () => {
     snapPoints: ["90%", "100%"],
     enablePanDownToClose: true,
   });
-  const updateStoreSnapPoints = useMemo(
-    () => (isMapMode ? ["75%", "100%"] : ["100%"]),
-    [isMapMode],
-  );
   const updateStoreSheet = useBottomSheet({
-    snapPoints: updateStoreSnapPoints,
-    enablePanDownToClose: isMapMode,
-    enableOverDrag: isMapMode,
+    snapPoints: ["100%"],
+    enablePanDownToClose: false,
+    enableOverDrag: false,
+    enableHandlePanningGesture: false,
   });
   const ratingsSheet = useBottomSheet({
     snapPoints: ["50%", "85%"],
     enablePanDownToClose: true,
   });
+
+  const fabPanelCtx = useContext(MoreFabPanelContext);
+  useEffect(() => {
+    fabPanelCtx?.reportOverlayOpen(updateStoreSheet.isOpen);
+    return () => fabPanelCtx?.reportOverlayOpen(false);
+  }, [updateStoreSheet.isOpen, fabPanelCtx]);
 
   const [searchQuery, setSearchQuery] = useState("");
   const [isList, setIsList] = useState(true);
@@ -405,6 +410,7 @@ const Index = () => {
         onPressUpdate={handlePressUpdateStore}
         onPressRatings={handlePressRatings}
         showImageAnimation={settingData?.data?.showImageAnimation ?? true}
+        profileCompact
         panelCompare={
           filteredStores.length >= 2
             ? {
@@ -474,7 +480,7 @@ const Index = () => {
       storesHeader: 52,
       storesLoading: 130,
       storesError: 360,
-      storesEmpty: 360,
+      storesEmpty: 400,
       storeRow: expandedStores ? (isList ? 300 : 270) : 200,
       storesHorizontal: 220,
       freebarbersHeader: 72,
@@ -697,7 +703,7 @@ const Index = () => {
         <IconButton
           icon="arrow-left"
           iconColor="#ffb900"
-          size={22}
+          size={20}
           onPress={() => router.back()}
           accessibilityLabel={t("common.goBack")}
           style={{ margin: 0 }}
@@ -771,7 +777,7 @@ const Index = () => {
             if (item.type === "stores-header") {
               return (
                 <View className="flex flex-row justify-between items-center mt-4">
-                  <Text className="font-century-gothic text-2xl" style={{ color: colors.sectionHeaderText }}>
+                  <Text className="font-century-gothic text-xl" style={{ color: colors.sectionHeaderText }}>
                     {t("panel.myStores")}
                   </Text>
                   {hasStores && (
@@ -780,6 +786,7 @@ const Index = () => {
                       onPress={() =>
                         toggleExpand(expandedStores, setExpandedStores)
                       }
+                      size={20}
                     />
                   )}
                 </View>
@@ -812,6 +819,22 @@ const Index = () => {
               );
             }
             if (item.type === "stores-empty") {
+              const showAddStoreCta =
+                !hasStores && !searchQuery.trim() && !hasActiveFilters;
+              if (showAddStoreCta) {
+                return (
+                  <View className="mt-2" style={{ minHeight: 300 }}>
+                    <PanelEmptyCta
+                      title={t("empty.noStoresAdded")}
+                      subtitle={t("panel.emptyStateHintStore")}
+                      buttonLabel={t("panel.openStorePanelToAdd")}
+                      onPress={() =>
+                        router.push("/(barberstoretabs)/(panel)")
+                      }
+                    />
+                  </View>
+                );
+              }
               return (
                 <View className="mt-2" style={{ minHeight: 250, maxHeight: 400 }}>
                   <UnifiedStateWrapper
@@ -832,14 +855,13 @@ const Index = () => {
             }
             if (item.type === "store-row") {
               return (
-                <ScrollStackItem
-                  scroll={scrollY}
-                  itemStride={item._scrollLen}
-                  scrollAnchor={item._scrollStart}
-                  bandLength={item._scrollLen}
+                <PerplexityListItem
+                  scrollPos={scrollY}
+                  itemStart={item._scrollStart}
+                  itemLength={item._scrollLen}
                 >
                   {renderStoreItem({ item: item.data })}
-                </ScrollStackItem>
+                </PerplexityListItem>
               );
             }
             if (item.type === "stores-content-horizontal") {
@@ -860,7 +882,7 @@ const Index = () => {
             if (item.type === "freebarbers-header") {
               return (
                 <View className="flex flex-row justify-between items-center mt-12">
-                  <Text className="font-century-gothic text-2xl" style={{ color: colors.sectionHeaderText }}>
+                  <Text className="font-century-gothic text-xl" style={{ color: colors.sectionHeaderText }}>
                     {t("panel.nearbyFreeBarbers")}
                   </Text>
                   {hasFreeBarbers && (
@@ -872,6 +894,7 @@ const Index = () => {
                           setExpandedFreeBarbers,
                         )
                       }
+                      size={20}
                     />
                   )}
                 </View>
@@ -929,14 +952,13 @@ const Index = () => {
             }
             if (item.type === "freebarber-row") {
               return (
-                <ScrollStackItem
-                  scroll={scrollY}
-                  itemStride={item._scrollLen}
-                  scrollAnchor={item._scrollStart}
-                  bandLength={item._scrollLen}
+                <PerplexityListItem
+                  scrollPos={scrollY}
+                  itemStart={item._scrollStart}
+                  itemLength={item._scrollLen}
                 >
                   {renderFreeBarberItem({ item: item.data })}
-                </ScrollStackItem>
+                </PerplexityListItem>
               );
             }
             if (item.type === "freebarbers-content-horizontal") {
@@ -1076,6 +1098,7 @@ const Index = () => {
         snapPoints={updateStoreSheet.snapPoints}
         enableOverDrag={updateStoreSheet.enableOverDrag}
         enablePanDownToClose={updateStoreSheet.enablePanDownToClose}
+        enableHandlePanningGesture={updateStoreSheet.enableHandlePanningGesture}
       >
         <BottomSheetView className="h-full pt-2">
           <DeferredRender

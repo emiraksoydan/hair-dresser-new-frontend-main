@@ -76,8 +76,10 @@ export const ChairItem = React.memo<ChairItemProps>(
                 selectedTextStyle={{
                   color: colors.sectionHeaderText,
                   fontFamily: "CenturyGothic",
+                  fontSize: 14,
+                  flexShrink: 1,
                 }}
-                itemTextStyle={{ color: colors.sectionHeaderText, fontFamily: "CenturyGothic" }}
+                itemTextStyle={{ color: colors.sectionHeaderText, fontFamily: "CenturyGothic", fontSize: 14 }}
                 containerStyle={{
                   backgroundColor: colors.cardBg,
                   borderWidth: 0,
@@ -158,10 +160,13 @@ export const ChairItem = React.memo<ChairItemProps>(
                   selectedTextStyle={{
                     color: colors.sectionHeaderText,
                     fontFamily: "CenturyGothic",
+                    fontSize: 14,
+                    flexShrink: 1,
                   }}
                   itemTextStyle={{
                     color: colors.sectionHeaderText,
                     fontFamily: "CenturyGothic",
+                    fontSize: 14,
                   }}
                   activeColor={dropdownItemActiveBg}
                 />

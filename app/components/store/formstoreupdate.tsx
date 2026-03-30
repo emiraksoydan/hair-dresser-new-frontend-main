@@ -50,6 +50,7 @@ import {
   handlePickMultipleImages,
   handlePickImage,
   truncateFileName,
+  resolveMimeType,
 } from "../../utils/form/pick-document";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { MapPicker } from "../common/mappicker";
@@ -331,6 +332,15 @@ const createSchema = (t: (key: string) => string) =>
         .default([]),
     })
     .superRefine((data, ctx) => {
+      if (data.type && String(data.type).trim()) {
+        if (!data.selectedMainHeadings || data.selectedMainHeadings.length === 0) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: t("form.mainHeadingsRequired"),
+            path: ["selectedMainHeadings"],
+          });
+        }
+      }
       // Ana başlıklar seçilip alt başlıklar seçilmezse hata ver
       if (data.selectedMainHeadings && data.selectedMainHeadings.length > 0) {
         if (!data.selectedSubHeadings || data.selectedSubHeadings.length === 0) {
@@ -1058,7 +1068,7 @@ const FormStoreUpdate = React.memo(({
         ? {
           uri: current.avatar.uri,
           name: current.avatar.name ?? "photo.jpg",
-          type: current.avatar.type ?? "image/jpeg",
+          type: resolveMimeType(current.avatar.type, current.avatar.name),
         }
         : undefined,
       id: current.id,
@@ -1363,7 +1373,7 @@ const FormStoreUpdate = React.memo(({
         formData.append("file", {
           uri: form.taxDocumentImage.uri,
           name: form.taxDocumentImage.name ?? "tax-document.jpg",
-          type: form.taxDocumentImage.type ?? "image/jpeg",
+          type: resolveMimeType(form.taxDocumentImage.type, form.taxDocumentImage.name),
         } as any);
         // Vergi levhası kullanıcıya bağlı resim (create ile aynı); Store+userId backend'de mağaza bulunamadı hatası verir
         formData.append("ownerType", String(ImageOwnerType.User));
@@ -1510,7 +1520,7 @@ const FormStoreUpdate = React.memo(({
           formData.append("file", {
             uri: img.uri,
             name: img.name ?? "photo.jpg",
-            type: img.type ?? "image/jpeg",
+            type: resolveMimeType(img.type, img.name),
           } as any);
           const updateRes = await updateImageBlob({
             imageId: img.id,
@@ -1537,7 +1547,7 @@ const FormStoreUpdate = React.memo(({
           formData.append("files", {
             uri: img.uri,
             name: img.name ?? "photo.jpg",
-            type: img.type ?? "image/jpeg",
+            type: resolveMimeType(img.type, img.name),
           } as any);
         });
         formData.append("ownerType", String(ImageOwnerType.Store));
@@ -1751,7 +1761,7 @@ const FormStoreUpdate = React.memo(({
                               />
                             </TouchableOpacity>
                             {value?.uri && !isTaxDocumentLoading && (
-                              <View className="mt-2 mb-2 w-full">
+                              <View className="mt-2 mb-2 w-full relative">
                                 <Image
                                   source={{ uri: value.uri }}
                                   style={{
@@ -1759,8 +1769,15 @@ const FormStoreUpdate = React.memo(({
                                     height: 200,
                                     borderRadius: 10,
                                   }}
-                                  resizeMode="stretch"
+                                  resizeMode="cover"
                                 />
+                                <TouchableOpacity
+                                  onPress={() => onChange(undefined as any)}
+                                  className="absolute top-2 right-2 bg-red-500 rounded-full p-1.5"
+                                  activeOpacity={0.85}
+                                >
+                                  <Icon source="close" size={18} color="white" />
+                                </TouchableOpacity>
                               </View>
                             )}
                             <HelperText
@@ -1872,14 +1889,25 @@ const FormStoreUpdate = React.memo(({
                   <>
                     <View className="mt-2 px-2">
                       {!selectedType || mainHeadingOptions.length === 0 ? (
-                        <Text className="text-gray-400 text-center py-8">
-                          {t("form.stepMainHeadings")} - {t("form.selectMainCategory")}
-                        </Text>
+                        <>
+                          <Text className="text-gray-400 text-center py-8">
+                            {t("form.stepMainHeadings")} - {t("form.selectMainCategory")}
+                          </Text>
+                          <HelperText type="info" visible style={{ fontFamily: "CenturyGothic" }}>
+                            {t("form.categoryStepHelperMainHeadings")}
+                          </HelperText>
+                          <HelperText type="error" visible={!!errors.selectedMainHeadings} style={{ fontFamily: "CenturyGothic" }}>
+                            {errors.selectedMainHeadings?.message as string}
+                          </HelperText>
+                        </>
                       ) : (
                         <>
                           <Text className="text-xl mb-3 font-century-gothic-bold" style={{ color: colors.sectionHeaderText }}>
-                            {t("form.mainHeadings")}
+                            {t("form.mainHeadings")} *
                           </Text>
+                          <HelperText type="info" visible style={{ fontFamily: "CenturyGothic", marginTop: -8, marginBottom: 8 }}>
+                            {t("form.categoryStepHelperMainHeadings")}
+                          </HelperText>
                           <View className="rounded-xl p-3" style={{ borderWidth: 1, borderColor: colors.borderColor, backgroundColor: colors.cardBg }}>
                             <Controller
                               control={control}
@@ -1893,7 +1921,8 @@ const FormStoreUpdate = React.memo(({
                                   />
                                   <HelperText
                                     type="error"
-                                    visible={!selectedMainHeadings.length && !!errors.selectedMainHeadings}
+                                    visible={!!errors.selectedMainHeadings}
+                                    style={{ fontFamily: "CenturyGothic" }}
                                   >
                                     {errors.selectedMainHeadings?.message}
                                   </HelperText>
@@ -1910,14 +1939,25 @@ const FormStoreUpdate = React.memo(({
                   <>
                     <View className="mt-2 px-2">
                       {selectedMainHeadings.length === 0 || subHeadingOptions.length === 0 ? (
-                        <Text className="text-gray-400 text-center py-8">
-                          {t("form.stepSubHeadings")} - {t("form.selectMainHeadings")}
-                        </Text>
+                        <>
+                          <Text className="text-gray-400 text-center py-8">
+                            {t("form.stepSubHeadings")} - {t("form.selectMainHeadings")}
+                          </Text>
+                          <HelperText type="info" visible style={{ fontFamily: "CenturyGothic" }}>
+                            {t("form.categoryStepHelperSubHeadings")}
+                          </HelperText>
+                          <HelperText type="error" visible={!!errors.selectedSubHeadings} style={{ fontFamily: "CenturyGothic" }}>
+                            {errors.selectedSubHeadings?.message as string}
+                          </HelperText>
+                        </>
                       ) : (
                         <>
                           <Text className="text-xl mb-3 font-century-gothic-bold" style={{ color: colors.sectionHeaderText }}>
-                            {t("form.subHeadings")}
+                            {t("form.subHeadings")} *
                           </Text>
+                          <HelperText type="info" visible style={{ fontFamily: "CenturyGothic", marginTop: -8, marginBottom: 8 }}>
+                            {t("form.categoryStepHelperSubHeadings")}
+                          </HelperText>
                           <View className="rounded-xl p-3" style={{ borderWidth: 1, borderColor: colors.borderColor, backgroundColor: colors.cardBg }}>
                             <Controller
                               control={control}
@@ -1931,7 +1971,8 @@ const FormStoreUpdate = React.memo(({
                                   />
                                   <HelperText
                                     type="error"
-                                    visible={!selectedSubHeadings.length && !!errors.selectedSubHeadings}
+                                    visible={!!errors.selectedSubHeadings}
+                                    style={{ fontFamily: "CenturyGothic" }}
                                   >
                                     {errors.selectedSubHeadings?.message}
                                   </HelperText>
@@ -1948,14 +1989,25 @@ const FormStoreUpdate = React.memo(({
                   <>
                     <View className="mt-2 px-2">
                       {selectedSubHeadings.length === 0 || categoryOptions.length === 0 ? (
-                        <Text className="text-gray-400 text-center py-8">
-                          {t("form.stepStoreServices")} - {t("form.selectSubHeadings")}
-                        </Text>
+                        <>
+                          <Text className="text-gray-400 text-center py-8">
+                            {t("form.stepStoreServices")} - {t("form.selectSubHeadings")}
+                          </Text>
+                          <HelperText type="info" visible style={{ fontFamily: "CenturyGothic" }}>
+                            {t("form.categoryStepHelperServicesStore")}
+                          </HelperText>
+                          <HelperText type="error" visible={!!errors.selectedCategories} style={{ fontFamily: "CenturyGothic" }}>
+                            {errors.selectedCategories?.message as string}
+                          </HelperText>
+                        </>
                       ) : (
                         <>
                           <Text className="text-xl mb-3 font-century-gothic-bold" style={{ color: colors.sectionHeaderText }}>
-                            {t("form.servicesTitle")} ({selectedType})
+                            {t("form.servicesTitle")} ({selectedType}) *
                           </Text>
+                          <HelperText type="info" visible style={{ fontFamily: "CenturyGothic", marginTop: -8, marginBottom: 8 }}>
+                            {t("form.categoryStepHelperServicesStore")}
+                          </HelperText>
                           <View className="rounded-xl p-3" style={{ borderWidth: 1, borderColor: colors.borderColor, backgroundColor: colors.cardBg }}>
                             <Controller
                               control={control}
@@ -1973,7 +2025,8 @@ const FormStoreUpdate = React.memo(({
 
                                     <HelperText
                                       type="error"
-                                      visible={!selectedCategories.length && !!errors.selectedCategories}
+                                      visible={!!errors.selectedCategories}
+                                      style={{ fontFamily: "CenturyGothic" }}
                                     >
                                       {errors.selectedCategories?.message}
                                     </HelperText>
@@ -1996,13 +2049,16 @@ const FormStoreUpdate = React.memo(({
                         </Text>
                       ) : (
                         <>
+                          <Text className="text-xl mb-3 font-century-gothic-bold" style={{ color: colors.sectionHeaderText }}>
+                            {t("form.stepStorePrices")} *
+                          </Text>
                           {selectedCategories.length > 0 && (
                             <View
-                              className="mt-0 mx-0  rounded-xl"
+                              className="rounded-xl p-3"
                               style={{
+                                borderWidth: 1,
+                                borderColor: colors.borderColor,
                                 backgroundColor: colors.cardBg,
-                                paddingVertical: 6,
-                                paddingHorizontal: 16,
                               }}
                             >
                               {selectedCategories.map((categoryId) => {
@@ -2408,40 +2464,6 @@ const FormStoreUpdate = React.memo(({
                           <Text className="text-[#c2a523] font-century-gothic pt-2 pb-1 text-sm">
                             - {t("form.workingHoursInfo")}
                           </Text>
-                          <Text className="text-xl mt-1" style={{ color: colors.sectionHeaderText }}>
-                            Tatil Günleri
-                          </Text>
-                          <Controller
-                            control={control}
-                            name="holidayDays"
-                            render={({
-                              field: { value, onChange },
-                              fieldState: { error },
-                            }) => (
-                              <>
-                                <CategoryListSelect
-                                  data={HOLIDAY_OPTIONS}
-                                  value={(value ?? []).map(String)}
-                                  onChange={(vals: string[]) => {
-                                    const numeric = vals.map((v) => Number(v));
-                                    onChange(numeric);
-                                    const current = getValues("workingHours") ?? [];
-                                    const updated = current.map((w) => ({
-                                      ...w,
-                                      isClosed: numeric.includes(w.dayOfWeek),
-                                    }));
-                                    setValue("workingHours", updated, {
-                                      shouldDirty: true,
-                                      shouldValidate: true,
-                                    });
-                                  }}
-                                />
-                                <HelperText type="error" visible={!!error} style={{ fontFamily: 'CenturyGothic' }}>
-                                  {error?.message as string}
-                                </HelperText>
-                              </>
-                            )}
-                          />
                         </View>
                       </View>
                   </>

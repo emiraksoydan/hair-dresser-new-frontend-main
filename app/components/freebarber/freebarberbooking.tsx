@@ -68,6 +68,7 @@ interface Props {
   appointmentId?: string;
   storeId?: string;
   onStoreSelected?: (storeId: string) => void; // Dükkan seçildiğinde çağrılacak callback
+  disableHeaderImageSwipe?: boolean;
 }
 
 const FreeBarberBookingContent = ({
@@ -78,6 +79,7 @@ const FreeBarberBookingContent = ({
   mode,
   appointmentId,
   storeId,
+  disableHeaderImageSwipe = false,
 }: Props) => {
   const router = useSafeNavigation();
   const guard = useActionGuard();
@@ -302,56 +304,6 @@ const FreeBarberBookingContent = ({
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.sheetBg }} className="w-full">
-      {!isAddStoreMode && (
-        <View className={`relative w-full h-[250px]`}>
-          <ImageCarousel
-            images={freeBarberData?.imageList ?? []}
-            autoPlay={true}
-            mode={"default"}
-            height={250}
-            borderRadiusClass={borderRadiusClass}
-          />
-          <View
-            className={`absolute bottom-0 left-0 right-0 px-4 pb-3 bg-black/50 ${borderRadiusClass} justify-end h-full`}
-          >
-            <View className="flex-row justify-between items-end">
-              <View className="flex-1 mr-2">
-                <Text
-                  className="font-century-gothic-bold text-white shadow-md"
-                  numberOfLines={1}
-                  style={{ fontSize: isBottomSheet ? 22 : 26 }}
-                >
-                  {freeBarberData?.fullName ?? "Serbest Berber"}
-                </Text>
-                <View className="flex-row items-center gap-2 mt-1">
-                  <Icon
-                    size={18}
-                    color={freeBarberData?.type === 0 ? "#60a5fa" : "#f472b6"}
-                    source={
-                      freeBarberData?.type === 0 ? "face-man" : "face-woman"
-                    }
-                  />
-                  <Text
-                    className="text-white font-century-gothic"
-                    style={{ fontSize: 14 }}
-                  >
-                    - {getBarberTypeName(freeBarberData?.type!)}
-                  </Text>
-                </View>
-              </View>
-              <View className="flex-row items-center gap-1 bg-black/30 px-2 py-1 rounded-lg">
-                <Icon size={16} color="#FFA500" source="star" />
-                <Text
-                  className="font-century-gothic-bold text-white"
-                  style={{ fontSize: 14 }}
-                >
-                  {Number(freeBarberData?.rating ?? 0).toFixed(1)}
-                </Text>
-              </View>
-            </View>
-          </View>
-        </View>
-      )}
       {isAddStoreMode && (
         <View className="px-4 pt-4 pb-2">
           <Text style={{ color: colors.sectionHeaderText }} className="font-century-gothic-bold text-lg">
@@ -372,7 +324,66 @@ const FreeBarberBookingContent = ({
         </View>
       )}
 
-      <ScrollContainer nestedScrollEnabled className="p-4 gap-3" contentContainerStyle={{ paddingBottom: 140 }}>
+      <ScrollContainer
+        nestedScrollEnabled
+        className={isAddStoreMode ? "p-4 gap-3" : undefined}
+        contentContainerStyle={{ paddingBottom: 140 }}
+        stickyHeaderIndices={!isAddStoreMode ? [0] : undefined}
+      >
+        {!isAddStoreMode && (
+          <View style={{ overflow: "hidden", backgroundColor: colors.sheetBg }}>
+            <View className={`relative w-full h-[250px]`}>
+              <ImageCarousel
+                images={freeBarberData?.imageList ?? []}
+                autoPlay={true}
+                mode={"default"}
+                height={250}
+                borderRadiusClass={borderRadiusClass}
+                enableSwipe={!disableHeaderImageSwipe}
+              />
+              <View
+                className={`absolute bottom-0 left-0 right-0 px-4 pb-3 bg-black/50 ${borderRadiusClass} justify-end h-full`}
+              >
+                <View className="flex-row justify-between items-end">
+                  <View className="flex-1 mr-2">
+                    <Text
+                      className="font-century-gothic-bold text-white shadow-md"
+                      numberOfLines={1}
+                      style={{ fontSize: isBottomSheet ? 22 : 26 }}
+                    >
+                      {freeBarberData?.fullName ?? "Serbest Berber"}
+                    </Text>
+                    <View className="flex-row items-center gap-2 mt-1">
+                      <Icon
+                        size={18}
+                        color={freeBarberData?.type === 0 ? "#60a5fa" : "#f472b6"}
+                        source={
+                          freeBarberData?.type === 0 ? "face-man" : "face-woman"
+                        }
+                      />
+                      <Text
+                        className="text-white font-century-gothic"
+                        style={{ fontSize: 14 }}
+                      >
+                        - {getBarberTypeName(freeBarberData?.type!)}
+                      </Text>
+                    </View>
+                  </View>
+                  <View className="flex-row items-center gap-1 bg-black/30 px-2 py-1 rounded-lg">
+                    <Icon size={16} color="#FFA500" source="star" />
+                    <Text
+                      className="font-century-gothic-bold text-white"
+                      style={{ fontSize: 14 }}
+                    >
+                      {Number(freeBarberData?.rating ?? 0).toFixed(1)}
+                    </Text>
+                  </View>
+                </View>
+              </View>
+            </View>
+          </View>
+        )}
+        <View className={isAddStoreMode ? undefined : "p-4 gap-3"}>
         {currentUserType === UserType.BarberStore &&
           isBarberMode &&
           !isAddStoreMode && (
@@ -889,6 +900,7 @@ const FreeBarberBookingContent = ({
               </TouchableOpacity>
             </View>
           )}
+        </View>
       </ScrollContainer>
 
       {/* Dükkan Seçimi Bottom Sheet - Customer Panel Yapısı */}

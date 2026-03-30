@@ -19,7 +19,7 @@ import { showSnack } from '../../store/snackbarSlice';
 import { useEffect, useState, useRef, useMemo, useCallback } from 'react';
 import { ProfileSkeleton } from '../../components/common/profileskeleton';
 import { getErrorMessage } from '../../utils/errorHandler';
-import { LottieViewComponent } from '../../components/common/lottieview';
+import { UnifiedStateWrapper } from '../../components/common/UnifiedStateManager';
 import { MESSAGES } from '../../constants/messages';
 import { useLanguage } from '../../hook/useLanguage';
 import { LanguageSelector } from '../../components/common/LanguageSelector';
@@ -325,12 +325,11 @@ const Index = () => {
         return <ProfileSkeleton />;
     }
 
-    // Error durumu - refresh edildiğinde de göster
     if (isUserError && userError && errorMessage) {
         return (
             <View className="flex-1">
                 <ScrollView
-                    contentContainerStyle={{ flexGrow: 1 }}
+                    contentContainerStyle={{ flexGrow: 1, paddingHorizontal: 16, paddingTop: 16 }}
                     refreshControl={
                         <RefreshControl
                             refreshing={refreshing || isFetching}
@@ -340,10 +339,20 @@ const Index = () => {
                         />
                     }
                 >
-                    <LottieViewComponent
-                        animationSource={require('../../../assets/animations/error.json')}
-                        message={errorMessage}
-                    />
+                    <UnifiedStateWrapper
+                        loading={false}
+                        error={userError}
+                        data={[]}
+                        fetchedOnce={true}
+                        onRetry={handleRefresh}
+                        customMessages={{
+                            error: errorMessage,
+                            'service-unavailable': errorMessage,
+                            'network-error': errorMessage,
+                        }}
+                    >
+                        <View />
+                    </UnifiedStateWrapper>
                 </ScrollView>
             </View>
         );
@@ -522,8 +531,8 @@ const Index = () => {
                         <View className='flex-row items-center flex-1'>
                             <Icon source="view-dashboard-outline" size={24} color="#ffb900" />
                             <View className='ml-3 flex-1'>
-                                <Text className='text-base' style={{ color: colors.sectionHeaderText }}>{t('panel.viewMyPanel')}</Text>
-                                <Text className='text-xs mt-0.5' style={{ color: colors.textSecondary }}>{t('panel.nearbyStores')}</Text>
+                                <Text className='text-lg font-century-gothic-bold' style={{ color: colors.sectionHeaderText }}>{t('panel.viewMyPanel')}</Text>
+                                <Text className='text-sm mt-0.5' style={{ color: colors.textSecondary, fontFamily: 'CenturyGothic' }}>{t('panel.nearbyStores')}</Text>
                             </View>
                         </View>
                         <Icon source="chevron-right" size={24} color="#6b7280" />

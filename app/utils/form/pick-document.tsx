@@ -3,14 +3,28 @@ import * as ImagePicker from 'expo-image-picker';
 import { FileObject } from "../../types";
 import { FieldValues, Path, UseFormSetValue } from 'react-hook-form';
 
-/** HEIC/HEIF dosyalarını JPEG olarak yeniden adlandırır (expo-image-picker uri zaten JPEG içerir) */
+/** Dosya uzantısından MIME type türetir */
+const getMimeFromExt = (name: string): string => {
+  if (/\.png$/i.test(name)) return 'image/png';
+  if (/\.gif$/i.test(name)) return 'image/gif';
+  if (/\.webp$/i.test(name)) return 'image/webp';
+  return 'image/jpeg';
+};
+
+/** HEIC/HEIF dosyalarını JPEG olarak yeniden adlandırır (expo-image-picker uri zaten JPEG içerir).
+ *  Expo'nun AssetType ("image") değerini geçerli MIME type'a dönüştürür. */
 const normalizeImageFile = (uri: string, fileName: string | null | undefined, type: string | undefined, index?: number): FileObject => {
   const rawName = fileName ?? `photo${index !== undefined ? `_${index}` : ''}.jpg`;
   const isHeic = /\.(heic|heif)$/i.test(rawName);
+  // Expo ImagePicker type alanı "image" döndürür (AssetType), geçerli MIME değil.
+  // Gerçek MIME type için "/" içermeli (örn. "image/jpeg").
+  const resolvedType = isHeic
+    ? 'image/jpeg'
+    : (type && type.includes('/') ? type : getMimeFromExt(rawName));
   return {
     uri,
     name: isHeic ? rawName.replace(/\.(heic|heif)$/i, '.jpg') : rawName,
-    type: isHeic ? 'image/jpeg' : (type ?? 'image/jpeg'),
+    type: resolvedType,
   };
 };
 
@@ -57,6 +71,13 @@ export const handlePickImage = async (): Promise<FileObject | null> => {
         return normalizeImageFile(file.uri, file.fileName, file.type);
     }
     return null;
+};
+
+/** type "image" gibi AssetType değerlerini geçerli MIME type'a çevirir.
+ *  Tüm FormData file append işlemlerinde kullanılmalıdır. */
+export const resolveMimeType = (type: string | undefined, fileName: string | undefined): string => {
+  if (type && type.includes('/')) return type;
+  return getMimeFromExt(fileName ?? '');
 };
 
 export const truncateFileName = (name: string, max = 40) =>

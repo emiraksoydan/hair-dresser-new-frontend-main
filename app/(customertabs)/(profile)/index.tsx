@@ -19,7 +19,7 @@ import { showSnack } from '../../store/snackbarSlice';
 import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { ProfileSkeleton } from '../../components/common/profileskeleton';
 import { getErrorMessage } from '../../utils/errorHandler';
-import { LottieViewComponent } from '../../components/common/lottieview';
+import { UnifiedStateWrapper } from '../../components/common/UnifiedStateManager';
 import { MESSAGES } from '../../constants/messages';
 import { useLanguage } from '../../hook/useLanguage';
 import { LanguageSelector } from '../../components/common/LanguageSelector';
@@ -317,12 +317,11 @@ const Index = () => {
         return <ProfileSkeleton />;
     }
 
-    // Error durumu - refresh edildiğinde de göster
     if (isUserError && userError && errorMessage) {
         return (
             <View className="flex-1">
                 <ScrollView
-                    contentContainerStyle={{ flexGrow: 1 }}
+                    contentContainerStyle={{ flexGrow: 1, paddingHorizontal: 16, paddingTop: 16 }}
                     refreshControl={
                         <RefreshControl
                             refreshing={refreshing || isFetching}
@@ -332,10 +331,20 @@ const Index = () => {
                         />
                     }
                 >
-                    <LottieViewComponent
-                        animationSource={require('../../../assets/animations/error.json')}
-                        message={errorMessage || ''}
-                    />
+                    <UnifiedStateWrapper
+                        loading={false}
+                        error={userError}
+                        data={[]}
+                        fetchedOnce={true}
+                        onRetry={handleRefresh}
+                        customMessages={{
+                            error: errorMessage,
+                            'service-unavailable': errorMessage,
+                            'network-error': errorMessage,
+                        }}
+                    >
+                        <View />
+                    </UnifiedStateWrapper>
                 </ScrollView>
             </View>
         );

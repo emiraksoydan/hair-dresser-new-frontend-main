@@ -13,6 +13,8 @@ interface RatingSectionProps {
   starSize?: number;
   showReviewsLink?: boolean;
   className?: string;
+  /** Panel kartlarında yıldız ve metin küçük */
+  compact?: boolean;
 }
 
 /**
@@ -22,13 +24,17 @@ export const RatingSection: React.FC<RatingSectionProps> = ({
   rating,
   reviewCount,
   onPressRatings,
-  starSize = 15,
+  starSize: starSizeProp,
   showReviewsLink = true,
   className = '',
+  compact = false,
 }) => {
   const { t } = useLanguage();
   const { colors } = useTheme();
   const formattedRating = rating?.toFixed(1) || '0.0';
+  const starSize = starSizeProp ?? (compact ? 15 : 19);
+  const ratingFont = compact ? 14 : 17;
+  const reviewFont = compact ? 12 : 15;
 
   return (
     <View className={`flex-row items-center gap-1 ${className}`}>
@@ -38,32 +44,33 @@ export const RatingSection: React.FC<RatingSectionProps> = ({
         color="#ffb900"
         starStyle={{ marginHorizontal: 0 }}
       />
-      <Text style={{ color: colors.sectionHeaderText }} className="flex-1">{formattedRating}</Text>
+      <Text style={{ color: colors.sectionHeaderText, fontSize: ratingFont, fontFamily: 'CenturyGothic-Bold' }} className="flex-1">
+        {formattedRating}
+      </Text>
       {showReviewsLink && onPressRatings && (
         <TouchableOpacity
           onPress={onPressRatings}
           activeOpacity={0.7}
           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
         >
-          <Text style={{ color: colors.textSecondary }} className="underline mr-1 mb-0 text-xs">
+          <Text style={{ color: colors.textSecondary, fontSize: reviewFont }} className="underline mr-1 mb-0">
             {t('card.reviews')}{' '}
             (
             <AnimatedCountText
               value={reviewCount || 0}
-              style={{ color: colors.textSecondary }}
-              className="underline text-xs"
+              style={{ color: colors.textSecondary, fontSize: reviewFont }}
+              className="underline"
             />
             )
           </Text>
         </TouchableOpacity>
       )}
       {!showReviewsLink && (
-        <Text style={{ color: colors.textSecondary }} className="text-xs">
+        <Text style={{ color: colors.textSecondary, fontSize: reviewFont }}>
           (
           <AnimatedCountText
             value={reviewCount || 0}
-            style={{ color: colors.textSecondary }}
-            className="text-xs"
+            style={{ color: colors.textSecondary, fontSize: reviewFont }}
           />
           )
         </Text>

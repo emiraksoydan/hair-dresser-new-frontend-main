@@ -1,27 +1,105 @@
-import React, { useMemo } from "react";
+import React, { useCallback, useMemo, useState } from "react";
+import { View } from "react-native";
+import * as Location from "expo-location";
+import { BottomSheetModal, BottomSheetView } from "@gorhom/bottom-sheet";
 import { BaseTabLayout } from "../components/layout/BaseTabLayout";
 import { FreeBarberLocationProvider } from "../components/freebarber/FreeBarberLocationProvider";
 import { UserType } from "../types";
 import { useLanguage } from "../hook/useLanguage";
 import { getCommonTabs, panelTabConfigs, accentColors } from "../config/tabConfig";
+import { useBottomSheet } from "../hook/useBottomSheet";
+import { useTheme } from "../hook/useTheme";
+import { DeferredRender } from "../components/common/deferredrender";
+import { CrudSkeletonComponent } from "../components/common/crudskeleton";
+import { FormFreeBarberOperation } from "../components/freebarber/formfreebarberoper";
+import { useGetFreeBarberMinePanelQuery } from "../store/api";
+import { FreeBarberPanelSheetContext } from "../context/FreeBarberPanelSheetContext";
 
 const FreeBarberLayout = () => {
   const { t } = useLanguage();
+  const { colors } = useTheme();
+  const [panelTargetId, setPanelTargetId] = useState<string | null>(null);
 
-  const tabs = useMemo(() => getCommonTabs(t, {
-    icon: panelTabConfigs.freeBarber.icon,
-    iconFocused: panelTabConfigs.freeBarber.iconFocused,
-    label: t(panelTabConfigs.freeBarber.labelKey),
-  }), [t]);
+  const panelSheet = useBottomSheet({
+    snapPoints: ["100%"],
+    enablePanDownToClose: false,
+    enableOverDrag: false,
+    enableHandlePanningGesture: false,
+  });
+
+  const [fgPerm] = Location.useForegroundPermissions();
+  const locationStatusForForm = useMemo((): "unknown" | "granted" | "denied" => {
+    if (!fgPerm) return "unknown";
+    return fgPerm.granted ? "granted" : "denied";
+  }, [fgPerm]);
+
+  const { error: minePanelError } = useGetFreeBarberMinePanelQuery();
+
+  const openPanel = useCallback(
+    (freeBarberId: string | null) => {
+      setPanelTargetId(freeBarberId);
+      setTimeout(() => panelSheet.present(), 50);
+    },
+    [panelSheet],
+  );
+
+  const panelSheetApi = useMemo(() => ({ openPanel }), [openPanel]);
+
+  const tabs = useMemo(
+    () =>
+      getCommonTabs(t, {
+        icon: panelTabConfigs.freeBarber.icon,
+        iconFocused: panelTabConfigs.freeBarber.iconFocused,
+        label: t(panelTabConfigs.freeBarber.labelKey),
+      }),
+    [t],
+  );
+
+  const renderAdditionalBottomSheets = () => (
+    <BottomSheetModal
+      ref={panelSheet.ref}
+      backdropComponent={panelSheet.makeBackdrop()}
+      handleIndicatorStyle={{ backgroundColor: colors.sheetHandle }}
+      backgroundStyle={{ backgroundColor: colors.sheetBg }}
+      onChange={panelSheet.handleChange}
+      snapPoints={panelSheet.snapPoints}
+      enableOverDrag={panelSheet.enableOverDrag}
+      enablePanDownToClose={panelSheet.enablePanDownToClose}
+      enableHandlePanningGesture={panelSheet.enableHandlePanningGesture}
+    >
+      <BottomSheetView className="h-full pt-2">
+        <DeferredRender
+          active={panelSheet.isOpen}
+          placeholder={
+            <View className="flex-1 pt-4">
+              <CrudSkeletonComponent />
+            </View>
+          }
+        >
+          <FormFreeBarberOperation
+            freeBarberId={panelTargetId}
+            enabled={panelSheet.isOpen}
+            onClose={() => panelSheet.dismiss()}
+            error={minePanelError}
+            locationStatus={locationStatusForForm}
+          />
+        </DeferredRender>
+      </BottomSheetView>
+    </BottomSheetModal>
+  );
 
   return (
-    <FreeBarberLocationProvider>
-      <BaseTabLayout
-        userType={UserType.FreeBarber}
-        accentColor={accentColors.freeBarber}
-        tabs={tabs}
-      />
-    </FreeBarberLocationProvider>
+    <FreeBarberPanelSheetContext.Provider value={panelSheetApi}>
+      <FreeBarberLocationProvider>
+        <BaseTabLayout
+          userType={UserType.FreeBarber}
+          accentColor={accentColors.freeBarber}
+          tabs={tabs}
+          layoutSheetOpen={panelSheet.isOpen}
+          renderAdditionalBottomSheets={renderAdditionalBottomSheets}
+        />
+      </FreeBarberLocationProvider>
+    </FreeBarberPanelSheetContext.Provider>
   );
 };
 

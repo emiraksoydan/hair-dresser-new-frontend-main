@@ -2,9 +2,9 @@ import React, { useState, useMemo, memo } from "react";
 import { View, Dimensions } from "react-native";
 import { IconButton } from "react-native-paper";
 import { Text } from "../common/Text";
-import { Button } from "../common/Button";
+import { PanelEmptyCta } from "../common/PanelEmptyCta";
 import { SkeletonComponent } from "../common/skeleton";
-import { LottieViewComponent } from "../common/lottieview";
+import { UnifiedStateManager } from "../common/UnifiedStateManager";
 import MotiViewExpand from "../common/motiviewexpand";
 import { FreeBarberMineCardComp } from "./freebarberminecard";
 import { toggleExpand } from "../../utils/common/expand-toggle";
@@ -100,7 +100,7 @@ export const FreeBarberPanelSection = memo(
                 <IconButton
                   icon={isList ? "format-list-bulleted" : "view-grid-outline"}
                   iconColor="#ffb900"
-                  size={22}
+                  size={20}
                   onPress={onToggleLayout}
                   style={{ margin: 0 }}
                 />
@@ -110,6 +110,7 @@ export const FreeBarberPanelSection = memo(
                 onPress={() =>
                   toggleExpand(expandedMineStore, setExpandedMineStore)
                 }
+                size={20}
               />
             </View>
           )}
@@ -121,29 +122,36 @@ export const FreeBarberPanelSection = memo(
             ))}
           </View>
         ) : !hasMineFreeBarber ? (
-          <View style={{ backgroundColor: colors.cardBg }} className="rounded-xl mt-2">
-            <LottieViewComponent message={t("empty.noPanelAdded")} />
-            <Button
-              style={{ marginTop: -10, marginBottom: 10, marginHorizontal: 10 }}
-              buttonColor="#ffb900"
-              mode="contained"
-              icon={"plus"}
-              onPress={() => onOpenPanel(null)}
-            >
-              {t("common.add")}
-            </Button>
-          </View>
+          <PanelEmptyCta
+            title={t("empty.noPanelAdded")}
+            subtitle={t("panel.emptyStateHintFreeBarber")}
+            buttonLabel={t("common.add")}
+            onPress={() => onOpenPanel(null)}
+          />
         ) : locationStatus === "error" ? (
-          <LottieViewComponent
-            animationSource={require("../../../assets/animations/Location.json")}
-            message={locationMessage!}
-          />
+          <View style={{ minHeight: 200, maxHeight: 400 }}>
+            <UnifiedStateManager
+              locationStatus="unknown"
+              state="location-unavailable"
+              message={locationMessage ?? undefined}
+              onRetry={onRetry}
+              loading={false}
+              fetchedOnce={true}
+              hasData={false}
+            />
+          </View>
         ) : isError ? (
-          <LottieViewComponent
-            animationSource={require("../../../assets/animations/error.json")}
-            message={getErrorMessage(error)}
-            onRetry={onRetry}
-          />
+          <View style={{ minHeight: 200, maxHeight: 400 }}>
+            <UnifiedStateManager
+              error={error}
+              message={getErrorMessage(error)}
+              state="error"
+              onRetry={onRetry}
+              loading={false}
+              fetchedOnce={true}
+              hasData={false}
+            />
+          </View>
         ) : (
           <View key={freeBarber?.id}>
             <FreeBarberMineCardComp
@@ -154,6 +162,7 @@ export const FreeBarberPanelSection = memo(
               onPressUpdate={(barber) => onOpenPanel(barber.id)}
               onPressRatings={onPressRatings}
               showImageAnimation={showImageAnimation}
+              profileCompact
             />
           </View>
         )}

@@ -1,10 +1,11 @@
 import { useSelector } from "react-redux";
 import { hideSnack } from "../store/snackbarSlice";
 import { RootState } from "../store/redux-store";
-import { Portal, Snackbar } from "react-native-paper";
+import { Snackbar } from "react-native-paper";
 import React, { useRef, useCallback, useEffect } from "react";
 import { useDispatch } from "react-redux";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Modal, StyleSheet, View } from "react-native";
 import { useLanguage } from "./useLanguage";
 
 // useSnackbar hook kaldırıldı - direkt slice kullanın:
@@ -48,29 +49,48 @@ export const GlobalSnackbar: React.FC = () => {
     }
   }, [visible, handleDismiss]);
 
+  // RN Modal, Paper Modal / başka Portal katmanlarının üstünde — snackbar her zaman önde
   return (
-    <Portal>
-      <Snackbar
-        visible={visible}
-        onDismiss={handleDismiss}
-        duration={3000}
-        wrapperStyle={{
-          top: 0,
-          bottom: "auto",
-          paddingTop: insets.top,
-          paddingBottom: 0,
-        }}
-        style={{
-          backgroundColor: isError ? "#b91c1c" : "#15803d", // Kırmızı: hata, Yeşil: başarı
-        }}
-        action={{
-          label: t("common.close"),
-          onPress: handleDismiss,
-          textColor: "white",
-        }}
-      >
-        {message}
-      </Snackbar>
-    </Portal>
+    <Modal
+      visible={visible}
+      transparent
+      animationType="none"
+      statusBarTranslucent
+      presentationStyle="overFullScreen"
+      onRequestClose={handleDismiss}
+    >
+      <View style={styles.overlay} pointerEvents="box-none">
+        <Snackbar
+          visible={visible}
+          onDismiss={handleDismiss}
+          duration={3000}
+          wrapperStyle={{
+            top: 0,
+            bottom: "auto",
+            paddingTop: insets.top,
+            paddingBottom: 0,
+            zIndex: 99999,
+            elevation: 999,
+          }}
+          style={{
+            backgroundColor: isError ? "#b91c1c" : "#15803d", // Kırmızı: hata, Yeşil: başarı
+          }}
+          action={{
+            label: t("common.close"),
+            onPress: handleDismiss,
+            textColor: "white",
+          }}
+        >
+          {message}
+        </Snackbar>
+      </View>
+    </Modal>
   );
 };
+
+const styles = StyleSheet.create({
+  overlay: {
+    ...StyleSheet.absoluteFillObject,
+    flex: 1,
+  },
+});

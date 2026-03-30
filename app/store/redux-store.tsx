@@ -3,6 +3,8 @@ import { api } from './api';
 import snackbarReducer from './snackbarSlice';
 import alertReducer from './alertSlice';
 import signalrReducer from './signalrSlice';
+import bookingSwipeReducer from './bookingSwipeSlice';
+import subscriptionReducer from './subscriptionSlice';
 
 export const store = configureStore({
     reducer: {
@@ -10,6 +12,8 @@ export const store = configureStore({
         snackbar: snackbarReducer,
         alert: alertReducer,
         signalr: signalrReducer,
+        bookingSwipe: bookingSwipeReducer,
+        subscription: subscriptionReducer,
     },
     middleware: (getDefaultMiddleware) =>
         getDefaultMiddleware({
