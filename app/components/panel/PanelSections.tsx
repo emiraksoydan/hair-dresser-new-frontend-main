@@ -52,7 +52,7 @@ export const StoresSection = React.memo(({ stores, loading, hasLocation, locatio
     const scrollY = useSharedValue(0);
     const onScroll = useAnimatedScrollHandler({
         onScroll: (e) => {
-            scrollY.value = e.contentOffset.y;
+            scrollY.value = e.contentOffset.y / storeRowStride;
         },
     });
 
@@ -143,9 +143,7 @@ export const StoresSection = React.memo(({ stores, loading, hasLocation, locatio
                     renderItem={({ item: s, index }: { item: any; index: number }) => (
                         <PerplexityListItem
                             scrollPos={scrollY}
-                            itemStart={index * storeRowStride}
-                            itemLength={storeRowStride}
-                            horizontal={false}
+                            index={index}
                         >
                             <StoreCardInner store={s} isList={isList} expanded={expanded} cardWidthStore={cardWidth} compactMeta onPressUpdate={onPressStore} onPressRatings={onPressRatings} showImageAnimation={showImageAnimation} />
                         </PerplexityListItem>
@@ -176,7 +174,7 @@ export const FreeBarbersSection = React.memo(({ freeBarbers, loading, hasLocatio
     const scrollYFb = useSharedValue(0);
     const onScrollFb = useAnimatedScrollHandler({
         onScroll: (e) => {
-            scrollYFb.value = e.contentOffset.y;
+            scrollYFb.value = e.contentOffset.y / fbRowStride;
         },
     });
 
@@ -266,9 +264,7 @@ export const FreeBarbersSection = React.memo(({ freeBarbers, loading, hasLocatio
                     renderItem={({ item: fb, index }: { item: any; index: number }) => (
                         <PerplexityListItem
                             scrollPos={scrollYFb}
-                            itemStart={index * fbRowStride}
-                            itemLength={fbRowStride}
-                            horizontal={false}
+                            index={index}
                         >
                             <FreeBarberCardInner freeBarber={fb} isList={isList} expanded={expanded} cardWidthFreeBarber={cardWidth} compactMeta onPressUpdate={onPressFreeBarber} onPressRatings={onPressRatings} showImageAnimation={showImageAnimation} />
                         </PerplexityListItem>

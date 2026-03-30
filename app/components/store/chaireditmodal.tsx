@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from "react";
-import { View, TouchableOpacity } from "react-native";
+import React, { useEffect } from "react";
+import { View, Pressable } from "react-native";
 import { Text } from "../common/Text";
 import { Dialog, HelperText, Portal, TextInput } from "react-native-paper";
 import { useAppDispatch } from "../../store/hook";
@@ -63,7 +63,8 @@ export const ChairEditModal: React.FC<Props> = ({
 
   const barberOptions = barbers.map((b) => ({ label: b.name, value: b.id }));
   const { t } = useLanguage();
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
+  const accent = "#c2a523";
   const dispatch = useAppDispatch();
   const guard = useActionGuard();
 
@@ -170,54 +171,103 @@ export const ChairEditModal: React.FC<Props> = ({
           {title}
         </Dialog.Title>
         <Dialog.Content style={{ paddingBottom: 0, marginBottom: 0 }}>
-          <View className="flex-row justify-start gap-6 mb-3">
-            <TouchableOpacity
+          <Text
+            style={{
+              fontFamily: "CenturyGothic",
+              fontSize: 12,
+              color: colors.textSecondary,
+              marginBottom: 8,
+            }}
+          >
+            {t("form.chairAssignmentType")}
+          </Text>
+          <View style={{ flexDirection: "row", gap: 10, marginBottom: 8 }}>
+            <Pressable
               onPress={() => handleModeChange("named")}
-              className="flex-row items-center gap-2"
-              activeOpacity={0.8}
-            >
-              <View
-                className={`w-4 h-4 rounded-full border ${
+              style={({ pressed }) => ({
+                flex: 1,
+                paddingVertical: 11,
+                paddingHorizontal: 8,
+                borderRadius: 12,
+                borderWidth: 1.5,
+                borderColor: mode === "named" ? accent : colors.borderColor2,
+                backgroundColor:
                   mode === "named"
-                    ? "bg-emerald-500 border-emerald-500"
-                    : "border-gray-400"
-                }`}
-              />
-              <Text style={{ color: colors.sectionHeaderText }} className="text-sm">İsme ata</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              onPress={() => handleModeChange("barber")}
-              className="flex-row items-center gap-2"
-              activeOpacity={0.8}
+                    ? isDark
+                      ? "rgba(194, 165, 35, 0.14)"
+                      : "rgba(194, 165, 35, 0.1)"
+                    : colors.cardBg,
+                opacity: pressed ? 0.88 : 1,
+              })}
             >
-              <View
-                className={`w-4 h-4 rounded-full border ${
+              <Text
+                style={{
+                  textAlign: "center",
+                  fontFamily: "CenturyGothic",
+                  fontSize: 13,
+                  color: colors.sectionHeaderText,
+                }}
+              >
+                {t("form.assignByDisplayName")}
+              </Text>
+            </Pressable>
+            <Pressable
+              onPress={() => handleModeChange("barber")}
+              style={({ pressed }) => ({
+                flex: 1,
+                paddingVertical: 11,
+                paddingHorizontal: 8,
+                borderRadius: 12,
+                borderWidth: 1.5,
+                borderColor: mode === "barber" ? accent : colors.borderColor2,
+                backgroundColor:
                   mode === "barber"
-                    ? "bg-emerald-500 border-emerald-500"
-                    : "border-gray-400"
-                }`}
-              />
-              <Text style={{ color: colors.sectionHeaderText }} className="text-sm">
+                    ? isDark
+                      ? "rgba(194, 165, 35, 0.14)"
+                      : "rgba(194, 165, 35, 0.1)"
+                    : colors.cardBg,
+                opacity: pressed ? 0.88 : 1,
+              })}
+            >
+              <Text
+                style={{
+                  textAlign: "center",
+                  fontFamily: "CenturyGothic",
+                  fontSize: 13,
+                  color: colors.sectionHeaderText,
+                }}
+              >
                 {t("form.assignToBarber")}
               </Text>
-            </TouchableOpacity>
+            </Pressable>
           </View>
 
-          <View className="gap-3 mt-3">
+          <Text
+            style={{
+              fontFamily: "CenturyGothic",
+              fontSize: 12,
+              color: colors.textSecondary,
+              marginBottom: 12,
+              lineHeight: 17,
+            }}
+          >
+            {mode === "named" ? t("form.chairModeNamedHint") : t("form.chairModeBarberHint")}
+          </Text>
+
+          <View className="gap-3 mt-0">
             {mode === "named" && (
               <Controller
                 control={control}
                 name="name"
                 rules={
                   mode === "named"
-                    ? { required: "Koltuk adı zorunlu" }
+                    ? { required: t("form.chairNameRequired") }
                     : undefined
                 }
                 render={({ field: { value, onChange, onBlur } }) => (
                   <>
                     <TextInput
-                      label="Koltuk adı"
+                      label={t("form.chairNameFieldLabel")}
                       mode="outlined"
                       dense
                       value={value ?? ""}
@@ -227,7 +277,7 @@ export const ChairEditModal: React.FC<Props> = ({
                       outlineColor={errors.name ? "#b00020" : colors.borderColor2}
                       theme={{
                         roundness: 10,
-                        colors: { onSurfaceVariant: "gray", primary: colors.sectionHeaderText },
+                        colors: { onSurfaceVariant: colors.textSecondary, primary: colors.sectionHeaderText },
                       }}
                       style={{ backgroundColor: colors.cardBg, borderWidth: 0 }}
                     />
@@ -244,7 +294,7 @@ export const ChairEditModal: React.FC<Props> = ({
                 name="barberId"
                 rules={
                   mode === "barber"
-                    ? { required: "Berber seçmelisiniz" }
+                    ? { required: t("form.barberSelectionRequired") }
                     : undefined
                 }
                 render={({ field: { value, onChange } }) => (
@@ -297,15 +347,7 @@ export const ChairEditModal: React.FC<Props> = ({
             )}
           </View>
         </Dialog.Content>
-        <Dialog.Actions style={{ paddingHorizontal: 16, paddingBottom: 16 }}>
-          <Button 
-            mode="text"
-            onPress={onClose} 
-            textColor="#9CA3AF"
-            style={{ marginRight: 8 }}
-          >
-            Vazgeç
-          </Button>
+        <Dialog.Actions style={{ flexDirection: "column", alignItems: "stretch", paddingHorizontal: 16, paddingBottom: 16, gap: 8 }}>
           <Button
             mode="contained"
             loading={isAdding || isUpdating}
@@ -313,8 +355,19 @@ export const ChairEditModal: React.FC<Props> = ({
             onPress={handleSubmit(submit)}
             buttonColor="#10B981"
             textColor="white"
+            style={{ borderRadius: 10 }}
+            labelStyle={{ fontFamily: "CenturyGothic" }}
           >
-            Kaydet
+            {t("common.save")}
+          </Button>
+          <Button
+            mode="outlined"
+            onPress={onClose}
+            textColor={colors.textSecondary}
+            style={{ borderRadius: 10, borderColor: colors.borderColor2 }}
+            labelStyle={{ fontFamily: "CenturyGothic" }}
+          >
+            {t("common.cancel")}
           </Button>
         </Dialog.Actions>
       </Dialog>

@@ -96,11 +96,11 @@ const createSchema = (t: (key: string) => string) =>
     name: z
       .string({ required_error: t("form.nameRequired") })
       .trim()
-      .min(1, t("form.minOneChar")),
+      .min(2, t("form.minTwoChars")),
     surname: z
       .string({ required_error: t("form.surnameRequired") })
       .trim()
-      .min(1, t("form.minOneChar")),
+      .min(2, t("form.minTwoChars")),
     images: z
       .array(
         z.object({
@@ -738,9 +738,10 @@ export const FormFreeBarberOperation = React.memo(
     const prevMainCategoriesRef = useRef<string[]>([]);
     useEffect(() => {
       if (isRestoringRef.current) return;
+      const sortedKey = (arr: string[]) => [...arr].sort().join(",");
       const mainCatsChanged =
-        JSON.stringify(prevMainCategoriesRef.current.sort()) !==
-        JSON.stringify([...selectedMainCategories].sort());
+        sortedKey(prevMainCategoriesRef.current) !==
+        sortedKey(selectedMainCategories);
 
       if (mainCatsChanged && prevMainCategoriesRef.current.length > 0) {
         setValue("selectedMainHeadings", [], { shouldDirty: true, shouldValidate: true });
@@ -761,9 +762,10 @@ export const FormFreeBarberOperation = React.memo(
     const prevMainHeadingsRef = useRef<string[]>([]);
     useEffect(() => {
       if (isRestoringRef.current) return;
+      const sortedKey = (arr: string[]) => [...arr].sort().join(",");
       const mainHeadingsChanged =
-        JSON.stringify(prevMainHeadingsRef.current.sort()) !==
-        JSON.stringify([...selectedMainHeadings].sort());
+        sortedKey(prevMainHeadingsRef.current) !==
+        sortedKey(selectedMainHeadings);
 
       if (mainHeadingsChanged && prevMainHeadingsRef.current.length > 0) {
         setValue("selectedSubHeadings", [], { shouldDirty: true, shouldValidate: true });
@@ -782,9 +784,10 @@ export const FormFreeBarberOperation = React.memo(
     const prevSubHeadingsRef = useRef<string[]>([]);
     useEffect(() => {
       if (isRestoringRef.current) return;
+      const sortedKey = (arr: string[]) => [...arr].sort().join(",");
       const subHeadingsChanged =
-        JSON.stringify(prevSubHeadingsRef.current.sort()) !==
-        JSON.stringify([...selectedSubHeadings].sort());
+        sortedKey(prevSubHeadingsRef.current) !==
+        sortedKey(selectedSubHeadings);
 
       if (subHeadingsChanged && prevSubHeadingsRef.current.length > 0) {
         setValue("selectedCategories", [], { shouldDirty: true, shouldValidate: true });
@@ -802,9 +805,10 @@ export const FormFreeBarberOperation = React.memo(
     const prevBsMainHeadingsRef = useRef<string[]>([]);
     useEffect(() => {
       if (isRestoringRef.current) return;
+      const sortedKey = (arr: string[]) => [...arr].sort().join(",");
       const changed =
-        JSON.stringify(prevBsMainHeadingsRef.current.sort()) !==
-        JSON.stringify([...selectedBeautySalonMainHeadings].sort());
+        sortedKey(prevBsMainHeadingsRef.current) !==
+        sortedKey(selectedBeautySalonMainHeadings);
 
       if (changed && prevBsMainHeadingsRef.current.length > 0) {
         setValue("selectedBeautySalonSubHeadings", [], { shouldDirty: true, shouldValidate: true });
@@ -824,9 +828,10 @@ export const FormFreeBarberOperation = React.memo(
     const prevBsSubHeadingsRef = useRef<string[]>([]);
     useEffect(() => {
       if (isRestoringRef.current) return;
+      const sortedKey = (arr: string[]) => [...arr].sort().join(",");
       const changed =
-        JSON.stringify(prevBsSubHeadingsRef.current.sort()) !==
-        JSON.stringify([...selectedBeautySalonSubHeadings].sort());
+        sortedKey(prevBsSubHeadingsRef.current) !==
+        sortedKey(selectedBeautySalonSubHeadings);
 
       if (changed && prevBsSubHeadingsRef.current.length > 0) {
         setValue("selectedBeautySalonCategories", [], { shouldDirty: true, shouldValidate: true });
@@ -1048,6 +1053,8 @@ export const FormFreeBarberOperation = React.memo(
 
         if (certUploadResult) {
           if ("error" in certUploadResult) {
+            // eslint-disable-next-line no-console
+            console.log("certificate uploadImage error", certUploadResult.error);
             dispatch(showSnack({ message: getErrorMessage(certUploadResult.error) || MESSAGES.FORM.CERTIFICATE_UPLOAD_FAILED, isError: true }));
             return;
           }
@@ -1060,6 +1067,8 @@ export const FormFreeBarberOperation = React.memo(
 
         if (beautyUploadResult) {
           if ("error" in beautyUploadResult) {
+            // eslint-disable-next-line no-console
+            console.log("beauty-certificate uploadImage error", beautyUploadResult.error);
             dispatch(showSnack({ message: getErrorMessage(beautyUploadResult.error) || MESSAGES.FORM.CERTIFICATE_UPLOAD_FAILED, isError: true }));
             return;
           }
@@ -1093,6 +1102,9 @@ export const FormFreeBarberOperation = React.memo(
           ? await addFreeBarber(payload)
           : await updateFreeBarber(payload);
         if ("error" in mutationResult) {
+          // Debug log: network / API error details for free barber create/update
+          // eslint-disable-next-line no-console
+          console.log("freeBarber mutation error", mutationResult.error);
           const errorMessage = getErrorMessage(mutationResult.error);
           const fallbackMessage = isEdit
             ? MESSAGES.FORM.FREEBARBER_UPDATE_ERROR
@@ -1189,6 +1201,8 @@ export const FormFreeBarberOperation = React.memo(
                 formData.append("ownerId", ownerId);
                 const uploadMultiResult = await uploadMultipleImages(formData);
                 if ("error" in uploadMultiResult) {
+                  // eslint-disable-next-line no-console
+                  console.log("freebarber uploadMultipleImages error", uploadMultiResult.error);
                   throw new Error(
                     getErrorMessage(uploadMultiResult.error) ||
                     MESSAGES.FORM.FREEBARBER_IMAGES_UPLOAD_ERROR,

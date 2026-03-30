@@ -6,11 +6,13 @@ import {
     TouchableOpacity,
     TextInput,
     KeyboardAvoidingView,
+    Keyboard,
     Platform,
-    FlatList,
     RefreshControl,
+    Pressable,
     useWindowDimensions,
 } from "react-native";
+import Animated, { useAnimatedScrollHandler, useSharedValue } from "react-native-reanimated";
 import { Text } from "../../components/common/Text";
 
 import { useGetMyRequestsQuery, useCreateRequestMutation, useDeleteRequestMutation } from "../../store/api";
@@ -22,6 +24,9 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 import { useTheme } from "../../hook/useTheme";
 import { useActionGuard } from "../../hook/useActionGuard";
 import { useSafeNavigation } from "../../hook/useSafeNavigation";
+import { ScrollStackItem } from "../../components/common/ScrollStackItem";
+
+const REQUEST_STRIDE = 148;
 
 const ACCENT = "#ffb900";
 
@@ -72,6 +77,13 @@ export default function RequestsPage() {
     const [deleteRequest, { isLoading: isDeleting }] = useDeleteRequestMutation();
 
     const safeRequests = Array.isArray(requests) ? requests : [];
+
+    const scrollY = useSharedValue(0);
+    const onScroll = useAnimatedScrollHandler({
+        onScroll: (e) => {
+            scrollY.value = e.contentOffset.y / REQUEST_STRIDE;
+        },
+    });
 
     const labelAccent = useMemo(
         () => ({
@@ -151,9 +163,10 @@ export default function RequestsPage() {
         );
     };
 
-    const renderRequestItem = ({ item }: { item: RequestGetDto }) => {
+    const renderRequestItem = ({ item, index }: { item: RequestGetDto; index: number }) => {
         const processed = item.isProcessed;
         return (
+            <ScrollStackItem index={index} scroll={scrollY} vanish>
             <View
                 className="mb-3 overflow-hidden rounded-xl pl-3 pr-3 py-3"
                 style={{
@@ -243,6 +256,7 @@ export default function RequestsPage() {
                     </Text>
                 </View>
             </View>
+            </ScrollStackItem>
         );
     };
 
@@ -347,6 +361,7 @@ export default function RequestsPage() {
                     style={{ flex: 1 }}
                     keyboardVerticalOffset={Platform.OS === "ios" ? formMetrics.iosKbOffset : 0}
                 >
+                    <Pressable style={{ flex: 1 }} onPress={Keyboard.dismiss} accessible={false}>
                     <View
                         style={{
                             flex: 1,
@@ -426,12 +441,15 @@ export default function RequestsPage() {
                             {primaryButton(handleSubmit, isCreating, t("profile.submit"))}
                         </View>
                     </View>
+                    </Pressable>
                 </KeyboardAvoidingView>
             ) : (
-                <FlatList
+                <Animated.FlatList
                     data={safeRequests}
                     keyExtractor={(item: RequestGetDto) => item.id}
                     renderItem={renderRequestItem}
+                    onScroll={onScroll}
+                    scrollEventThrottle={16}
                     contentContainerStyle={{ padding: formMetrics.listPad, flexGrow: 1 }}
                     showsVerticalScrollIndicator={false}
                     refreshControl={

@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useRef, useState } from "react";
+import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import {
   Dimensions,
   RefreshControl,
@@ -62,6 +62,7 @@ import { PerplexityListItem } from "../../components/panel/PerplexityListItem";
 import { PerplexityHorizontalList } from "../../components/panel/PerplexityHorizontalList";
 import { PanelEmptyCta } from "../../components/common/PanelEmptyCta";
 import { useBarberStoreSheet } from "../../context/BarberStoreSheetContext";
+import { MoreFabPanelContext } from "../../components/layout/MoreFabContext";
 
 const Index = () => {
   const insets = useSafeAreaInsets();
@@ -77,6 +78,7 @@ const Index = () => {
   const guard = useActionGuard();
   const { withSubscription } = useSubscriptionGuard();
   const barberStoreSheet = useBarberStoreSheet();
+  const fabCtx = useContext(MoreFabPanelContext);
 
   // Current user for filters
   const { data: currentUser } = useGetMeQuery();
@@ -163,6 +165,12 @@ const Index = () => {
     enablePanDownToClose: true,
   });
 
+  const anySheetOpen = mapDetailSheet.isOpen || ratingsSheet.isOpen;
+  useEffect(() => {
+    fabCtx?.reportOverlayOpen(anySheetOpen);
+    return () => { fabCtx?.reportOverlayOpen(false); };
+  }, [anySheetOpen, fabCtx]);
+
   const [searchQuery, setSearchQuery] = useState("");
   const [isList, setIsList] = useState(true);
 
@@ -198,10 +206,11 @@ const Index = () => {
     locationStatus,
   ]);
 
+  const ITEM_ANIM_STRIDE = 280;
   const scrollY = useSharedValue(0);
   const onVerticalScroll = useAnimatedScrollHandler({
     onScroll: (e) => {
-      scrollY.value = e.contentOffset.y;
+      scrollY.value = e.contentOffset.y / 280;
     },
   });
 
@@ -676,8 +685,7 @@ const Index = () => {
               return (
                 <PerplexityListItem
                   scrollPos={scrollY}
-                  itemStart={item._scrollStart}
-                  itemLength={item._scrollLen}
+                  index={item._scrollStart / ITEM_ANIM_STRIDE}
                 >
                   {renderFreeBarberItem({ item: item.data })}
                 </PerplexityListItem>

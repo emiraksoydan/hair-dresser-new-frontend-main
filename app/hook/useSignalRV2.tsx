@@ -184,7 +184,7 @@ export const useSignalRV2 = () => {
 
     conn.on("appointment.updated", (appointment: AppointmentGetDto) => {
 
-      const filters = [AppointmentFilter.Active, AppointmentFilter.Completed, AppointmentFilter.Cancelled];
+      const filters = [AppointmentFilter.Active, AppointmentFilter.Pending, AppointmentFilter.Completed, AppointmentFilter.Cancelled];
 
       filters.forEach((filter) => {
         dispatch(
@@ -193,6 +193,7 @@ export const useSignalRV2 = () => {
             const existingIndex = draft.findIndex((a) => a.id === appointment.id);
             const shouldBeInThisFilter =
               (filter === AppointmentFilter.Active && (appointment.status === AppointmentStatus.Approved || appointment.status === AppointmentStatus.Pending)) ||
+              (filter === AppointmentFilter.Pending && appointment.status === AppointmentStatus.Pending) ||
               (filter === AppointmentFilter.Completed && appointment.status === AppointmentStatus.Completed) ||
               (filter === AppointmentFilter.Cancelled && (appointment.status === AppointmentStatus.Cancelled || appointment.status === AppointmentStatus.Rejected || appointment.status === AppointmentStatus.Unanswered));
 

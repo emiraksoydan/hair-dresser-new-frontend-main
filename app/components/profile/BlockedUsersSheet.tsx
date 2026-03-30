@@ -12,8 +12,9 @@ import LottieView from "lottie-react-native";
 import { useTheme } from "../../hook/useTheme";
 import { useActionGuard } from "../../hook/useActionGuard";
 import { DEFAULT_AVATAR } from "../../constants/images";
+import { COLORS, getProfileNativeSwitchProps } from "../../constants/colors";
 
-const ACCENT = "#ffb900";
+const ACCENT = COLORS.PROFILE_SWITCH.ACTIVE;
 
 type BlockedUsersSheetProps = {
   onClose: () => void;
@@ -130,10 +131,8 @@ export const BlockedUsersSheet: React.FC<BlockedUsersSheetProps> = ({ onClose })
         <Switch
           value={true}
           onValueChange={() => handleUnblock(item.blockedToUserId)}
-          trackColor={{ false: isDark ? "#3a3a3c" : "#d1d5db", true: ACCENT }}
-          thumbColor="#ffffff"
-          ios_backgroundColor={isDark ? "#3a3a3c" : "#e5e7eb"}
           disabled={isUnblocking}
+          {...getProfileNativeSwitchProps(isDark, true)}
         />
       </View>
     );

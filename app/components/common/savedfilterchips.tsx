@@ -24,7 +24,7 @@ export const SavedFilterChips = memo(({ savedFilters, activeFilterId, onLoad }: 
             <Text style={{ color: colors.sectionHeaderText, fontSize: 12, fontFamily: 'CenturyGothic-Bold', marginBottom: 8, opacity: 0.85 }}>
                 {t('filters.savedFilters')}
             </Text>
-            <FlatList
+                <FlatList
                 horizontal
                 data={savedFilters}
                 keyExtractor={(item) => item.id}
@@ -39,17 +39,25 @@ export const SavedFilterChips = memo(({ savedFilters, activeFilterId, onLoad }: 
                             style={{
                                 flexDirection: 'row',
                                 alignItems: 'center',
-                                gap: 5,
+                                gap: 6,
                                 backgroundColor: isActive ? '#ffb900' : colors.cardBg2,
-                                borderRadius: 22,
+                                borderRadius: 20,
                                 borderWidth: 1,
                                 borderColor: '#ffb900',
-                                paddingHorizontal: 12,
-                                paddingVertical: 8,
+                                paddingHorizontal: 13,
+                                paddingVertical: 7,
+                                minHeight: 32,
                             }}
                         >
                             <Icon source="bookmark" size={14} color={isActive ? colors.cardBg2 : '#ffb900'} />
-                            <Text style={{ color: isActive ? colors.cardBg2 : colors.sectionHeaderText, fontSize: 13, fontFamily: 'CenturyGothic' }} numberOfLines={1}>
+                            <Text
+                                style={{
+                                    color: isActive ? colors.cardBg2 : colors.sectionHeaderText,
+                                    fontSize: 12,
+                                    fontFamily: 'CenturyGothic',
+                                }}
+                                numberOfLines={1}
+                            >
                                 {item.name}
                             </Text>
                         </TouchableOpacity>

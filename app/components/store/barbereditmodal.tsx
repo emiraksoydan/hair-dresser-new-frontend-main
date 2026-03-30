@@ -137,7 +137,7 @@ export const BarberEditModal: React.FC<Props> = ({
     formData.append("ownerId", ownerId);
     const uploadImageResult = await uploadImage({
       data: formData,
-      isProfileImage: true,
+      isProfileImage: false,
     });
     if ("error" in uploadImageResult) {
       throw new Error(

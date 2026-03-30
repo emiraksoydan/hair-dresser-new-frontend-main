@@ -89,7 +89,7 @@ export const api = createApi({
     endpoints: (builder) => ({
 
         // --- AUTH API ---
-        sendOtp: builder.mutation<{ message: string; success: boolean }, { phoneNumber: string, userType?: UserType, otpPurpose: OtpPurpose }>({
+        sendOtp: builder.mutation<{ message: string; success: boolean }, { phoneNumber: string, userType?: UserType, otpPurpose: OtpPurpose, language?: string }>({
             query: (body) => ({ url: 'Auth/send-otp', method: 'POST', body }),
         }),
         verifyOtp: builder.mutation<ApiResponse<AccessTokenDto>, VerifyOtpRequest>({
@@ -1196,7 +1196,7 @@ export const api = createApi({
             invalidatesTags: ['UserProfile'],
         }),
 
-        sendPhoneChangeOtp: builder.mutation<{ success: boolean; message: string }, { newPhone: string }>({
+        sendPhoneChangeOtp: builder.mutation<{ success: boolean; message: string }, { newPhone: string; language?: string }>({
             query: (body) => ({ url: 'User/send-phone-change-otp', method: 'POST', body }),
         }),
         updatePhone: builder.mutation<ApiResponse<AccessTokenDto>, { newPhone: string; otpCode: string }>({

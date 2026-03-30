@@ -10,7 +10,7 @@ type Props<T> = {
   data: T[];
   keyExtractor: (item: T, index: number) => string;
   renderItem: (info: { item: T; index: number }) => React.ReactNode;
-  /** Height of each item along the scroll axis (used for animation interpolation). */
+  /** Height of each item along the scroll axis (used for scroll normalization). */
   itemStride: number;
   contentContainerStyle?: object;
   style?: object;
@@ -23,11 +23,8 @@ type Props<T> = {
 };
 
 /**
- * Vertical list with Perplexity-style scale + opacity + translateY animation.
- * Handles scroll tracking internally — no need to pass a scrollY SharedValue.
- *
- * Used across CustomerTabs, BarberStore, FreeBarber panels and Favorites.
- * @see PerplexityListItem for the animation details.
+ * Vertical list with scale + opacity animation.
+ * Scroll is normalized by itemStride so each item aligns with its integer index.
  */
 export function PerplexityAnimatedList<T>({
   data,
@@ -46,7 +43,7 @@ export function PerplexityAnimatedList<T>({
   const scrollY = useSharedValue(0);
   const onScroll = useAnimatedScrollHandler({
     onScroll: (e) => {
-      scrollY.value = e.contentOffset.y;
+      scrollY.value = e.contentOffset.y / itemStride;
     },
   });
 
@@ -58,11 +55,7 @@ export function PerplexityAnimatedList<T>({
       scrollEventThrottle={16}
       showsVerticalScrollIndicator={false}
       renderItem={({ item, index }: { item: any; index: number }) => (
-        <PerplexityListItem
-          scrollPos={scrollY}
-          itemStart={index * itemStride}
-          itemLength={itemStride}
-        >
+        <PerplexityListItem scrollPos={scrollY} index={index}>
           {renderItem({ item: item as T, index })}
         </PerplexityListItem>
       )}

@@ -109,7 +109,18 @@ export const GlobalAlert: React.FC = () => {
           </Text>
         </Dialog.Content>
 
-        <Dialog.Actions style={{ justifyContent: 'center', gap: 12, paddingBottom: 16 }}>
+        <Dialog.Actions
+          style={{
+            flexDirection: buttons.length > 2 ? 'column' : 'row',
+            flexWrap: 'wrap',
+            justifyContent: 'center',
+            alignItems: 'stretch',
+            gap: 10,
+            paddingHorizontal: 16,
+            paddingBottom: 16,
+            width: '100%',
+          }}
+        >
           {buttons.map((button, index) => (
             <Button
               key={index}
@@ -119,10 +130,16 @@ export const GlobalAlert: React.FC = () => {
               textColor={button.style === 'cancel' ? '#9ca3af' : 'white'}
               style={{
                 borderRadius: 10,
-                minWidth: 100,
+                minWidth: buttons.length > 2 ? undefined : 100,
+                width: buttons.length > 2 ? '100%' : undefined,
                 borderColor: button.style === 'cancel' ? colors.borderColor : 'transparent',
               }}
-              labelStyle={{ fontFamily: 'CenturyGothic', fontSize: 14 }}
+              labelStyle={{
+                fontFamily: 'CenturyGothic',
+                fontSize: buttons.length > 2 ? 15 : 14,
+                marginVertical: 2,
+                textAlign: 'center',
+              }}
             >
               {button.text}
             </Button>

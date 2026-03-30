@@ -8,7 +8,7 @@ import {
 import { Icon } from "react-native-paper";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Text } from "../../components/common/Text";
-import React, { useCallback, useMemo, useRef, useState } from "react";
+import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useBottomSheet } from "../../hook/useBottomSheet";
 import SearchBar from "../../components/common/searchbar";
 import { SkeletonComponent } from "../../components/common/skeleton";
@@ -70,6 +70,7 @@ import { PerplexityListItem } from "../../components/panel/PerplexityListItem";
 import { PerplexityHorizontalList } from "../../components/panel/PerplexityHorizontalList";
 import { PanelEmptyCta } from "../../components/common/PanelEmptyCta";
 import { useFreeBarberPanelSheet } from "../../context/FreeBarberPanelSheetContext";
+import { MoreFabPanelContext } from "../../components/layout/MoreFabContext";
 
 const Index = () => {
   const insets = useSafeAreaInsets();
@@ -85,6 +86,7 @@ const Index = () => {
   const guard = useActionGuard();
   const { withSubscription } = useSubscriptionGuard();
   const freeBarberPanelSheet = useFreeBarberPanelSheet();
+  const fabCtx = useContext(MoreFabPanelContext);
 
   const { data: notifications = [], refetch: refetchNotifications } =
     useGetAllNotificationsQuery();
@@ -295,10 +297,17 @@ const Index = () => {
     enablePanDownToClose: true,
   });
 
+  const anySheetOpen = mapDetailSheet.isOpen || ratingsSheet.isOpen;
+  useEffect(() => {
+    fabCtx?.reportOverlayOpen(anySheetOpen);
+    return () => { fabCtx?.reportOverlayOpen(false); };
+  }, [anySheetOpen, fabCtx]);
+
+  const ITEM_ANIM_STRIDE = 280;
   const scrollY = useSharedValue(0);
   const onVerticalScroll = useAnimatedScrollHandler({
     onScroll: (e) => {
-      scrollY.value = e.contentOffset.y;
+      scrollY.value = e.contentOffset.y / 280;
     },
   });
 
@@ -765,8 +774,7 @@ const Index = () => {
               return (
                 <PerplexityListItem
                   scrollPos={scrollY}
-                  itemStart={item._scrollStart}
-                  itemLength={item._scrollLen}
+                  index={item._scrollStart / ITEM_ANIM_STRIDE}
                 >
                   <StoreCardInner
                     store={item.data}

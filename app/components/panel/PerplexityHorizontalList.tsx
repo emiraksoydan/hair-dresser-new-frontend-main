@@ -16,7 +16,8 @@ type Props<T> = {
 };
 
 /**
- * Horizontal carousel with Perplexity-style scale/opacity vs scroll position.
+ * Horizontal carousel with scale + opacity animation.
+ * Scroll is normalized by snapInterval so each card aligns with its integer index.
  */
 export function PerplexityHorizontalList<T>({
   data,
@@ -31,7 +32,7 @@ export function PerplexityHorizontalList<T>({
   const scrollX = useSharedValue(0);
   const onScroll = useAnimatedScrollHandler({
     onScroll: (e) => {
-      scrollX.value = e.contentOffset.x;
+      scrollX.value = e.contentOffset.x / snapInterval;
     },
   });
 
@@ -43,12 +44,7 @@ export function PerplexityHorizontalList<T>({
       data={data}
       keyExtractor={keyExtractor}
       renderItem={({ item, index }) => (
-        <PerplexityListItem
-          horizontal
-          scrollPos={scrollX}
-          itemStart={index * snapInterval}
-          itemLength={snapInterval}
-        >
+        <PerplexityListItem horizontal scrollPos={scrollX} index={index}>
           {renderItem({ item, index })}
         </PerplexityListItem>
       )}

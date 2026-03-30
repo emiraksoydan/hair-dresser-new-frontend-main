@@ -1,6 +1,7 @@
 import { Icon } from "react-native-paper";
 import React from "react";
-import { View, ActivityIndicator, Switch, Image, FlatList, RefreshControl, TouchableOpacity } from "react-native";
+import { View, ActivityIndicator, Switch, Image, RefreshControl, TouchableOpacity } from "react-native";
+import Animated, { useAnimatedScrollHandler, useSharedValue } from "react-native-reanimated";
 import { Text } from "../../components/common/Text";
 
 import { useGetMyBlockedUsersQuery, useUnblockUserMutation } from "../../store/api";
@@ -13,8 +14,12 @@ import { useTheme } from "../../hook/useTheme";
 import { useActionGuard } from "../../hook/useActionGuard";
 import { useSafeNavigation } from "../../hook/useSafeNavigation";
 import { DEFAULT_AVATAR } from "../../constants/images";
+import { COLORS, getProfileNativeSwitchProps } from "../../constants/colors";
+import { ScrollStackItem } from "../../components/common/ScrollStackItem";
 
-const ACCENT = "#ffb900";
+const BLOCKED_STRIDE = 136;
+
+const ACCENT = COLORS.PROFILE_SWITCH.ACTIVE;
 const AVATAR = 58;
 const AVATAR_RADIUS = 12;
 
@@ -29,6 +34,13 @@ export default function BlockedUsersPage() {
     const [unblockUser, { isLoading: isUnblocking }] = useUnblockUserMutation();
 
     const safeBlockedUsers = Array.isArray(blockedUsers) ? blockedUsers : [];
+
+    const scrollY = useSharedValue(0);
+    const onScroll = useAnimatedScrollHandler({
+        onScroll: (e) => {
+            scrollY.value = e.contentOffset.y / BLOCKED_STRIDE;
+        },
+    });
 
     const formatDateTime = (dateStr: string) => {
         try {
@@ -66,12 +78,13 @@ export default function BlockedUsersPage() {
             }
         });
 
-    const renderBlockedItem = ({ item }: { item: BlockedGetDto }) => {
+    const renderBlockedItem = ({ item, index }: { item: BlockedGetDto; index: number }) => {
         const displayName = item.targetUserName || "Bilinmeyen Kullanıcı";
         const imageUrl = item.targetUserImage;
         const userTypeName = getUserTypeName(item.targetUserType);
 
         return (
+            <ScrollStackItem index={index} scroll={scrollY} vanish>
             <View
                 className="mb-3 flex-row items-center overflow-hidden rounded-xl p-4"
                 style={{
@@ -127,12 +140,11 @@ export default function BlockedUsersPage() {
                 <Switch
                     value={true}
                     onValueChange={() => handleUnblock(item.blockedToUserId)}
-                    trackColor={{ false: isDark ? "#3a3a3c" : "#d1d5db", true: ACCENT }}
-                    thumbColor="#ffffff"
-                    ios_backgroundColor={isDark ? "#3a3a3c" : "#e5e7eb"}
                     disabled={isUnblocking}
+                    {...getProfileNativeSwitchProps(isDark, true)}
                 />
             </View>
+            </ScrollStackItem>
         );
     };
 
@@ -175,10 +187,12 @@ export default function BlockedUsersPage() {
                     <ActivityIndicator size="large" color={ACCENT} />
                 </View>
             ) : (
-                <FlatList
+                <Animated.FlatList
                     data={safeBlockedUsers}
                     keyExtractor={(item: BlockedGetDto) => item.id}
                     renderItem={renderBlockedItem}
+                    onScroll={onScroll}
+                    scrollEventThrottle={16}
                     contentContainerStyle={{ padding: 16, flexGrow: 1 }}
                     showsVerticalScrollIndicator={false}
                     refreshControl={

@@ -43,7 +43,8 @@ import { LanguageSelector } from "../components/common/LanguageSelector";
 import { LegalAgreementCheckbox } from "../components/auth/LegalAgreementCheckbox";
 import { useSafeNavigation } from "../hook/useSafeNavigation";
 
-const OTP_COUNTDOWN_SECONDS = 120; // Backend OTP_VALIDITY_SECONDS ile eşleşmeli (120 sn)
+/** NetGsmSmsManager OTP_VALIDITY_SECONDS ile aynı (60 sn). */
+const OTP_COUNTDOWN_SECONDS = 60;
 
 /** #RRGGBB → yarı saydam OTP modal backdrop (ekran zeminiyle uyumlu). */
 function backdropFromScreenBg(screenBg: string, isDark: boolean): string {
@@ -218,9 +219,11 @@ const Index = () => {
         phoneNumber: string;
         userType?: UserType;
         otpPurpose: OtpPurpose;
+        language: string;
       } = {
         phoneNumber: normalizedPhone,
         otpPurpose: isRegister ? OtpPurpose.Register : OtpPurpose.Login,
+        language: currentLanguage,
         ...(isRegister ? { userType: mapUserTypeToNumber(data.userType) } : {}),
       };
 
@@ -449,9 +452,11 @@ const Index = () => {
         phoneNumber: string;
         userType?: UserType;
         otpPurpose: OtpPurpose;
+        language: string;
       } = {
         phoneNumber: phone,
         otpPurpose: isRegister ? OtpPurpose.Register : OtpPurpose.Login,
+        language: currentLanguage,
         ...(isRegister ? { userType: mapUserTypeToNumber(f.userType) } : {}),
       };
 

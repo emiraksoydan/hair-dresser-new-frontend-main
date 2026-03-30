@@ -278,7 +278,7 @@ const createSchema = (t: (key: string) => string) =>
       )
       .max(3, t("form.maxImages"))
       .optional(),
-    storeName: z.string({ required_error: t("form.storeNameRequired") }).trim(),
+    storeName: z.string({ required_error: t("form.storeNameRequired") }).trim().min(2, t("form.storeNameMin")),
     type: z.string({ required_error: t("form.storeTypeRequired") }),
     // Ana başlıklar (seçilen main kategorilere göre)
     selectedMainHeadings: z.array(z.string()).optional(),
@@ -665,8 +665,10 @@ const FormStoreAdd = ({
       formData.append("ownerType", String(ImageOwnerType.User));
       formData.append("ownerId", userId);
 
-      const uploadRes = await uploadImage({ data: formData });
+      const uploadRes = await uploadImage({ data: formData, isProfileImage: false });
       if ("error" in uploadRes) {
+        // eslint-disable-next-line no-console
+        console.log("taxDocument uploadImage error", uploadRes.error);
         dispatch(
           showSnack({
             message:
@@ -741,6 +743,11 @@ const FormStoreAdd = ({
     };
     const storeResult = await addStore(payload);
     if ("error" in storeResult) {
+      // Debug log: network / API error details for store create/update
+      // Özellikle "Servise ulaşılamadı" hatasını kök nedenine inmek için.
+      // NOT: Production'da da kalabilir; sadece konsola yazar.
+      // eslint-disable-next-line no-console
+      console.log("addBarberStore error", storeResult.error);
       const errorMessage = getErrorMessage(storeResult.error);
       dispatch(
         showSnack({
@@ -785,6 +792,8 @@ const FormStoreAdd = ({
           formData.append("ownerId", createdStoreId);
           const uploadRes = await uploadMultipleImages(formData);
           if ("error" in uploadRes) {
+            // eslint-disable-next-line no-console
+            console.log("store uploadMultipleImages error", uploadRes.error);
             uploadError =
               getErrorMessage(uploadRes.error) ||
               MESSAGES.FORM.STORE_IMAGES_UPLOAD_ERROR;
@@ -810,11 +819,13 @@ const FormStoreAdd = ({
               } as any);
               formData.append("ownerType", String(ImageOwnerType.ManuelBarber));
               formData.append("ownerId", barber.id);
-              return uploadImage({ data: formData });
+              return uploadImage({ data: formData, isProfileImage: false });
             }),
           );
           for (const uploadRes of barberUploadResults) {
             if ("error" in uploadRes) {
+              // eslint-disable-next-line no-console
+              console.log("barber uploadImage error", uploadRes.error);
               uploadError =
                 getErrorMessage(uploadRes.error) ||
                 MESSAGES.FORM.BARBER_IMAGE_UPLOAD_ERROR;
@@ -975,9 +986,10 @@ const FormStoreAdd = ({
   // Ana başlıklar değişince alt seviyeleri reset et
   const prevMainHeadingsRef = useRef<string[]>([]);
   useEffect(() => {
+    const sortedKey = (arr: string[]) => [...arr].sort().join(",");
     const mainHeadingsChanged =
-      JSON.stringify(prevMainHeadingsRef.current.sort()) !==
-      JSON.stringify([...selectedMainHeadings].sort());
+      sortedKey(prevMainHeadingsRef.current) !==
+      sortedKey(selectedMainHeadings);
 
     if (mainHeadingsChanged && prevMainHeadingsRef.current.length > 0) {
       setValue("selectedSubHeadings", [], {
@@ -997,9 +1009,10 @@ const FormStoreAdd = ({
   // Alt başlıklar değişince hizmetleri reset et
   const prevSubHeadingsRef = useRef<string[]>([]);
   useEffect(() => {
+    const sortedKey = (arr: string[]) => [...arr].sort().join(",");
     const subHeadingsChanged =
-      JSON.stringify(prevSubHeadingsRef.current.sort()) !==
-      JSON.stringify([...selectedSubHeadings].sort());
+      sortedKey(prevSubHeadingsRef.current) !==
+      sortedKey(selectedSubHeadings);
 
     if (subHeadingsChanged && prevSubHeadingsRef.current.length > 0) {
       setValue("selectedCategories", [], {
@@ -1663,6 +1676,18 @@ const FormStoreAdd = ({
             )}
             {currentStep === 5 && (
               <>
+                <View
+                  className="mx-2 mt-2 mb-3 rounded-xl px-3 py-3"
+                  style={{
+                    backgroundColor: isDark ? "rgba(194, 165, 35, 0.12)" : "rgba(194, 165, 35, 0.08)",
+                    borderWidth: 1,
+                    borderColor: isDark ? "rgba(194, 165, 35, 0.28)" : "rgba(194, 165, 35, 0.35)",
+                  }}
+                >
+                  <Text style={{ fontFamily: "CenturyGothic", fontSize: 14, lineHeight: 21, color: colors.sectionHeaderText }}>
+                    {t("form.staffStepIntro")}
+                  </Text>
+                </View>
                 <View className="mt-2 mx-0 flex-row items-center px-2">
                   <Text className="text-white text-xl flex-1" style={{ color: colors.sectionHeaderText }}>
                     {t("form.workingBarbersCount")} : {barberFields.length}{" "}
@@ -1714,7 +1739,7 @@ const FormStoreAdd = ({
 
                 <View className="mt-1 mx-0 px-2 flex-row items-center">
                   <Text className="text-white text-xl flex-1" style={{ color: colors.sectionHeaderText }}>
-                    Koltuk Sayısı : {chairFields.length}
+                    {t("form.chairCount")} : {chairFields.length}
                   </Text>
                   <Button
                     mode="text"
@@ -1723,7 +1748,7 @@ const FormStoreAdd = ({
                       addChair({ id: uuid(), mode: "named", name: "" })
                     }
                   >
-                    Koltuk Ekle
+                    {t("form.addChair")}
                   </Button>
                 </View>
 

@@ -65,6 +65,7 @@ import { useAlert } from "../../hook/useAlert";
 import { useTheme } from "../../hook/useTheme";
 import * as ImagePicker from "expo-image-picker";
 import * as Location from "expo-location";
+import { ensureJpegForUpload, normalizeImageFile } from "../../utils/form/pick-document";
 import * as DocumentPicker from "expo-document-picker";
 import { Audio } from "expo-av";
 import { API_CONFIG } from "../../constants/api";
@@ -78,7 +79,7 @@ async function transcribeWithWhisper(
   uri: string,
   authToken: string,
   baseUrl: string,
-): Promise<{ text: string | null; serverMessage?: string }> {
+): Promise<{ text: string | null; serverMessage?: string; isEmpty?: boolean }> {
   try {
     const filename = uri.split("/").pop() || "audio.m4a";
     const formData = new FormData();
@@ -95,6 +96,9 @@ async function transcribeWithWhisper(
       return { text: null, serverMessage: msg };
     }
     const text = json?.data ?? null;
+    if (typeof text === "string" && text.trim() === "") {
+      return { text: "", isEmpty: true };
+    }
     return { text: typeof text === "string" ? text : null };
   } catch {
     return { text: null };
@@ -151,9 +155,10 @@ async function uploadImageToBackend(
   baseUrl: string,
   ownerId: string,
   mimeType = "image/jpeg",
+  fileName?: string,
 ): Promise<string | null> {
   try {
-    const filename = uri.split("/").pop() || "photo.jpg";
+    const filename = fileName || uri.split("/").pop() || "photo.jpg";
     const formData = new FormData();
     formData.append("File", { uri, name: filename, type: mimeType } as any);
     formData.append("OwnerId", ownerId);
@@ -225,7 +230,13 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({
   // Recording state
   const [isRecording, setIsRecording] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
+  /** Kayıt bitince ses gönder / metne çevir seçim kartı */
+  const [pendingVoiceUri, setPendingVoiceUri] = useState<string | null>(null);
   const recordingRef = useRef<Audio.Recording | null>(null);
+
+  // Audio playback state
+  const [playingAudioId, setPlayingAudioId] = useState<string | null>(null);
+  const soundRef = useRef<Audio.Sound | null>(null);
 
   // Media sending state
   const [isSendingMedia, setIsSendingMedia] = useState(false);
@@ -454,12 +465,19 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({
     });
     if (result.canceled || !result.assets?.[0]) return;
     const asset = result.assets[0];
-    const uri = asset.uri;
-    const mime = asset.mimeType ?? "image/jpeg";
+    const normalized = normalizeImageFile(asset.uri, asset.fileName, asset.mimeType);
+    const ready = await ensureJpegForUpload(normalized);
     if (!currentUserId || !token) { alertError(t("common.error"), t("chat.imageUploadFailed")); return; }
     setIsSendingMedia(true);
     try {
-      const url = await uploadImageToBackend(uri, token, API_CONFIG.BASE_URL, currentUserId, mime);
+      const url = await uploadImageToBackend(
+        ready.uri,
+        token,
+        API_CONFIG.BASE_URL,
+        currentUserId,
+        ready.type,
+        ready.name,
+      );
       if (!url) { alertError(t("common.error"), t("chat.imageUploadFailed")); return; }
       await sendChatMedia({ threadId, messageType: ChatMessageType.Image, mediaUrl: url, replyToMessageId: replyingTo?.messageId ?? null });
       setReplyingTo(null);
@@ -518,31 +536,85 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({
     }
   }, [canSendMessage, threadId, token, currentUserId, replyingTo, sendChatMedia, t, alertError]);
 
+  // --- Audio playback ---
+  const stopCurrentAudio = useCallback(async () => {
+    if (soundRef.current) {
+      await soundRef.current.unloadAsync().catch(() => {});
+      soundRef.current = null;
+    }
+    setPlayingAudioId(null);
+  }, []);
+
+  const handlePlayAudio = useCallback(async (messageId: string, url: string) => {
+    if (playingAudioId === messageId) {
+      await stopCurrentAudio();
+      return;
+    }
+    await stopCurrentAudio();
+    try {
+      await Audio.setAudioModeAsync({ allowsRecordingIOS: false, playsInSilentModeIOS: true });
+      const { sound } = await Audio.Sound.createAsync({ uri: url });
+      soundRef.current = sound;
+      setPlayingAudioId(messageId);
+      await sound.playAsync();
+      sound.setOnPlaybackStatusUpdate((status) => {
+        if (status.isLoaded && status.didJustFinish) {
+          soundRef.current = null;
+          setPlayingAudioId(null);
+        }
+      });
+    } catch {
+      alertError(t("common.error"), t("chat.audioPlayFailed"));
+    }
+  }, [playingAudioId, stopCurrentAudio, alertError, t]);
+
+  const openChatAttachmentUrl = useCallback(
+    async (url: string | null | undefined) => {
+      if (!url?.trim()) return;
+      try {
+        await Linking.openURL(url);
+      } catch {
+        try {
+          await Clipboard.setStringAsync(url);
+          alertWarning(t("chat.fileOpenFailed"), t("chat.fileLinkCopied"));
+        } catch {
+          alertWarning(t("common.error"), t("chat.fileOpenFailed"));
+        }
+      }
+    },
+    [alertWarning, t],
+  );
+
+  // --- Audio upload + send ---
+  const handleSendAudioMessage = useCallback(async (uri: string) => {
+    if (!currentUserId || !token) return;
+    setIsSendingMedia(true);
+    try {
+      const filename = uri.split("/").pop() || "audio.m4a";
+      const url = await uploadFileToBackend(uri, filename, "audio/mp4", token, API_CONFIG.BASE_URL, currentUserId);
+      if (!url) { alertError(t("common.error"), t("chat.audioUploadFailed")); return; }
+      await sendChatMedia({ threadId, messageType: ChatMessageType.Audio, mediaUrl: url, fileName: filename, replyToMessageId: replyingTo?.messageId ?? null });
+      setReplyingTo(null);
+    } catch {
+      alertError(t("common.error"), t("chat.audioUploadFailed"));
+    } finally {
+      setIsSendingMedia(false);
+    }
+  }, [currentUserId, token, threadId, replyingTo, sendChatMedia, alertError, t]);
+
   // --- Microphone recording ---
   const handleMicPress = useCallback(async () => {
     if (isRecording) {
       // Stop recording
       setIsRecording(false);
-      setIsTranscribing(true);
       try {
         await recordingRef.current?.stopAndUnloadAsync();
         const uri = recordingRef.current?.getURI();
         recordingRef.current = null;
-        if (uri && token) {
-          const { text, serverMessage } = await transcribeWithWhisper(uri, token, API_CONFIG.BASE_URL);
-          if (text?.trim()) {
-            setMessageText((prev) => (prev ? `${prev} ${text}` : text));
-          } else {
-            alertWarning(
-              t("chat.transcriptionUnavailableTitle"),
-              serverMessage?.trim() ? serverMessage : t("chat.transcriptionUnavailableBody"),
-            );
-          }
-        }
+        if (!uri) return;
+        setPendingVoiceUri(uri);
       } catch {
         alertError(t("common.error"), t("chat.recordingFailed"));
-      } finally {
-        setIsTranscribing(false);
       }
       return;
     }
@@ -561,7 +633,38 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({
     } catch {
       alertError(t("common.error"), t("chat.recordingFailed"));
     }
-  }, [isRecording, token, t, alertError, alertWarning]);
+  }, [isRecording, token, t, alertError, handleSendAudioMessage]);
+
+  const closeVoiceActionSheet = useCallback(() => setPendingVoiceUri(null), []);
+
+  const onVoiceSendAsAudio = useCallback(() => {
+    if (!pendingVoiceUri) return;
+    const u = pendingVoiceUri;
+    setPendingVoiceUri(null);
+    void handleSendAudioMessage(u);
+  }, [pendingVoiceUri, handleSendAudioMessage]);
+
+  const onVoiceTranscribe = useCallback(async () => {
+    if (!pendingVoiceUri || !token) return;
+    const u = pendingVoiceUri;
+    setPendingVoiceUri(null);
+    setIsTranscribing(true);
+    try {
+      const { text, serverMessage, isEmpty } = await transcribeWithWhisper(u, token, API_CONFIG.BASE_URL);
+      if (text?.trim()) {
+        setMessageText((prev) => (prev ? `${prev} ${text}` : text));
+      } else if (isEmpty) {
+        alertWarning(t("chat.transcriptionUnavailableTitle"), t("chat.transcriptionEmpty"));
+      } else {
+        alertWarning(
+          t("chat.transcriptionUnavailableTitle"),
+          serverMessage?.trim() ? serverMessage : t("chat.transcriptionUnavailableBody"),
+        );
+      }
+    } finally {
+      setIsTranscribing(false);
+    }
+  }, [pendingVoiceUri, token, t, alertWarning]);
 
   // --- Context menu ---
   const showContextMenu = useCallback((msg: ChatMessageItemDto) => {
@@ -970,7 +1073,7 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({
 
                     {/* Image message */}
                     {msgType === ChatMessageType.Image && message.mediaUrl ? (
-                      <TouchableOpacity activeOpacity={0.85} onPress={() => message.mediaUrl && Linking.openURL(message.mediaUrl)}>
+                      <TouchableOpacity activeOpacity={0.85} onPress={() => openChatAttachmentUrl(message.mediaUrl)}>
                         <Image
                           source={{ uri: message.mediaUrl }}
                           style={{ width: 220, height: 160, borderRadius: 12 }}
@@ -1007,28 +1110,71 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({
                         </View>
                       </TouchableOpacity>
                     ) : msgType === ChatMessageType.File && message.mediaUrl ? (
-                      /* File message */
+                      /* File message — compact row (WhatsApp benzeri) */
                       <TouchableOpacity
                         activeOpacity={0.85}
-                        onPress={() => message.mediaUrl && Linking.openURL(message.mediaUrl)}
+                        onPress={() => openChatAttachmentUrl(message.mediaUrl)}
                       >
-                        <View className="flex-row items-center gap-2.5 px-1 py-1" style={{ maxWidth: 220 }}>
+                        <View
+                          className="flex-row items-center gap-2 px-2 py-1.5 rounded-full"
+                          style={{
+                            maxWidth: 216,
+                            backgroundColor: isMe ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.04)",
+                          }}
+                        >
                           <View
-                            className="w-10 h-10 rounded-xl items-center justify-center"
-                            style={{ backgroundColor: isMe ? "rgba(255,255,255,0.2)" : softBrandBg, flexShrink: 0 }}
+                            className="w-9 h-9 rounded-full items-center justify-center"
+                            style={{ backgroundColor: isMe ? "rgba(255,255,255,0.22)" : softBrandBg, flexShrink: 0 }}
                           >
-                            <Icon source="file-document-outline" size={22} color={isMe ? "white" : brandColor} />
+                            <Icon source="file-document-outline" size={20} color={isMe ? "white" : brandColor} />
                           </View>
                           <View style={{ flex: 1, minWidth: 0 }}>
                             <Text
-                              className="text-sm font-century-gothic-sans-medium"
+                              className="text-xs font-century-gothic-sans-medium"
                               style={{ color: isMe ? "white" : colors.sectionHeaderText }}
-                              numberOfLines={2}
+                              numberOfLines={1}
                             >
-                              {message.text}
+                              {message.text || t("chat.file")}
                             </Text>
-                            <Text className="text-[11px] font-century-gothic mt-0.5" style={{ color: isMe ? "rgba(255,255,255,0.65)" : mutedTextColor }}>
+                            <Text className="text-[10px] font-century-gothic mt-0.5" style={{ color: isMe ? "rgba(255,255,255,0.65)" : mutedTextColor }}>
                               {t("chat.tapToOpen")}
+                            </Text>
+                          </View>
+                        </View>
+                      </TouchableOpacity>
+                    ) : msgType === ChatMessageType.Audio && message.mediaUrl ? (
+                      /* Audio message */
+                      <TouchableOpacity
+                        activeOpacity={0.85}
+                        onPress={() => message.mediaUrl && handlePlayAudio(message.messageId, message.mediaUrl)}
+                      >
+                        <View
+                          className="flex-row items-center gap-2 px-2 py-1.5 rounded-full"
+                          style={{
+                            minWidth: 168,
+                            maxWidth: 216,
+                            backgroundColor: isMe ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.04)",
+                          }}
+                        >
+                          <View
+                            className="w-9 h-9 rounded-full items-center justify-center"
+                            style={{ backgroundColor: isMe ? "rgba(255,255,255,0.22)" : softBrandBg, flexShrink: 0 }}
+                          >
+                            <Icon
+                              source={playingAudioId === message.messageId ? "pause-circle-outline" : "play-circle-outline"}
+                              size={24}
+                              color={isMe ? "white" : brandColor}
+                            />
+                          </View>
+                          <View style={{ flex: 1, minWidth: 0 }}>
+                            <Text
+                              className="text-xs font-century-gothic-sans-medium"
+                              style={{ color: isMe ? "white" : colors.sectionHeaderText }}
+                            >
+                              {t("chat.audioMessage")}
+                            </Text>
+                            <Text className="text-[10px] font-century-gothic mt-0.5" style={{ color: isMe ? "rgba(255,255,255,0.65)" : mutedTextColor }}>
+                              {playingAudioId === message.messageId ? t("chat.playing") : t("chat.tapToPlay")}
                             </Text>
                           </View>
                         </View>
@@ -1121,7 +1267,7 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({
             <View className="flex-1 mr-2">
               <Text className="text-xs font-century-gothic-sans-medium" style={{ color: brandColor }}>{t("chat.replyingTo")}</Text>
               <Text className="text-xs font-century-gothic mt-0.5" style={{ color: mutedTextColor }} numberOfLines={2}>
-                {replyingTo.text || (replyingTo.messageType === ChatMessageType.Image ? t("chat.photo") : replyingTo.messageType === ChatMessageType.Location ? t("chat.location") : replyingTo.messageType === ChatMessageType.File ? t("chat.file") : "")}
+                {replyingTo.text || (replyingTo.messageType === ChatMessageType.Image ? t("chat.photo") : replyingTo.messageType === ChatMessageType.Location ? t("chat.location") : replyingTo.messageType === ChatMessageType.File ? t("chat.file") : replyingTo.messageType === ChatMessageType.Audio ? t("chat.audioMessage") : "")}
               </Text>
             </View>
             <TouchableOpacity onPress={() => setReplyingTo(null)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
@@ -1327,62 +1473,64 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({
               style={{
                 position: "absolute",
                 left: 0, right: 0,
-                bottom: insets.bottom + 60,
+                bottom: insets.bottom + 48,
                 alignItems: "center",
-                paddingHorizontal: 24,
+                paddingHorizontal: 20,
                 transform: [
-                  { translateY: contextMenuAnim.interpolate({ inputRange: [0, 1], outputRange: [30, 0] }) },
+                  { translateY: contextMenuAnim.interpolate({ inputRange: [0, 1], outputRange: [24, 0] }) },
                 ],
                 opacity: contextMenuAnim,
               }}
             >
-              {/* Message preview bubble */}
+              {/* Message preview bubble — compact */}
               {contextMenuMessage.text ? (
                 <Animated.View
                   style={{
-                    maxWidth: 280,
-                    borderRadius: 18,
-                    paddingHorizontal: 16,
-                    paddingVertical: 10,
-                    marginBottom: 14,
+                    maxWidth: 240,
+                    borderRadius: 14,
+                    paddingHorizontal: 12,
+                    paddingVertical: 8,
+                    marginBottom: 10,
                     backgroundColor: contextMenuMessage.senderUserId === currentUserId ? bubbleMeBg : bubbleOtherBg,
                     borderWidth: contextMenuMessage.senderUserId === currentUserId ? 0 : 1,
                     borderColor: bubbleOtherBorder,
                     transform: [
-                      { scale: contextMenuAnim.interpolate({ inputRange: [0, 1], outputRange: [0.92, 1] }) },
+                      { scale: contextMenuAnim.interpolate({ inputRange: [0, 1], outputRange: [0.96, 1] }) },
                     ],
                     shadowColor: "#000",
-                    shadowOffset: { width: 0, height: 4 },
-                    shadowOpacity: 0.2,
-                    shadowRadius: 10,
-                    elevation: 6,
+                    shadowOffset: { width: 0, height: 2 },
+                    shadowOpacity: 0.14,
+                    shadowRadius: 6,
+                    elevation: 4,
                   }}
                 >
                   <Text
-                    className="text-sm font-century-gothic"
+                    className="text-xs font-century-gothic leading-[18px]"
                     style={{ color: contextMenuMessage.senderUserId === currentUserId ? "#ffffff" : colors.sectionHeaderText }}
-                    numberOfLines={4}
+                    numberOfLines={3}
                   >
                     {contextMenuMessage.text}
                   </Text>
                 </Animated.View>
               ) : null}
 
-              {/* Action items */}
+              {/* Action items — minimal rows */}
               <Animated.View
                 style={{
                   width: "100%",
-                  maxWidth: 300,
-                  borderRadius: 16,
+                  maxWidth: 248,
+                  borderRadius: 12,
                   overflow: "hidden",
                   backgroundColor: isDark ? "#1e293b" : "#ffffff",
+                  borderWidth: 1,
+                  borderColor: isDark ? "rgba(148,163,184,0.12)" : "rgba(226,232,240,0.95)",
                   shadowColor: "#000",
-                  shadowOffset: { width: 0, height: 10 },
-                  shadowOpacity: isDark ? 0.45 : 0.18,
-                  shadowRadius: 20,
-                  elevation: 14,
+                  shadowOffset: { width: 0, height: 4 },
+                  shadowOpacity: isDark ? 0.35 : 0.12,
+                  shadowRadius: 12,
+                  elevation: 8,
                   transform: [
-                    { scale: contextMenuAnim.interpolate({ inputRange: [0, 1], outputRange: [0.88, 1] }) },
+                    { scale: contextMenuAnim.interpolate({ inputRange: [0, 1], outputRange: [0.94, 1] }) },
                   ],
                 }}
               >
@@ -1393,18 +1541,17 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({
                   style={{
                     flexDirection: "row",
                     alignItems: "center",
-                    paddingHorizontal: 20,
-                    paddingVertical: 14,
+                    paddingHorizontal: 12,
+                    paddingVertical: 9,
                     borderBottomWidth: 0.5,
-                    borderBottomColor: isDark ? "rgba(148,163,184,0.18)" : "rgba(226,232,240,0.9)",
-                    gap: 14,
+                    borderBottomColor: isDark ? "rgba(148,163,184,0.14)" : "rgba(226,232,240,0.85)",
+                    gap: 10,
                   }}
                 >
-                  <View style={{ width: 34, height: 34, borderRadius: 10, backgroundColor: isDark ? "rgba(240,94,35,0.15)" : "rgba(240,94,35,0.1)", alignItems: "center", justifyContent: "center" }}>
-                    <Icon source="reply" size={18} color={brandColor} />
+                  <View style={{ width: 26, height: 26, borderRadius: 8, backgroundColor: isDark ? "rgba(240,94,35,0.14)" : "rgba(240,94,35,0.09)", alignItems: "center", justifyContent: "center" }}>
+                    <Icon source="reply" size={15} color={brandColor} />
                   </View>
-                  <Text className="text-base font-century-gothic-sans-medium" style={{ color: colors.sectionHeaderText, flex: 1 }}>{t("chat.reply")}</Text>
-                  <Icon source="chevron-right" size={18} color={isDark ? "rgba(148,163,184,0.5)" : "rgba(100,116,139,0.5)"} />
+                  <Text className="text-sm font-century-gothic-sans-medium" style={{ color: colors.sectionHeaderText, flex: 1 }}>{t("chat.reply")}</Text>
                 </TouchableOpacity>
 
                 {/* Copy (only for text messages) */}
@@ -1415,18 +1562,17 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({
                     style={{
                       flexDirection: "row",
                       alignItems: "center",
-                      paddingHorizontal: 20,
-                      paddingVertical: 14,
+                      paddingHorizontal: 12,
+                      paddingVertical: 9,
                       borderBottomWidth: 0.5,
-                      borderBottomColor: isDark ? "rgba(148,163,184,0.18)" : "rgba(226,232,240,0.9)",
-                      gap: 14,
+                      borderBottomColor: isDark ? "rgba(148,163,184,0.14)" : "rgba(226,232,240,0.85)",
+                      gap: 10,
                     }}
                   >
-                    <View style={{ width: 34, height: 34, borderRadius: 10, backgroundColor: isDark ? "rgba(99,102,241,0.15)" : "rgba(99,102,241,0.1)", alignItems: "center", justifyContent: "center" }}>
-                      <Icon source="content-copy" size={18} color={isDark ? "#818cf8" : "#6366f1"} />
+                    <View style={{ width: 26, height: 26, borderRadius: 8, backgroundColor: isDark ? "rgba(99,102,241,0.14)" : "rgba(99,102,241,0.08)", alignItems: "center", justifyContent: "center" }}>
+                      <Icon source="content-copy" size={15} color={isDark ? "#818cf8" : "#6366f1"} />
                     </View>
-                    <Text className="text-base font-century-gothic-sans-medium" style={{ color: colors.sectionHeaderText, flex: 1 }}>{t("common.copy")}</Text>
-                    <Icon source="chevron-right" size={18} color={isDark ? "rgba(148,163,184,0.5)" : "rgba(100,116,139,0.5)"} />
+                    <Text className="text-sm font-century-gothic-sans-medium" style={{ color: colors.sectionHeaderText, flex: 1 }}>{t("common.copy")}</Text>
                   </TouchableOpacity>
                 )}
 
@@ -1437,22 +1583,141 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({
                   style={{
                     flexDirection: "row",
                     alignItems: "center",
-                    paddingHorizontal: 20,
-                    paddingVertical: 14,
-                    gap: 14,
+                    paddingHorizontal: 12,
+                    paddingVertical: 9,
+                    gap: 10,
                   }}
                 >
-                  <View style={{ width: 34, height: 34, borderRadius: 10, backgroundColor: "rgba(239,68,68,0.12)", alignItems: "center", justifyContent: "center" }}>
-                    <Icon source="delete-outline" size={18} color="#ef4444" />
+                  <View style={{ width: 26, height: 26, borderRadius: 8, backgroundColor: "rgba(239,68,68,0.1)", alignItems: "center", justifyContent: "center" }}>
+                    <Icon source="delete-outline" size={15} color="#ef4444" />
                   </View>
-                  <Text className="text-base font-century-gothic-sans-medium" style={{ color: "#ef4444", flex: 1 }}>{t("chat.delete")}</Text>
-                  <Icon source="chevron-right" size={18} color="rgba(239,68,68,0.4)" />
+                  <Text className="text-sm font-century-gothic-sans-medium" style={{ color: "#ef4444", flex: 1 }}>{t("chat.delete")}</Text>
                 </TouchableOpacity>
               </Animated.View>
             </Animated.View>
           </Pressable>
         </Modal>
       )}
+
+      {/* Ses kaydı: gönder / metne çevir — dikey kart, taşan buton yok */}
+      {pendingVoiceUri ? (
+        <Modal
+          transparent
+          animationType="fade"
+          statusBarTranslucent
+          onRequestClose={closeVoiceActionSheet}
+        >
+          <Pressable
+            style={{
+              flex: 1,
+              backgroundColor: isDark ? "rgba(0,0,0,0.62)" : "rgba(15,23,42,0.45)",
+              justifyContent: "center",
+              paddingHorizontal: 24,
+              paddingBottom: insets.bottom + 16,
+            }}
+            onPress={closeVoiceActionSheet}
+          >
+            <Pressable
+              onPress={(e) => e.stopPropagation()}
+              style={{
+                alignSelf: "center",
+                width: "100%",
+                maxWidth: 360,
+                borderRadius: 18,
+                paddingTop: 20,
+                paddingHorizontal: 18,
+                paddingBottom: 18,
+                backgroundColor: colors.cardBg,
+                borderWidth: 1,
+                borderColor: isDark ? "rgba(148,163,184,0.2)" : "rgba(226,232,240,0.95)",
+              }}
+            >
+              <View className="items-center mb-3">
+                <View
+                  style={{
+                    width: 48,
+                    height: 48,
+                    borderRadius: 24,
+                    backgroundColor: isDark ? "rgba(240,94,35,0.2)" : "rgba(240,94,35,0.14)",
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  <Icon source="microphone" size={26} color={brandColor} />
+                </View>
+                <Text
+                  className="text-center font-century-gothic-sans-bold mt-3 text-lg"
+                  style={{ color: colors.sectionHeaderText }}
+                >
+                  {t("chat.audioRecordedTitle")}
+                </Text>
+                <Text
+                  className="text-center font-century-gothic text-sm mt-1.5 px-1"
+                  style={{ color: mutedTextColor, lineHeight: 20 }}
+                >
+                  {t("chat.audioRecordedBody")}
+                </Text>
+              </View>
+
+              <Pressable
+                onPress={onVoiceSendAsAudio}
+                style={({ pressed }) => ({
+                  flexDirection: "row",
+                  alignItems: "center",
+                  paddingVertical: 14,
+                  paddingHorizontal: 14,
+                  borderRadius: 14,
+                  marginBottom: 10,
+                  backgroundColor: pressed ? softBrandBg : isDark ? "rgba(240,94,35,0.12)" : "rgba(240,94,35,0.08)",
+                  borderWidth: 1,
+                  borderColor: isDark ? "rgba(240,94,35,0.35)" : "rgba(240,94,35,0.28)",
+                })}
+              >
+                <Icon source="send" size={22} color={brandColor} />
+                <View className="ml-3 flex-1">
+                  <Text className="font-century-gothic-sans-medium text-base" style={{ color: colors.sectionHeaderText }}>
+                    {t("chat.sendAsAudio")}
+                  </Text>
+                  <Text className="font-century-gothic text-xs mt-0.5" style={{ color: mutedTextColor }}>
+                    {t("chat.sendAsAudioHint")}
+                  </Text>
+                </View>
+              </Pressable>
+
+              <Pressable
+                onPress={onVoiceTranscribe}
+                style={({ pressed }) => ({
+                  flexDirection: "row",
+                  alignItems: "center",
+                  paddingVertical: 14,
+                  paddingHorizontal: 14,
+                  borderRadius: 14,
+                  marginBottom: 10,
+                  backgroundColor: pressed ? (isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)") : colors.cardBg2,
+                  borderWidth: 1,
+                  borderColor: colors.borderColor2,
+                })}
+              >
+                <Icon source="text-box-outline" size={22} color={colors.sectionHeaderText} />
+                <View className="ml-3 flex-1">
+                  <Text className="font-century-gothic-sans-medium text-base" style={{ color: colors.sectionHeaderText }}>
+                    {t("chat.transcribeToText")}
+                  </Text>
+                  <Text className="font-century-gothic text-xs mt-0.5" style={{ color: mutedTextColor }}>
+                    {t("chat.transcribeToTextHint")}
+                  </Text>
+                </View>
+              </Pressable>
+
+              <Pressable onPress={closeVoiceActionSheet} style={{ paddingVertical: 12, alignItems: "center" }}>
+                <Text className="font-century-gothic-sans-medium text-base" style={{ color: mutedTextColor }}>
+                  {t("common.cancel")}
+                </Text>
+              </Pressable>
+            </Pressable>
+          </Pressable>
+        </Modal>
+      ) : null}
 
       {/* Participants Bottom Sheet */}
       <BottomSheetModal

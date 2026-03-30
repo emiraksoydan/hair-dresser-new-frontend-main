@@ -83,12 +83,21 @@ export function useAIAssistant(): AIAssistantState {
     if (!recordingRef.current) return;
 
     try {
+      const status = await recordingRef.current.getStatusAsync();
+      const durationMs = (status as any).durationMillis ?? 0;
+
       setPhase("transcribing");
       await recordingRef.current.stopAndUnloadAsync();
       const uri = recordingRef.current.getURI();
       recordingRef.current = null;
 
       if (!uri) throw new Error("recording_failed");
+
+      if (durationMs < 800) {
+        setPhase("error");
+        setErrorMessage("transcription_empty");
+        return;
+      }
 
       // --- Whisper transcription (backend proxy — API key backend'de tutulur) ---
       if (!token) throw new Error("whisper_failed");

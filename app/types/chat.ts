@@ -31,6 +31,7 @@ export enum ChatMessageType {
   Image = 1,
   Location = 2,
   File = 3,
+  Audio = 4,
 }
 
 export type ChatMessageItemDto = {

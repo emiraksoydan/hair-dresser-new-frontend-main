@@ -112,7 +112,8 @@ export const BaseTabLayout: React.FC<BaseTabLayoutProps> = ({
       "(profile)",
     ]);
     const tabIdx = s.findIndex((seg) => tabNames.has(seg));
-    if (tabIdx === -1) return true;
+    // Bilinmeyen veya (screens) gibi sekme dışı yollarda FAB gösterme
+    if (tabIdx === -1) return false;
     const tail = s.slice(tabIdx + 1);
     if (tail.length === 0) return true;
     if (tail.length === 1 && tail[0] === "index") return true;

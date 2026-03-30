@@ -130,7 +130,7 @@ export function PanelImageOverflowMenu({ images, panelCompare, galleryTitle }: P
           ]}
           pointerEvents={menuOpen ? "auto" : "none"}
         >
-          {menuItems.map((row) => (
+          {menuItems.map((row, index) => (
             <Pressable
               key={row.key}
               onPress={() => {
@@ -139,6 +139,7 @@ export function PanelImageOverflowMenu({ images, panelCompare, galleryTitle }: P
               }}
               style={({ pressed }) => [
                 styles.row,
+                index < menuItems.length - 1 && styles.rowSeparator,
                 pressed && {
                   opacity: 0.9,
                   backgroundColor: "rgba(255, 185, 0, 0.14)",
@@ -206,14 +207,18 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   row: {
-    paddingVertical: 9,
-    paddingHorizontal: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+  },
+  rowSeparator: {
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(255, 185, 0, 0.22)",
   },
   rowInner: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "flex-start",
-    gap: 8,
+    gap: 10,
     minWidth: 0,
   },
   rowIconWrap: {

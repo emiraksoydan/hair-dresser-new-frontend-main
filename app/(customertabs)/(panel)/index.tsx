@@ -229,10 +229,11 @@ const Index = () => {
     }
   }, [manualFetchStores, manualFetchFreeBarbers, hasError, locationStatus]);
 
+  const ITEM_ANIM_STRIDE = 280;
   const scrollY = useSharedValue(0);
   const onVerticalScroll = useAnimatedScrollHandler({
     onScroll: (e) => {
-      scrollY.value = e.contentOffset.y;
+      scrollY.value = e.contentOffset.y / 280;
     },
   });
 
@@ -819,8 +820,7 @@ const Index = () => {
               return (
                 <PerplexityListItem
                   scrollPos={scrollY}
-                  itemStart={item._scrollStart}
-                  itemLength={item._scrollLen}
+                  index={item._scrollStart / ITEM_ANIM_STRIDE}
                 >
                   {renderStoreItem({ item: item.data })}
                 </PerplexityListItem>
@@ -916,8 +916,7 @@ const Index = () => {
               return (
                 <PerplexityListItem
                   scrollPos={scrollY}
-                  itemStart={item._scrollStart}
-                  itemLength={item._scrollLen}
+                  index={item._scrollStart / ITEM_ANIM_STRIDE}
                 >
                   {renderFreeBarberItem({ item: item.data })}
                 </PerplexityListItem>

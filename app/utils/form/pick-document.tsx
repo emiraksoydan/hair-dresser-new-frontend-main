@@ -1,7 +1,13 @@
 import * as DocumentPicker from "expo-document-picker";
 import * as ImagePicker from 'expo-image-picker';
+import * as ImageManipulator from 'expo-image-manipulator';
 import { FileObject } from "../../types";
 import { FieldValues, Path, UseFormSetValue } from 'react-hook-form';
+
+/** Galeri yükleri ile aynı; çok büyümeden web/API uyumu için yeterli */
+const JPEG_UPLOAD_QUALITY = 0.8;
+
+const HEIC_MIMES = new Set(['image/heic', 'image/heif']);
 
 /** Dosya uzantısından MIME type türetir */
 const getMimeFromExt = (name: string): string => {
@@ -11,21 +17,50 @@ const getMimeFromExt = (name: string): string => {
   return 'image/jpeg';
 };
 
-/** HEIC/HEIF dosyalarını JPEG olarak yeniden adlandırır (expo-image-picker uri zaten JPEG içerir).
- *  Expo'nun AssetType ("image") değerini geçerli MIME type'a dönüştürür. */
-const normalizeImageFile = (uri: string, fileName: string | null | undefined, type: string | undefined, index?: number): FileObject => {
+function isHeicLike(uri: string, fileName?: string | null, mimeType?: string | null): boolean {
+  const m = mimeType?.toLowerCase() ?? '';
+  if (HEIC_MIMES.has(m)) return true;
+  const u = uri.toLowerCase();
+  if (u.includes('.heic') || u.includes('.heif')) return true;
+  if (fileName && /\.(heic|heif)$/i.test(fileName)) return true;
+  return false;
+}
+
+/** HEIC/HEIF → gerçek JPEG (iOS/Android). PNG/JPEG/WebP dokunulmaz — daha az CPU, yeterli uyumluluk. */
+export async function ensureJpegForUpload(file: FileObject): Promise<FileObject> {
+  if (!isHeicLike(file.uri, file.name, file.type)) return file;
+  try {
+    const out = await ImageManipulator.manipulateAsync(file.uri, [], {
+      compress: JPEG_UPLOAD_QUALITY,
+      format: ImageManipulator.SaveFormat.JPEG,
+    });
+    const base =
+      (file.name ?? 'photo')
+        .replace(/\.(heic|heif)$/i, '')
+        .replace(/\.[^/.]+$/, '') || 'photo';
+    return { uri: out.uri, name: `${base}.jpg`, type: 'image/jpeg' };
+  } catch {
+    return file;
+  }
+}
+
+/** Asset mimeType + dosya adından FileObject; Expo'da `type` alanı 'image' gibi AssetType olabilir — mime için mimeType kullanın. */
+export const normalizeImageFile = (
+  uri: string,
+  fileName: string | null | undefined,
+  mimeType: string | undefined,
+  index?: number,
+): FileObject => {
   const rawName = fileName ?? `photo${index !== undefined ? `_${index}` : ''}.jpg`;
-  const isHeic = /\.(heic|heif)$/i.test(rawName);
-  // Expo ImagePicker type alanı "image" döndürür (AssetType), geçerli MIME değil.
-  // Gerçek MIME type için "/" içermeli (örn. "image/jpeg").
-  const resolvedType = isHeic
-    ? 'image/jpeg'
-    : (type && type.includes('/') ? type : getMimeFromExt(rawName));
-  return {
-    uri,
-    name: isHeic ? rawName.replace(/\.(heic|heif)$/i, '.jpg') : rawName,
-    type: resolvedType,
-  };
+  const extHeic = /\.(heic|heif)$/i.test(rawName);
+  const uriHeic = uri.toLowerCase().includes('.heic') || uri.toLowerCase().includes('.heif');
+  const resolvedType =
+    mimeType && mimeType.includes('/')
+      ? mimeType
+      : extHeic || uriHeic
+        ? 'image/heic'
+        : getMimeFromExt(rawName);
+  return { uri, name: rawName, type: resolvedType };
 };
 
 
@@ -64,11 +99,12 @@ export const handlePickImage = async (): Promise<FileObject | null> => {
     const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: true,
-        quality: 0.8,
+        quality: JPEG_UPLOAD_QUALITY,
     });
     if (!result.canceled) {
         const file = result.assets[0];
-        return normalizeImageFile(file.uri, file.fileName, file.type);
+        const normalized = normalizeImageFile(file.uri, file.fileName, file.mimeType);
+        return ensureJpegForUpload(normalized);
     }
     return null;
 };
@@ -91,13 +127,14 @@ export const handlePickMultipleImages = async (maxImages: number = 3): Promise<F
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsMultipleSelection: true,
         selectionLimit: maxImages,
-        quality: 0.8,
+        quality: JPEG_UPLOAD_QUALITY,
     });
 
     if (!result.canceled && result.assets) {
-        return result.assets.map((file, index) =>
-            normalizeImageFile(file.uri, file.fileName, file.type, index)
+        const normalized = result.assets.map((file, index) =>
+            normalizeImageFile(file.uri, file.fileName, file.mimeType, index),
         );
+        return Promise.all(normalized.map((f) => ensureJpegForUpload(f)));
     }
     return [];
 };
@@ -108,12 +145,13 @@ export const handlePickMultipleImages = async (maxImages: number = 3): Promise<F
 export const handleTakePhoto = async (): Promise<FileObject | null> => {
     const result = await ImagePicker.launchCameraAsync({
         allowsEditing: true,
-        quality: 0.8,
+        quality: JPEG_UPLOAD_QUALITY,
     });
 
     if (!result.canceled && result.assets && result.assets.length > 0) {
         const file = result.assets[0];
-        return normalizeImageFile(file.uri, file.fileName, file.type);
+        const normalized = normalizeImageFile(file.uri, file.fileName, file.mimeType);
+        return ensureJpegForUpload(normalized);
     }
     return null;
 };

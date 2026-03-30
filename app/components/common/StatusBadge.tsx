@@ -94,8 +94,8 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({
   const config = getBadgeConfig();
   const denseList = dense && isList;
   const textSize = compact ? 'text-sm' : denseList ? 'text-xs' : isList ? 'text-sm' : 'text-xs';
-  const iconSize = compact ? 14 : denseList ? 12 : isList ? 14 : 12;
-  const chipPad = compact ? 'px-2.5 py-1' : denseList ? 'px-1.5 py-0.5' : 'px-2 py-0.5';
+  const iconSize = compact ? 14 : denseList ? 12 : isList ? 15 : 12;
+  const chipPad = compact ? 'px-2.5 py-1' : denseList ? 'px-1.5 py-0.5' : isList ? 'px-2.5 py-1' : 'px-2 py-0.5';
 
   /** Sadece compact: dar alan; liste/panel kartlarında metin kısaltılmaz, satır kırılır */
   const limitHeight = compact;

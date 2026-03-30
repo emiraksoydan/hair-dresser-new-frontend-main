@@ -1,7 +1,8 @@
 import { Icon } from "react-native-paper";
 import React from "react";
-import { View, ActivityIndicator, TouchableOpacity, Image, FlatList, RefreshControl } from "react-native";
+import { View, ActivityIndicator, TouchableOpacity, Image, RefreshControl } from "react-native";
 import { Text } from "../../components/common/Text";
+import Animated, { useAnimatedScrollHandler, useSharedValue } from "react-native-reanimated";
 
 import { useGetMyComplaintsQuery, useDeleteComplaintMutation } from "../../store/api";
 import { ComplaintGetDto, UserType } from "../../types";
@@ -13,6 +14,9 @@ import { useTheme } from "../../hook/useTheme";
 import { useActionGuard } from "../../hook/useActionGuard";
 import { useSafeNavigation } from "../../hook/useSafeNavigation";
 import { DEFAULT_AVATAR } from "../../constants/images";
+import { ScrollStackItem } from "../../components/common/ScrollStackItem";
+
+const COMPLAINT_STRIDE = 160;
 
 const ACCENT = "#ffb900";
 const AVATAR = 58;
@@ -29,6 +33,13 @@ export default function ComplaintsPage() {
     const [deleteComplaint, { isLoading: isDeleting }] = useDeleteComplaintMutation();
 
     const safeComplaints = Array.isArray(complaints) ? complaints : [];
+
+    const scrollY = useSharedValue(0);
+    const onScroll = useAnimatedScrollHandler({
+        onScroll: (e) => {
+            scrollY.value = e.contentOffset.y / COMPLAINT_STRIDE;
+        },
+    });
 
     const formatDateTime = (dateStr: string) => {
         try {
@@ -74,12 +85,13 @@ export default function ComplaintsPage() {
         );
     };
 
-    const renderComplaintItem = ({ item }: { item: ComplaintGetDto }) => {
+    const renderComplaintItem = ({ item, index }: { item: ComplaintGetDto; index: number }) => {
         const displayName = item.targetUserName || "Bilinmeyen Kullanıcı";
         const imageUrl = item.targetUserImage;
         const userTypeName = getUserTypeName(item.targetUserType);
 
         return (
+            <ScrollStackItem index={index} scroll={scrollY} vanish>
             <View
                 className="mb-3 overflow-hidden rounded-xl p-4"
                 style={{
@@ -174,6 +186,7 @@ export default function ComplaintsPage() {
                     </Text>
                 </View>
             </View>
+            </ScrollStackItem>
         );
     };
 
@@ -216,10 +229,12 @@ export default function ComplaintsPage() {
                     <ActivityIndicator size="large" color={ACCENT} />
                 </View>
             ) : (
-                <FlatList
+                <Animated.FlatList
                     data={safeComplaints}
                     keyExtractor={(item: ComplaintGetDto) => item.id}
                     renderItem={renderComplaintItem}
+                    onScroll={onScroll}
+                    scrollEventThrottle={16}
                     contentContainerStyle={{ padding: 16, flexGrow: 1 }}
                     showsVerticalScrollIndicator={false}
                     refreshControl={

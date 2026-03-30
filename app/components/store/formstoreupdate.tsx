@@ -70,7 +70,6 @@ import { ChairEditModal } from "./chaireditmodal";
 import { safeCoord } from "../../utils/location/geo";
 import { useAppDispatch } from "../../store/hook";
 import { showSnack } from "../../store/snackbarSlice";
-import { ChairItem } from "./ChairItem";
 import { WorkingHoursAccordion } from "./WorkingHoursAccordion";
 import { ManuelBarberItem } from "./ManuelBarberItem";
 import { useOptimizedChairOptions } from "../../hooks/useOptimizedFieldArray";
@@ -525,6 +524,8 @@ const FormStoreUpdate = React.memo(({
   const [completedSteps, setCompletedSteps] = React.useState<Set<number>>(new Set());
   const stepSlideAnim = React.useRef(new Animated.Value(0)).current;
   const prevStepRef = React.useRef(0);
+  /** Her `data` ile reset sonrası hiyerarşi effect'inin tekrar çalışması için (aksi halde ref true kalıp başlıklar boş kalıyordu). */
+  const initialDataLoadedRef = React.useRef(false);
 
   const stepLabels = React.useMemo(() => [
     t("form.stepStoreInfo"),
@@ -722,6 +723,7 @@ const FormStoreUpdate = React.memo(({
 
   useEffect(() => {
     if (!data) return;
+    initialDataLoadedRef.current = false;
     const imageListData = data.imageList ?? [];
     const initialImages = imageListData.map((img: any) => ({
       id: img.id, // Mevcut resimlerin ID'sini tut
@@ -921,7 +923,6 @@ const FormStoreUpdate = React.memo(({
   });
 
   // Data yüklendiğinde mevcut hizmetlerden geriye doğru ana başlık ve alt başlık bul
-  const initialDataLoadedRef = useRef(false);
   React.useEffect(() => {
     if (!data || isCategoryLoading) return;
     if (parentCategories.length === 0) return;
@@ -1379,7 +1380,7 @@ const FormStoreUpdate = React.memo(({
         formData.append("ownerType", String(ImageOwnerType.User));
         formData.append("ownerId", userId);
 
-        const uploadRes = await uploadImage({ data: formData });
+        const uploadRes = await uploadImage({ data: formData, isProfileImage: false });
         if ("error" in uploadRes) {
           dispatch(
             showSnack({
@@ -2130,6 +2131,18 @@ const FormStoreUpdate = React.memo(({
                 )}
                 {currentStep === 5 && (
                   <>
+                    <View
+                      className="mx-2 mt-2 mb-3 rounded-xl px-3 py-3"
+                      style={{
+                        backgroundColor: isDark ? "rgba(194, 165, 35, 0.12)" : "rgba(194, 165, 35, 0.08)",
+                        borderWidth: 1,
+                        borderColor: isDark ? "rgba(194, 165, 35, 0.28)" : "rgba(194, 165, 35, 0.35)",
+                      }}
+                    >
+                      <Text style={{ fontFamily: "CenturyGothic", fontSize: 14, lineHeight: 21, color: colors.sectionHeaderText }}>
+                        {t("form.staffStepIntro")}
+                      </Text>
+                    </View>
                     <View className="mt-2 mx-0 flex-row items-center px-2">
                       <Text className="text-xl flex-1" style={{ color: colors.sectionHeaderText }}>
                         {t("form.workingBarbersCount")} : {barberFields.length}{" "}
@@ -2143,69 +2156,90 @@ const FormStoreUpdate = React.memo(({
                       </Button>
                     </View>
                     {barberFields.length > 0 && (
-                      <View
-                        className="rounded-xl mx-2 px-3 pt-3 pb-2"
-                        style={{
-                          backgroundColor: colors.cardBg,
-                          borderWidth: 1,
-                          borderColor: colors.borderColor,
-                        }}
-                      >
+                      <View className="mx-2 mt-1">
+                        <Text
+                          style={{
+                            fontFamily: "CenturyGothic",
+                            fontSize: 12,
+                            lineHeight: 17,
+                            color: colors.textSecondary,
+                            marginBottom: 10,
+                          }}
+                        >
+                          {t("form.staffListManageHint")}
+                        </Text>
                         {barberFields.map((item, index) => (
                           <View
                             key={item._key}
-                            className="flex-row items-center mb-3 gap-3"
+                            style={{
+                              marginBottom: 12,
+                              padding: 14,
+                              borderRadius: 14,
+                              borderWidth: 1,
+                              borderColor: colors.borderColor,
+                              backgroundColor: colors.cardBg,
+                            }}
                           >
-                            {barbers[index]?.avatar?.uri ? (
-                              <Avatar.Image
-                                size={40}
-                                source={{ uri: barbers[index]?.avatar?.uri }}
-                              />
-                            ) : (
-                              <Avatar.Icon size={40} icon="account-circle" />
-                            )}
-
-                            <Controller
-                              control={control}
-                              name={`barbers.${index}.name`}
-                              render={({ field: { value } }) => (
-                                <TextInput
-                                  label={t("form.barberName")}
-                                  mode="outlined"
-                                  dense
-                                  value={value ?? ""}
-                                  readOnly
-                                  textColor={colors.sectionHeaderText}
-                                  outlineColor={colors.borderColor2}
-                                  theme={{
-                                    roundness: 10,
-                                    colors: {
-                                      onSurfaceVariant: colors.textSecondary,
-                                      primary: colors.sectionHeaderText,
-                                    },
-                                  }}
-                                  style={{
-                                    backgroundColor: colors.cardBg,
-                                    borderWidth: 0,
-                                    flex: 1,
-                                  }}
+                            <View className="flex-row items-center">
+                              {barbers[index]?.avatar?.uri ? (
+                                <Avatar.Image
+                                  size={44}
+                                  source={{ uri: barbers[index]?.avatar?.uri }}
                                 />
+                              ) : (
+                                <Avatar.Icon size={44} icon="account-circle" />
                               )}
-                            />
-                            <TouchableOpacity
-                              onPress={() => openEditBarberModal(index)}
+                              <Text
+                                className="flex-1 ml-3"
+                                style={{
+                                  fontFamily: "CenturyGothic-Bold",
+                                  fontSize: 16,
+                                  color: colors.sectionHeaderText,
+                                }}
+                              >
+                                {t("form.barberNumberLabel", { n: index + 1 })}
+                              </Text>
+                              <TouchableOpacity
+                                onPress={() => openEditBarberModal(index)}
+                                className="p-2"
+                                accessibilityRole="button"
+                                accessibilityLabel={t("common.edit")}
+                              >
+                                <Icon size={22} source="pencil" color="#c2a523" />
+                              </TouchableOpacity>
+                              <TouchableOpacity
+                                onPress={() => handleDeleteBarber(index)}
+                                className="p-2"
+                                accessibilityRole="button"
+                                accessibilityLabel={t("common.delete")}
+                              >
+                                <Icon size={22} source="delete-outline" color="#ef4444" />
+                              </TouchableOpacity>
+                            </View>
+                            <Text
+                              style={{
+                                fontSize: 12,
+                                fontFamily: "CenturyGothic",
+                                color: colors.textSecondary,
+                                marginTop: 12,
+                                marginBottom: 4,
+                              }}
                             >
-                              <Icon size={22} source="update" color="#c2a523" />
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                              onPress={() => handleDeleteBarber(index)}
+                              {t("form.barberName")}
+                            </Text>
+                            <Text
+                              style={{
+                                fontSize: 15,
+                                fontFamily: "CenturyGothic",
+                                color: colors.sectionHeaderText,
+                              }}
                             >
-                              <Icon size={22} source="delete" color="#ef4444" />
-                            </TouchableOpacity>
+                              {(barbers[index]?.name ?? "").trim() || "—"}
+                            </Text>
                           </View>
                         ))}
                         {!!barberErrorText && (
-                          <HelperText type="error" visible style={{ fontFamily: 'CenturyGothic' }}>
+                          <HelperText type="error" visible style={{ fontFamily: "CenturyGothic" }}>
                             {barberErrorText}
                           </HelperText>
                         )}
@@ -2246,37 +2280,64 @@ const FormStoreUpdate = React.memo(({
                           return (
                             <View
                               key={`chair-${item.id || index}-${barberName}`}
-                              className="flex-row items-center gap-3 mt-1 mb-2"
+                              style={{
+                                marginBottom: 12,
+                                padding: 14,
+                                borderRadius: 14,
+                                borderWidth: 1,
+                                borderColor: colors.borderColor,
+                                backgroundColor: colors.cardBg,
+                              }}
                             >
-                              <Icon
-                                size={24}
-                                source={"chair-rolling"}
-                                color="#c2a523"
-                              ></Icon>
-                              <View className="flex-1 rounded-xl items-center py-3 mt-[-5px] justify-center" style={{ backgroundColor: colors.cardBg, borderWidth: 1, borderColor: colors.borderColor2 }}>
-                                <Text className="text-gray-500 text-xs mb-1">
-                                  {modeLabel}
+                              <View className="flex-row items-center mb-2">
+                                <View
+                                  style={{
+                                    width: 36,
+                                    height: 36,
+                                    borderRadius: 10,
+                                    backgroundColor: isDark ? "rgba(194, 165, 35, 0.12)" : "rgba(194, 165, 35, 0.08)",
+                                    alignItems: "center",
+                                    justifyContent: "center",
+                                  }}
+                                >
+                                  <Icon size={22} source="chair-rolling" color="#c2a523" />
+                                </View>
+                                <Text
+                                  className="flex-1 ml-2"
+                                  style={{
+                                    fontFamily: "CenturyGothic-Bold",
+                                    fontSize: 16,
+                                    color: colors.sectionHeaderText,
+                                  }}
+                                >
+                                  {t("form.chairNumberLabel", { n: index + 1 })}
                                 </Text>
+                                <TouchableOpacity onPress={() => openEditChairModal(index)} className="p-2">
+                                  <Icon size={22} source="pencil" color="#c2a523" />
+                                </TouchableOpacity>
+                                <TouchableOpacity onPress={() => handleChair(index)} className="p-2">
+                                  <Icon size={22} source="delete-outline" color="#ef4444" />
+                                </TouchableOpacity>
                               </View>
-                              <View className="flex-1 items-center rounded-xl  py-3 mt-[-5px] justify-center" style={{ backgroundColor: colors.cardBg, borderWidth: 1, borderColor: colors.borderColor2 }}>
-                                {!isBarberChair ? (
-                                  <Text className="text-xs mb-1" style={{ color: colors.sectionHeaderText }}>
-                                    {chair.name}
-                                  </Text>
-                                ) : (
-                                  <Text className="text-xs mb-1" style={{ color: colors.sectionHeaderText }}>
-                                    {barberName}
-                                  </Text>
-                                )}
-                              </View>
-                              <TouchableOpacity
-                                onPress={() => openEditChairModal(index)}
+                              <Text
+                                style={{
+                                  fontSize: 12,
+                                  fontFamily: "CenturyGothic",
+                                  color: colors.textSecondary,
+                                  marginBottom: 4,
+                                }}
                               >
-                                <Icon size={22} source="update" color="#c2a523" />
-                              </TouchableOpacity>
-                              <TouchableOpacity onPress={() => handleChair(index)}>
-                                <Icon size={22} source="delete" color="#ef4444" />
-                              </TouchableOpacity>
+                                {modeLabel}
+                              </Text>
+                              <Text
+                                style={{
+                                  fontSize: 15,
+                                  fontFamily: "CenturyGothic",
+                                  color: colors.sectionHeaderText,
+                                }}
+                              >
+                                {!isBarberChair ? chair.name ?? "—" : barberName}
+                              </Text>
                             </View>
                           );
                         })}

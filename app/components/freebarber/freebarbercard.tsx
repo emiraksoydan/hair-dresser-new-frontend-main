@@ -175,8 +175,8 @@ const FreeBarberCard: React.FC<Props> = ({
         {!isList && (
           <View className="flex-row justify-end items-center gap-1 px-2 pb-2">
             {hasBeautySalonCertificate && (
-              <View className={`bg-purple-600/90 rounded-full ${compactMeta ? "px-1.5 py-0.5" : "px-2 py-0.5"}`}>
-                <Text className={`text-white font-century-gothic-sans-semibold ${compactMeta ? "text-[10px]" : "text-xs"}`}>
+              <View className="bg-purple-600/90 rounded-full px-2 py-0.5">
+                <Text className="text-white font-century-gothic-sans-semibold text-xs">
                   {t("card.beautyExpert")}
                 </Text>
               </View>
@@ -221,8 +221,8 @@ const FreeBarberCard: React.FC<Props> = ({
                 pointerEvents="box-none"
               >
                 {hasBeautySalonCertificate && (
-                  <View className={`bg-purple-600/90 rounded-full self-start max-w-full ${compactMeta ? "px-2 py-0.5" : "px-2.5 py-1"}`}>
-                    <Text className={`text-white font-century-gothic-sans-semibold ${compactMeta ? "text-xs" : "text-sm"}`}>
+                  <View className="bg-purple-600/90 rounded-full self-start max-w-full px-2.5 py-1">
+                    <Text className="text-white font-century-gothic-sans-semibold text-sm">
                       {t("card.beautyExpert")}
                     </Text>
                   </View>
@@ -247,9 +247,9 @@ const FreeBarberCard: React.FC<Props> = ({
                   <TouchableOpacity
                     onPress={handleCallFreeBarber}
                     disabled={isCalling}
-                    className={`bg-[#ffb900] flex-row items-center rounded-full ${compactMeta ? "px-2 py-0.5" : "px-2.5 py-1"}`}
+                    className="bg-[#ffb900] flex-row items-center rounded-full px-2.5 py-1"
                   >
-                    <Text className={`text-white font-century-gothic-sans-semibold ${compactMeta ? "text-xs" : "text-sm"}`}>
+                    <Text className="text-white font-century-gothic-sans-semibold text-sm">
                       {isCalling ? t("card.calling") : t("card.callBarber")}
                     </Text>
                   </TouchableOpacity>

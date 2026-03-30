@@ -6,6 +6,7 @@ import {
   Dimensions,
   Platform,
   ScrollView,
+  StatusBar,
   StyleSheet,
   Switch,
   TouchableOpacity,
@@ -29,6 +30,7 @@ import { BarChart, LineChart, PieChart } from "react-native-chart-kit";
 import { MultiSelect } from "react-native-element-dropdown";
 import { Text } from "../../components/common/Text";
 import { useTheme } from "../../hook/useTheme";
+import { getProfileNativeSwitchProps } from "../../constants/colors";
 import { useLanguage } from "../../hook/useLanguage";
 import { useSafeNavigation } from "../../hook/useSafeNavigation";
 import { useBottomSheet } from "../../hook/useBottomSheet";
@@ -51,11 +53,11 @@ import { AnimatedMoneyText } from "../../components/common/AnimatedMoneyText";
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const CURRENCY = "₺";
 
-/** Kazanç kartları yatay liste: Movie slider ile aynı stride (kart + aralık) */
-const EARNINGS_SLIDE_WIDTH = Math.round(SCREEN_WIDTH * 0.78);
-const EARNINGS_CAROUSEL_GAP = 10;
+/** Kazanç kartları yatay liste: ortadaki kart tam, yanlar hafif görünür */
+const EARNINGS_SLIDE_WIDTH = Math.round(SCREEN_WIDTH * 0.74);
+const EARNINGS_CAROUSEL_GAP = 14;
 const EARNINGS_ITEM_STRIDE = EARNINGS_SLIDE_WIDTH + EARNINGS_CAROUSEL_GAP;
-const EARNINGS_CARD_HEIGHT = 152;
+const EARNINGS_CARD_HEIGHT = 182;
 
 type ShopInsightsEarningsCardModel = {
   label: string;
@@ -209,8 +211,8 @@ const EarningsCard = ({
   /** Carousel: alt metin + Lottie için merkez odaklı opacity */
   detailAnimatedStyle?: AnimatedStyle<ViewStyle>;
 }) => {
-  const cardBg = isDark ? "rgba(20,26,46,0.92)" : "rgba(255,255,255,0.95)";
-  const accentBg = `${accentColor}22`;
+  const cardBg = isDark ? "rgba(15,23,42,0.96)" : `${accentColor}12`;
+  const accentBg = `${accentColor}28`;
   const suffix = valueSuffix ?? CURRENCY;
   const subTextStyle = {
     color: isDark ? "rgba(255,255,255,0.45)" : "rgba(30,41,59,0.45)",
@@ -224,11 +226,12 @@ const EarningsCard = ({
       style={{
         flex: 1,
         minWidth: 0,
-        borderRadius: 20,
-        padding: 16,
+        borderRadius: 22,
+        paddingVertical: 18,
+        paddingHorizontal: 18,
         backgroundColor: cardBg,
         borderWidth: 1,
-        borderColor: `${accentColor}45`,
+        borderColor: `${accentColor}40`,
         overflow: "hidden",
         ...(Platform.OS === "ios"
           ? { shadowColor: accentColor, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.28, shadowRadius: 14 }
@@ -250,27 +253,27 @@ const EarningsCard = ({
       <View style={{ flexDirection: "row", alignItems: "flex-start" }}>
         <View style={{ flex: 1, minWidth: 0, paddingRight: showLottie && lottieSource != null ? 6 : 0 }}>
           {/* Icon + label */}
-          <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 10, gap: 8 }}>
+          <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 12, gap: 10 }}>
             <View
               style={{
-                width: 32,
-                height: 32,
-                borderRadius: 10,
+                width: 38,
+                height: 38,
+                borderRadius: 12,
                 backgroundColor: accentBg,
                 alignItems: "center",
                 justifyContent: "center",
                 flexShrink: 0,
               }}
             >
-              <Icon source={icon} size={18} color={accentColor} />
+              <Icon source={icon} size={22} color={accentColor} />
             </View>
             <Text
               style={{
-                color: isDark ? "rgba(255,255,255,0.75)" : "rgba(30,41,59,0.75)",
+                color: isDark ? "rgba(255,255,255,0.82)" : "rgba(30,41,59,0.82)",
                 fontFamily: "CenturyGothic-Bold",
-                fontSize: 11,
+                fontSize: 13,
                 flex: 1,
-                lineHeight: 15,
+                lineHeight: 18,
               }}
               numberOfLines={2}
             >
@@ -284,7 +287,7 @@ const EarningsCard = ({
               style={{
                 color: accentColor,
                 fontFamily: "CenturyGothic-Bold",
-                fontSize: 22,
+                fontSize: 26,
               }}
               numberOfLines={1}
               adjustsFontSizeToFit
@@ -299,7 +302,7 @@ const EarningsCard = ({
               style={{
                 color: accentColor,
                 fontFamily: "CenturyGothic-Bold",
-                fontSize: 22,
+                fontSize: 26,
               }}
               enabled={animateNumbers}
             />
@@ -308,7 +311,7 @@ const EarningsCard = ({
               style={{
                 color: accentColor,
                 fontFamily: "CenturyGothic-Bold",
-                fontSize: 22,
+                fontSize: 26,
               }}
               numberOfLines={1}
               adjustsFontSizeToFit
@@ -339,7 +342,7 @@ const EarningsCard = ({
                 source={lottieSource as any}
                 autoPlay
                 loop
-                style={{ width: 48, height: 48, flexShrink: 0, marginLeft: 4 }}
+                style={{ width: 62, height: 62, flexShrink: 0, marginLeft: 4 }}
               />
             </Animated.View>
           ) : (
@@ -456,8 +459,7 @@ function ShopInsightsEarningsCarousel({
       onScroll={onScroll}
       scrollEventThrottle={16}
       contentContainerStyle={{
-        paddingLeft: 16,
-        paddingRight: SCREEN_WIDTH - EARNINGS_ITEM_STRIDE,
+        paddingHorizontal: Math.round((SCREEN_WIDTH - EARNINGS_SLIDE_WIDTH) / 2),
       }}
       renderItem={({ item, index }) => (
         <EarningsCarouselSlide
@@ -827,6 +829,7 @@ export default function ShopInsightsPage() {
       style={{ flex: 1, backgroundColor: isDark ? "#0f0f1a" : "#f1f5f9" }}
       edges={["top"]}
     >
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={isDark ? "#0f0f1a" : "#ffffff"} />
       <View
         style={{
           flexDirection: "row",
@@ -889,7 +892,7 @@ export default function ShopInsightsPage() {
       </View>
 
       <ScrollView
-        contentContainerStyle={{ paddingBottom: 60 }}
+        contentContainerStyle={{ paddingBottom: 72 }}
         showsVerticalScrollIndicator={false}
         stickyHeaderIndices={[0]}
       >
@@ -1041,7 +1044,7 @@ export default function ShopInsightsPage() {
           )}
         </View>
 
-        <View style={{ paddingTop: 8, paddingBottom: 2 }}>
+        <View style={{ paddingTop: 8, paddingBottom: 6 }}>
           {loadingStore && (
             <View style={{ alignItems: "center", marginBottom: 12 }}>
               <ActivityIndicator color="#ffb900" />
@@ -1141,8 +1144,7 @@ export default function ShopInsightsPage() {
               <Switch
                 value={showChart}
                 onValueChange={setShowChart}
-                trackColor={{ false: isDark ? "#333" : "#d1d5db", true: "#0d9488" }}
-                thumbColor={showChart ? "#ffffff" : "#9ca3af"}
+                {...getProfileNativeSwitchProps(isDark, showChart)}
               />
             </View>
           </View>

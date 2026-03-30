@@ -29,6 +29,7 @@ import { DEFAULT_AVATAR } from '../../constants/images';
 import { useSafeNavigation } from '../../hook/useSafeNavigation';
 import { useActionGuard } from '../../hook/useActionGuard';
 import { getTabFabScrollPadding } from '../../components/layout/panelBottomOverlays';
+import { getProfilePaperSwitchProps } from '../../constants/colors';
 
 const createProfileSchema = (t: (key: string) => string) => z.object({
     firstName: z.string({ required_error: t('auth.firstName') + ' ' + t('common.required') })
@@ -189,7 +190,7 @@ const Index = () => {
             dispatch(showSnack({ message: t('profile.phoneFormat'), isError: true }));
             return;
         }
-        const result = await sendPhoneChangeOtp({ newPhone: newPhoneInput });
+        const result = await sendPhoneChangeOtp({ newPhone: newPhoneInput, language: currentLanguage });
         if ('error' in result) {
             dispatch(showSnack({ message: (result.error as any)?.data?.message || t('profile.updateFailed'), isError: true }));
             return;
@@ -200,7 +201,7 @@ const Index = () => {
         } else {
             dispatch(showSnack({ message: result.data?.message || t('profile.updateFailed'), isError: true }));
         }
-    }, [newPhoneInput, sendPhoneChangeOtp, dispatch, t]);
+    }, [newPhoneInput, sendPhoneChangeOtp, dispatch, t, currentLanguage]);
 
     const handleVerifyPhoneOtp = useCallback(async () => {
         const result = await updatePhone({ newPhone: newPhoneInput, otpCode });
@@ -625,6 +626,7 @@ const Index = () => {
                                 }
                             }}
                             disabled={isUpdatingSetting || isLoadingSetting}
+                            {...getProfilePaperSwitchProps(isDark)}
                         />
                     </View>
                     <View className='flex-row items-center justify-between mt-4'>
@@ -652,6 +654,7 @@ const Index = () => {
                                 }
                             }}
                             disabled={isUpdatingSetting || isLoadingSetting}
+                            {...getProfilePaperSwitchProps(isDark)}
                         />
                     </View>
                     <View className='flex-row items-center justify-between mt-4'>
@@ -669,7 +672,7 @@ const Index = () => {
                         <Switch
                             value={themeMode === 'dark'}
                             onValueChange={toggleTheme}
-                            color='#60a5fa'
+                            {...getProfilePaperSwitchProps(isDark)}
                         />
                     </View>
                 </View>

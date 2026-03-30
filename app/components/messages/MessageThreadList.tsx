@@ -39,7 +39,7 @@ export const MessageThreadList: React.FC<MessageThreadListProps> = ({ routePrefi
     const scrollY = useSharedValue(0);
     const onThreadScroll = useAnimatedScrollHandler({
         onScroll: (e) => {
-            scrollY.value = e.contentOffset.y;
+            scrollY.value = e.contentOffset.y / THREAD_ROW_STRIDE;
         },
     });
     const { data: threads, isLoading, refetch, isFetching, error, isError } = useGetChatThreadsQuery();
@@ -209,7 +209,7 @@ export const MessageThreadList: React.FC<MessageThreadListProps> = ({ routePrefi
         };
 
         return (
-            <ScrollStackItem index={index} scroll={scrollY} itemStride={THREAD_ROW_STRIDE} vanish>
+            <ScrollStackItem index={index} scroll={scrollY} vanish>
             <TouchableOpacity
                 onPress={handlePress}
                 className={`rounded-2xl mb-3 ${hasUnread ? "pt-3 px-4 pb-4" : "pt-2 p-4"}`}

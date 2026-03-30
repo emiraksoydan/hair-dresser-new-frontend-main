@@ -68,11 +68,14 @@ export default function SharedAppointmentScreen() {
   // Scroll-linked header animation (Reanimated)
   // LegendList onScroll gerçek bir JS fonksiyonu bekler; useAnimatedScrollHandler worklet nesnesi verir → "Object is not a function"
   const listScrollY = useSharedValue(0);
+  const listScrollYNorm = useSharedValue(0);
   const onListScroll = useCallback(
     (e: NativeSyntheticEvent<NativeScrollEvent>) => {
-      listScrollY.value = e.nativeEvent.contentOffset.y;
+      const y = e.nativeEvent.contentOffset.y;
+      listScrollY.value = y;
+      listScrollYNorm.value = y / APPT_ROW_DEFAULT_STRIDE;
     },
-    [listScrollY],
+    [listScrollY, listScrollYNorm],
   );
   const filterBarAnimStyle = useAnimatedStyle(() => {
     const opacity = interpolate(listScrollY.value, [0, 30], [0, isDark ? 0.35 : 0.1], Extrapolation.CLAMP);
@@ -955,14 +958,11 @@ export default function SharedAppointmentScreen() {
     const itemStart =
       appointmentListScrollLayout.starts[index] ??
       APPT_LIST_PAD + index * APPT_ROW_DEFAULT_STRIDE;
-    const itemLength =
-      appointmentListScrollLayout.lengths[index] ?? APPT_ROW_DEFAULT_STRIDE;
 
     return (
     <PerplexityListItem
-      scrollPos={listScrollY}
-      itemStart={itemStart}
-      itemLength={itemLength}
+      scrollPos={listScrollYNorm}
+      index={itemStart / APPT_ROW_DEFAULT_STRIDE}
     >
       <View
         onLayout={(e: LayoutChangeEvent) => {
@@ -2244,17 +2244,20 @@ export default function SharedAppointmentScreen() {
                       closeCardMenu();
                       handleComplaintOrBlockAction(openCardMenuAppointment, "complaint");
                     }}
-                    className="flex-row items-center px-4 py-2.5"
                     style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      paddingHorizontal: 14,
+                      paddingVertical: 10,
                       borderBottomWidth: 1,
                       borderBottomColor: isDark ? colors.borderColor : "rgba(255, 185, 0, 0.22)",
                     }}
                     activeOpacity={0.7}
                   >
-                    <View style={{ marginRight: 10 }}>
-                      <Icon source="alert-circle-outline" size={18} color="#f59e0b" />
+                    <View style={{ width: 30, height: 30, borderRadius: 9, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(245, 158, 11, 0.14)", marginRight: 10, flexShrink: 0 }}>
+                      <Icon source="alert-circle-outline" size={18} color="#d97706" />
                     </View>
-                    <Text className="text-sm font-century-gothic-sans-medium flex-1" style={{ color: colors.sectionHeaderText }} numberOfLines={2}>
+                    <Text style={{ flex: 1, fontSize: 12.5, fontFamily: "CenturyGothic-Bold", color: "#b45309" }} numberOfLines={2}>
                       {t("complaint.title")}
                     </Text>
                   </TouchableOpacity>
@@ -2264,21 +2267,25 @@ export default function SharedAppointmentScreen() {
                       handleComplaintOrBlockAction(openCardMenuAppointment, "block");
                     }}
                     disabled={isBlockingUser}
-                    className={`flex-row items-center px-4 py-2.5 ${isBlockingUser ? "opacity-60" : ""}`}
                     style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      paddingHorizontal: 14,
+                      paddingVertical: 10,
+                      opacity: isBlockingUser ? 0.6 : 1,
                       borderBottomWidth: cardMenuFlags.showDelete ? 1 : 0,
                       borderBottomColor: isDark ? colors.borderColor : "rgba(255, 185, 0, 0.22)",
                     }}
                     activeOpacity={0.7}
                   >
-                    <View style={{ marginRight: 10, width: 18, alignItems: "center" }}>
+                    <View style={{ width: 30, height: 30, borderRadius: 9, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(156, 163, 175, 0.14)", marginRight: 10, flexShrink: 0 }}>
                       {isBlockingUser ? (
                         <ActivityIndicator size="small" color="#9ca3af" />
                       ) : (
                         <Icon source="block-helper" size={18} color="#9ca3af" />
                       )}
                     </View>
-                    <Text className="text-sm font-century-gothic-sans-medium flex-1" style={{ color: colors.sectionHeaderText }} numberOfLines={2}>
+                    <Text style={{ flex: 1, fontSize: 12.5, fontFamily: "CenturyGothic-Bold", color: "#b45309" }} numberOfLines={2}>
                       {t("block.submit")}
                     </Text>
                   </TouchableOpacity>
@@ -2291,17 +2298,23 @@ export default function SharedAppointmentScreen() {
                     handleDelete(openCardMenuAppointment.id);
                   }}
                   disabled={isDeletingAppointment}
-                  className={`flex-row items-center px-4 py-2.5 ${isDeletingAppointment ? "opacity-60" : ""}`}
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    paddingHorizontal: 14,
+                    paddingVertical: 10,
+                    opacity: isDeletingAppointment ? 0.6 : 1,
+                  }}
                   activeOpacity={0.7}
                 >
-                  <View style={{ marginRight: 10, width: 18, alignItems: "center" }}>
+                  <View style={{ width: 30, height: 30, borderRadius: 9, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(239, 68, 68, 0.12)", marginRight: 10, flexShrink: 0 }}>
                     {isDeletingAppointment ? (
                       <ActivityIndicator size="small" color="#ef4444" />
                     ) : (
                       <Icon source="delete-outline" size={18} color="#ef4444" />
                     )}
                   </View>
-                  <Text className="text-sm font-century-gothic-sans-medium flex-1" style={{ color: "#ef4444" }} numberOfLines={2}>
+                  <Text style={{ flex: 1, fontSize: 12.5, fontFamily: "CenturyGothic-Bold", color: "#ef4444" }} numberOfLines={2}>
                     {t("appointment.actions.delete")}
                   </Text>
                 </TouchableOpacity>
