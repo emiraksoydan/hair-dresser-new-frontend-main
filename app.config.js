@@ -20,6 +20,7 @@ module.exports = {
      * Google Play'de tableti tamamen dışlamak: Play Console → Üretim → Cihaz kataloğu / form faktörü (telefon seç, tablet hariç tut).
      * Değişiklikten sonra: npx expo prebuild --clean veya EAS yeni native build.
      */
+    owner: "emir.aksoydan",
     scheme: "hairdresser",
     name: "Gümüş Makas",
     slug: "HairDresser",
@@ -27,7 +28,7 @@ module.exports = {
     orientation: "portrait",
     icon: "./assets/adaptive-icon.png",
     userInterfaceStyle: "automatic",
-    newArchEnabled: false,
+    newArchEnabled: true,
     // Görsel marka intro’su tamamen React (BrandIntro). Native: sadece düz renk.
     splash: {
       backgroundColor: "#ffffff",
@@ -83,5 +84,10 @@ module.exports = {
       "./assets/fonts/centurygothic.ttf",
       "./assets/fonts/centurygothic_bold.ttf",
     ],
+    extra: {
+      eas: {
+        projectId: "52f29e16-47ea-4f30-8271-0c88e10aa1b3",
+      },
+    },
   },
 };
