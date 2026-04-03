@@ -69,6 +69,7 @@ module.exports = {
     plugins: [
       "expo-router",
       "./plugins/withNotificationChannel",
+      "./plugins/withGradleProperties",
       [
         "expo-location",
         {
