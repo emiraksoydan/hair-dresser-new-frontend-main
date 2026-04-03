@@ -9,7 +9,12 @@ const { withAndroidManifest } = require('@expo/config-plugins');
 
 const withNotificationChannel = (config) => {
   return withAndroidManifest(config, (mod) => {
-    const application = mod.modResults.manifest.application[0];
+    // tools namespace ekle (tools:replace için gerekli)
+    const manifest = mod.modResults.manifest;
+    if (!manifest.$) manifest.$ = {};
+    manifest.$['xmlns:tools'] = 'http://schemas.android.com/tools';
+
+    const application = manifest.application[0];
 
     if (!application['meta-data']) {
       application['meta-data'] = [];
@@ -26,6 +31,7 @@ const withNotificationChannel = (config) => {
         $: {
           'android:name': META_NAME,
           'android:value': 'fcm_fallback_notification_channel',
+          'tools:replace': 'android:value',
         },
       });
     }
