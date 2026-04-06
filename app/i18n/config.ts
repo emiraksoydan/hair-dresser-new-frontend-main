@@ -7,6 +7,22 @@ import tr from './locales/tr.json';
 import en from './locales/en.json';
 import ar from './locales/ar.json';
 import de from './locales/de.json';
+import hgEn from './locales/hg/en.entries.json';
+import hgAr from './locales/hg/ar.entries.json';
+import hgDe from './locales/hg/de.entries.json';
+
+type LocaleRoot = Record<string, unknown>;
+
+function mergeHelpGuideEntries(base: LocaleRoot, entries: Record<string, { title: string; description: string }>): LocaleRoot {
+  const hg = (base.helpGuide as Record<string, unknown> | undefined) ?? {};
+  return {
+    ...base,
+    helpGuide: {
+      ...hg,
+      entries,
+    },
+  };
+}
 
 const LANGUAGE_STORAGE_KEY = '@app_language';
 
@@ -47,9 +63,9 @@ i18n
     compatibilityJSON: 'v4',
     resources: {
       tr: { translation: tr },
-      en: { translation: en },
-      ar: { translation: ar },
-      de: { translation: de },
+      en: { translation: mergeHelpGuideEntries(en as LocaleRoot, hgEn) },
+      ar: { translation: mergeHelpGuideEntries(ar as LocaleRoot, hgAr) },
+      de: { translation: mergeHelpGuideEntries(de as LocaleRoot, hgDe) },
     },
     lng: 'tr', // Varsayılan dil, loadLanguage ile güncellenecek
     fallbackLng: 'tr',

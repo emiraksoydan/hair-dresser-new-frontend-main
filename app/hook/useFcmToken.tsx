@@ -153,7 +153,10 @@ export const useFcmToken = () => {
     }
 
     // User logged in, get and register FCM token
+    // 4 saniyelik gecikme: konum izni diyaloğu tamamlanmadan bildirim izni açılmasın
+    // (Android aynı anda iki sistem diyaloğunu gösteremiyor, biri diğerini kapatıyor)
     const initializeFcm = async () => {
+      await new Promise((resolve) => setTimeout(resolve, 4000));
       const token = await getFcmToken();
       if (token) {
         await registerToken(token);

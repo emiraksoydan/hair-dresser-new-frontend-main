@@ -7,11 +7,7 @@
     "orientation": "portrait",
     "icon": "./assets/adaptive-icon.png",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": false,
-    "splash": {
-      "backgroundColor": "#ffffff",
-      "resizeMode": "cover"
-    },
+    "newArchEnabled": true,
     "ios": {
       "supportsTablet": false,
       "requireFullScreen": true,
@@ -36,13 +32,9 @@
       "predictiveBackGestureEnabled": false,
       "permissions": [
         "ACCESS_FINE_LOCATION",
-        "ACCESS_BACKGROUND_LOCATION"
+        "ACCESS_BACKGROUND_LOCATION",
+        "RECORD_AUDIO"
       ],
-      "config": {
-        "googleMaps": {
-          "apiKey": "AIzaSyD4Irc_91MJjOw0CE7WpENeJZHNgHjOqtM"
-        }
-      },
       "googleServicesFile": "./google-services.json",
       "package": "com.hairdresser.app"
     },
@@ -52,6 +44,7 @@
     "plugins": [
       "expo-router",
       "./plugins/withNotificationChannel",
+      "./plugins/withPhoneOnly",
       [
         "expo-location",
         {

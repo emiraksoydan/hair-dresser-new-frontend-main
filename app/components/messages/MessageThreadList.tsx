@@ -5,7 +5,7 @@
 
 import { Icon } from "react-native-paper";
 import React, { useMemo, useCallback } from 'react';
-import { View, TouchableOpacity, RefreshControl } from 'react-native';
+import { View, TouchableOpacity, RefreshControl, Alert } from 'react-native';
 import { Text } from '../common/Text';
 import { useAnimatedScrollHandler, useSharedValue } from 'react-native-reanimated';
 import { AnimatedLegendList } from '../common/AnimatedLegendList';
@@ -59,6 +59,7 @@ export const MessageThreadList: React.FC<MessageThreadListProps> = ({ routePrefi
 
     const renderItem = useCallback(({ item, index }: { item: ChatThreadListItemDto; index: number }) => {
         const hasUnread = item.unreadCount > 0;
+        const isRestricted = item.isRestrictedForCurrentUser;
         const statusColor = item.status ? getAppointmentStatusColor(item.status) : undefined;
         const statusText = item.status === AppointmentStatus.Approved
             ? MESSAGES.APPOINTMENT_STATUS.APPROVED
@@ -69,7 +70,14 @@ export const MessageThreadList: React.FC<MessageThreadListProps> = ({ routePrefi
         const threadBorder = hasUnread ? unreadAccent : colors.borderColor;
 
         const handlePress = () => {
-            // Screens klasöründeki chat sayfasına yönlendir
+            if (item.isRestrictedForCurrentUser) {
+                Alert.alert(
+                    t('chat.restrictedThreadTitle'),
+                    t('chat.restrictedThreadMessage'),
+                    [{ text: t('common.ok') }]
+                );
+                return;
+            }
             router.push(`/(screens)/chat/${item.threadId}`);
         };
 
@@ -210,105 +218,109 @@ export const MessageThreadList: React.FC<MessageThreadListProps> = ({ routePrefi
 
         return (
             <ScrollStackItem index={index} scroll={scrollY} vanish>
-            <TouchableOpacity
-                onPress={handlePress}
-                className={`rounded-2xl mb-3 ${hasUnread ? "pt-3 px-4 pb-4" : "pt-2 p-4"}`}
-                activeOpacity={0.82}
-                style={{
-                    backgroundColor: hasUnread ? threadBackground : colors.cardBg,
-                    borderWidth: 1,
-                    borderColor: hasUnread ? threadBorder : (isDark ? 'rgba(148,163,184,0.18)' : 'rgba(148,163,184,0.28)'),
-                    ...cardShadowStyle,
-                }}
-            >
-                {statusText && statusColor ? (
-                    <View className="flex-row items-center mb-2 justify-end gap-2">
-                        <View
-                            className="px-2.5 py-1 rounded-full"
-                            style={{ backgroundColor: statusColor + COLORS.OPACITY.LIGHT, borderWidth: 1, borderColor: statusColor + COLORS.OPACITY.MEDIUM }}
-                        >
-                            <Text
-                                className="text-xs font-century-gothic-sans-medium"
-                                style={{ color: statusColor }}
-                            >
-                                {statusText}
-                            </Text>
-                        </View>
-                    </View>
-                ) : null}
-                <View className="flex-row items-start" style={{ minWidth: 0 }}>
-                    <View className="flex-1 pr-3" style={{ minWidth: 0, flexShrink: 1 }}>
-                        {item.participants.length > 1 ? (
-                            renderOverlappingParticipants(item.participants)
-                        ) : item.participants.length === 1 ? (
-                            renderSingleParticipant(item.participants[0])
-                        ) : (
-                            <View className="w-12 h-12 rounded-full items-center justify-center" style={{ backgroundColor: colors.cardBg2 }}>
-                                <Icon source={iconSource} size={24} color={isDark ? "white" : colors.sectionHeaderText} />
-                            </View>
-                        )}
-
-                        {item.lastMessagePreview && (
+                <TouchableOpacity
+                    onPress={handlePress}
+                    className={`rounded-2xl mb-3 ${hasUnread ? "pt-3 px-4 pb-4" : "pt-2 p-4"}`}
+                    activeOpacity={0.82}
+                    style={{
+                        backgroundColor: hasUnread ? threadBackground : colors.cardBg,
+                        borderWidth: 1,
+                        borderColor: hasUnread ? threadBorder : (isDark ? 'rgba(148,163,184,0.18)' : 'rgba(148,163,184,0.28)'),
+                        ...cardShadowStyle,
+                    }}
+                >
+                    {statusText && statusColor ? (
+                        <View className="flex-row items-center mb-2 justify-end gap-2">
                             <View
-                                className={`flex-row items-start rounded-xl ${hasUnread ? "mt-3 gap-3 px-3 py-3" : "mt-2.5 gap-2 px-2.5 py-2 rounded-lg"}`}
-                                style={{
-                                    marginLeft: item.participants.length > 0 ? 42 : 0,
-                                    minWidth: 0,
-                                    maxWidth: '100%',
-                                    backgroundColor: hasUnread
-                                        ? (isDark ? 'rgba(240,94,35,0.08)' : 'rgba(254,243,199,0.45)')
-                                        : (isDark ? '#111827' : '#f1f5f9'),
-                                    borderWidth: 1,
-                                    borderColor: hasUnread ? `${unreadAccent}40` : colors.borderColor,
-                                }}
+                                className="px-2.5 py-1 rounded-full"
+                                style={{ backgroundColor: statusColor + COLORS.OPACITY.LIGHT, borderWidth: 1, borderColor: statusColor + COLORS.OPACITY.MEDIUM }}
                             >
-                                <View style={{ paddingTop: hasUnread ? 2 : 0 }}>
-                                    <Icon
-                                        source="message-text"
-                                        size={hasUnread ? 14 : 12}
-                                        color={hasUnread ? unreadAccent : mutedTextColor}
-                                    />
-                                </View>
                                 <Text
-                                    className={`mb-0 ${hasUnread ? 'text-[15px] leading-5 font-century-gothic-sans-medium' : 'text-sm font-century-gothic-sans-regular'}`}
-                                    style={hasUnread ? { color: colors.sectionHeaderText, flex: 1, minWidth: 0 } : { color: mutedTextColor, flexShrink: 1, minWidth: 0, maxWidth: '100%' }}
-                                    numberOfLines={hasUnread ? 4 : 2}
+                                    className="text-xs font-century-gothic-sans-medium"
+                                    style={{ color: statusColor }}
                                 >
-                                    {item.lastMessagePreview}
+                                    {statusText}
                                 </Text>
                             </View>
-                        )}
-                    </View>
+                        </View>
+                    ) : null}
+                    <View className="flex-row items-start" style={{ minWidth: 0 }}>
+                        <View className="flex-1 pr-3" style={{ minWidth: 0, flexShrink: 1 }}>
+                            {item.participants.length > 1 ? (
+                                renderOverlappingParticipants(item.participants)
+                            ) : item.participants.length === 1 ? (
+                                renderSingleParticipant(item.participants[0])
+                            ) : (
+                                <View className="w-12 h-12 rounded-full items-center justify-center" style={{ backgroundColor: colors.cardBg2 }}>
+                                    <Icon source={iconSource} size={24} color={isDark ? "white" : colors.sectionHeaderText} />
+                                </View>
+                            )}
 
-                    <View className="items-end shrink-0" style={{ minWidth: 72, paddingLeft: 4 }}>
-                        {item.lastMessageAt && (
-                            <Text className="text-xs mb-2" style={{ color: tertiaryTextColor }}>
-                                {formatTime(item.lastMessageAt)}
-                            </Text>
-                        )}
-                        {hasUnread && (
-                            <View
-                                className="px-2.5 py-1.5 rounded-full mb-2"
-                                style={{ backgroundColor: unreadAccent + COLORS.OPACITY.LIGHT, borderWidth: 1, borderColor: unreadAccent + COLORS.OPACITY.MEDIUM }}
-                            >
-                                <Text className="text-[11px] font-century-gothic-sans-bold" style={{ color: unreadAccent }}>
-                                    {t('chat.newMessage')} ({item.unreadCount > 99 ? '99+' : item.unreadCount})
-                                </Text>
-                            </View>
-                        )}
-                        <View className="relative items-center justify-center mt-1">
-                            <Icon source="message-text" size={20} color={hasUnread ? unreadAccent : mutedTextColor} />
-                            {hasUnread && item.unreadCount > 0 && (
-                                <View className="absolute -top-1.5 -right-1.5 rounded-full min-w-[18px] h-[18px] px-1 items-center justify-center" style={{ backgroundColor: unreadAccent }}>
-                                    <Text className="text-white text-[9px] font-bold">
-                                        {item.unreadCount > 9 ? '9+' : item.unreadCount}
+                            {item.lastMessagePreview && (
+                                <View
+                                    className={`flex-row items-start rounded-xl ${hasUnread ? "mt-3 gap-3 px-3 py-3" : "mt-2.5 gap-2 px-2.5 py-2 rounded-lg"}`}
+                                    style={{
+                                        marginLeft: item.participants.length > 0 ? 42 : 0,
+                                        minWidth: 0,
+                                        maxWidth: '100%',
+                                        backgroundColor: hasUnread
+                                            ? (isDark ? 'rgba(240,94,35,0.08)' : 'rgba(254,243,199,0.45)')
+                                            : (isDark ? '#111827' : '#f1f5f9'),
+                                        borderWidth: 1,
+                                        borderColor: hasUnread ? `${unreadAccent}40` : colors.borderColor,
+                                    }}
+                                >
+                                    <View style={{ paddingTop: hasUnread ? 2 : 0 }}>
+                                        <Icon
+                                            source="message-text"
+                                            size={hasUnread ? 14 : 12}
+                                            color={hasUnread ? unreadAccent : mutedTextColor}
+                                        />
+                                    </View>
+                                    <Text
+                                        className={`mb-0 ${hasUnread ? 'text-[15px] leading-5 font-century-gothic-sans-medium' : 'text-sm font-century-gothic-sans-regular'}`}
+                                        style={hasUnread ? { color: colors.sectionHeaderText, flex: 1, minWidth: 0 } : { color: mutedTextColor, flexShrink: 1, minWidth: 0, maxWidth: '100%' }}
+                                        numberOfLines={hasUnread ? 4 : 2}
+                                    >
+                                        {item.lastMessagePreview}
                                     </Text>
                                 </View>
                             )}
                         </View>
+
+                        <View className="items-end shrink-0" style={{ minWidth: 72, paddingLeft: 4 }}>
+                            {item.lastMessageAt && (
+                                <Text className="text-xs mb-2" style={{ color: tertiaryTextColor }}>
+                                    {formatTime(item.lastMessageAt)}
+                                </Text>
+                            )}
+                            {hasUnread && (
+                                <View
+                                    className="px-2.5 py-1.5 rounded-full mb-2"
+                                    style={{ backgroundColor: unreadAccent + COLORS.OPACITY.LIGHT, borderWidth: 1, borderColor: unreadAccent + COLORS.OPACITY.MEDIUM }}
+                                >
+                                    <Text className="text-[11px] font-century-gothic-sans-bold" style={{ color: unreadAccent }}>
+                                        {t('chat.newMessage')} ({item.unreadCount > 99 ? '99+' : item.unreadCount})
+                                    </Text>
+                                </View>
+                            )}
+                            <View className="relative items-center justify-center mt-1">
+                                {isRestricted ? (
+                                    <Icon source="lock" size={20} color={mutedTextColor} />
+                                ) : (
+                                    <Icon source="message-text" size={20} color={hasUnread ? unreadAccent : mutedTextColor} />
+                                )}
+                                {hasUnread && item.unreadCount > 0 && (
+                                    <View className="absolute -top-1.5 -right-1.5 rounded-full min-w-[18px] h-[18px] px-1 items-center justify-center" style={{ backgroundColor: unreadAccent }}>
+                                        <Text className="text-white text-[9px] font-bold">
+                                            {item.unreadCount > 9 ? '9+' : item.unreadCount}
+                                        </Text>
+                                    </View>
+                                )}
+                            </View>
+                        </View>
                     </View>
-                </View>
-            </TouchableOpacity>
+                </TouchableOpacity>
             </ScrollStackItem>
         );
     }, [router, routePrefix, iconSource, formatTime, currentUserType, t, isDark, colors, mutedTextColor, tertiaryTextColor, unreadAccent, cardShadowStyle, scrollY]);

@@ -1,6 +1,7 @@
 import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import {
   Dimensions,
+  FlatList,
   RefreshControl,
   StyleSheet,
   TouchableOpacity,
@@ -54,10 +55,6 @@ import {
   compareStripOuterStyle,
   useCompareMetrics,
 } from "../../(screens)/compare/compareShared";
-import Animated, {
-  useAnimatedScrollHandler,
-  useSharedValue,
-} from "react-native-reanimated";
 import { PerplexityListItem } from "../../components/panel/PerplexityListItem";
 import { PerplexityHorizontalList } from "../../components/panel/PerplexityHorizontalList";
 import { PanelEmptyCta } from "../../components/common/PanelEmptyCta";
@@ -206,14 +203,6 @@ const Index = () => {
     locationStatus,
   ]);
 
-  const ITEM_ANIM_STRIDE = 280;
-  const scrollY = useSharedValue(0);
-  const onVerticalScroll = useAnimatedScrollHandler({
-    onScroll: (e) => {
-      scrollY.value = e.contentOffset.y / 280;
-    },
-  });
-
   const [expandedFreeBarbers, setExpandedFreeBarbers] = useState(true);
   const [selectedRatingsTarget, setSelectedRatingsTarget] = useState<{
     targetId: string;
@@ -223,7 +212,7 @@ const Index = () => {
   const screenWidth = Dimensions.get("window").width;
 
   const cardWidthFreeBarber = useMemo(
-    () => (expandedFreeBarbers ? screenWidth * 0.92 : screenWidth * 0.94),
+    () => (expandedFreeBarbers ? screenWidth * 0.935 : screenWidth * 0.955),
     [expandedFreeBarbers, screenWidth],
   );
 
@@ -319,9 +308,9 @@ const Index = () => {
         panelCompare={
           isOtherUsersFreeBarber(item, currentUserId)
             ? {
-                selected: compareFbIds.includes(item.id),
-                onPress: () => toggleCompareFb(item.id),
-              }
+              selected: compareFbIds.includes(item.id),
+              onPress: () => toggleCompareFb(item.id),
+            }
             : undefined
         }
       />
@@ -352,43 +341,43 @@ const Index = () => {
 
     type Row =
       | {
-          id: string;
-          type: "freebarbers-header";
-          _scrollStart: number;
-          _scrollLen: number;
-        }
+        id: string;
+        type: "freebarbers-header";
+        _scrollStart: number;
+        _scrollLen: number;
+      }
       | {
-          id: string;
-          type: "freebarbers-loading";
-          _scrollStart: number;
-          _scrollLen: number;
-        }
+        id: string;
+        type: "freebarbers-loading";
+        _scrollStart: number;
+        _scrollLen: number;
+      }
       | {
-          id: string;
-          type: "freebarbers-error";
-          _scrollStart: number;
-          _scrollLen: number;
-        }
+        id: string;
+        type: "freebarbers-error";
+        _scrollStart: number;
+        _scrollLen: number;
+      }
       | {
-          id: string;
-          type: "freebarbers-empty";
-          _scrollStart: number;
-          _scrollLen: number;
-        }
+        id: string;
+        type: "freebarbers-empty";
+        _scrollStart: number;
+        _scrollLen: number;
+      }
       | {
-          id: string;
-          type: "freebarber-row";
-          data: FreeBarGetDto;
-          _scrollStart: number;
-          _scrollLen: number;
-        }
+        id: string;
+        type: "freebarber-row";
+        data: FreeBarGetDto;
+        _scrollStart: number;
+        _scrollLen: number;
+      }
       | {
-          id: string;
-          type: "freebarbers-content-horizontal";
-          data: FreeBarGetDto[];
-          _scrollStart: number;
-          _scrollLen: number;
-        };
+        id: string;
+        type: "freebarbers-content-horizontal";
+        data: FreeBarGetDto[];
+        _scrollStart: number;
+        _scrollLen: number;
+      };
 
     const rows: Row[] = [];
     let y = 0;
@@ -451,11 +440,6 @@ const Index = () => {
     freeBarbersError,
     isList,
   ]);
-
-  const verticalSnapOffsets = useMemo(
-    () => listData.map((r) => r._scrollStart),
-    [listData],
-  );
 
   const mapInitialRegion = useMemo(() => {
     const fbCandidate = displayFreeBarbers
@@ -576,16 +560,11 @@ const Index = () => {
         </View>
       )}
       <View style={{ flex: 1 }} pointerEvents={isMapMode ? 'none' : 'auto'}>
-        <Animated.FlatList
+        <FlatList
           data={listData}
           keyExtractor={(item) => item.id}
-          onScroll={onVerticalScroll}
           scrollEventThrottle={16}
-          decelerationRate="fast"
-          snapToOffsets={
-            verticalSnapOffsets.length > 0 ? verticalSnapOffsets : undefined
-          }
-          contentContainerStyle={{ paddingBottom: 100 }}
+          contentContainerStyle={{ paddingBottom: 80 + insets.bottom }}
           showsVerticalScrollIndicator={false}
           removeClippedSubviews={false}
           refreshControl={
@@ -683,10 +662,7 @@ const Index = () => {
             }
             if (item.type === "freebarber-row") {
               return (
-                <PerplexityListItem
-                  scrollPos={scrollY}
-                  index={item._scrollStart / ITEM_ANIM_STRIDE}
-                >
+                <PerplexityListItem>
                   {renderFreeBarberItem({ item: item.data })}
                 </PerplexityListItem>
               );
@@ -697,7 +673,6 @@ const Index = () => {
                   <PerplexityHorizontalList
                     data={filteredFreeBarbers}
                     keyExtractor={(fb: FreeBarGetDto) => (fb as any).id}
-                    snapInterval={cardWidthFreeBarber + 12}
                     contentContainerStyle={{ gap: 10, paddingTop: 6, paddingBottom: 6, paddingHorizontal: 0 }}
                     renderItem={({ item: fb }) =>
                       renderFreeBarberItem({ item: fb })

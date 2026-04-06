@@ -33,6 +33,8 @@ export type AccessTokenDto = {
   expiration: string;
   refreshToken: string;
   refreshTokenExpires: string;
+  /** Yeni kayıt: kullanım rehberi uyarısı göster */
+  showHelpGuideOnboarding?: boolean;
 };
 
 export interface VerifyOtpRequest {
@@ -89,6 +91,8 @@ export interface HelpGuideGetDto {
   userType: number; // UserType enum değeri (0: Customer, 1: FreeBarber, 2: BarberStore)
   title: string;
   description: string;
+  /** helpGuide.entries.{key} — boşsa title/description (TR) kullanılır */
+  translationKey?: string;
   order: number;
   isActive: boolean;
 }

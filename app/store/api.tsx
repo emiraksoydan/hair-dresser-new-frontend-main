@@ -399,10 +399,17 @@ export const api = createApi({
                 { type: 'Appointment', id: 'LIST' },
             ],
         }),
-        cancelAppointment: builder.mutation<ApiResponse<boolean>, string>({
-            query: (appointmentId) => ({
+        cancelAppointment: builder.mutation<
+            ApiResponse<boolean>,
+            { appointmentId: string; cancellationReason?: string | null }
+        >({
+            query: ({ appointmentId, cancellationReason }) => ({
                 url: `Appointment/${appointmentId}/cancel`,
                 method: 'POST',
+                body:
+                    cancellationReason != null && String(cancellationReason).trim().length > 0
+                        ? { cancellationReason: String(cancellationReason).trim() }
+                        : {},
             }),
             invalidatesTags: (result, error, appointmentId) => [
                 { type: 'Appointment', id: appointmentId },
@@ -1204,6 +1211,16 @@ export const api = createApi({
             invalidatesTags: ['UserProfile'],
         }),
 
+        sendDeleteAccountOtp: builder.mutation<{ success: boolean; message: string }, { language?: string }>({
+            query: (body) => ({ url: 'User/send-delete-account-otp', method: 'POST', body }),
+        }),
+        deleteAccount: builder.mutation<{ success: boolean; message: string }, { otpCode: string }>({
+            query: (body) => ({ url: 'User/delete-account', method: 'DELETE', body }),
+        }),
+        completeHelpGuidePrompt: builder.mutation<{ success: boolean; message?: string }, void>({
+            query: () => ({ url: 'User/complete-help-guide-prompt', method: 'POST' }),
+        }),
+
         // --- SETTING API ---
         getSetting: builder.query<ApiResponse<SettingGetDto>, void>({
             query: () => 'Setting',
@@ -1562,7 +1579,10 @@ export const {
     useGetSubscriptionStatusQuery,
     useSendPhoneChangeOtpMutation,
     useUpdatePhoneMutation,
-    // SavedFilter
+    useSendDeleteAccountOtpMutation,
+        useDeleteAccountMutation,
+        useCompleteHelpGuidePromptMutation,
+        // SavedFilter
     useGetSavedFiltersQuery,
     useCreateSavedFilterMutation,
     useUpdateSavedFilterMutation,

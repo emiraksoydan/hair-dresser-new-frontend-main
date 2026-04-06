@@ -3,7 +3,7 @@
  */
 
 /** Generic default avatar for users (profile, blocked list, complaint list, etc.) */
-export const DEFAULT_AVATAR = require('../../assets/images/logonewimage.png');
+export const DEFAULT_AVATAR = require('../../assets/images/profileempty.webp');
 
 /** Generic placeholder for store / free-barber card images */
 export const EMPTY_IMAGE = require('../../assets/images/empty.png');

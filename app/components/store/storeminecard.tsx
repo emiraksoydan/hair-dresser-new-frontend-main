@@ -131,7 +131,7 @@ const StoreMineCard: React.FC<Props> = ({ store, isList, expanded, cardWidthStor
 
                         {!isList && (
                             <View className="flex-row justify-between pr-2">
-                                <Text style={{ color: colors.textSecondary }} className={profileCompact ? 'text-base' : 'text-lg'}>{getBarberTypeLabel(store.type)}</Text>
+                                <Text style={{ color: colors.textSecondary }} className="text-sm font-century-gothic-sans-medium">{getBarberTypeLabel(store.type)}</Text>
                                 <FavoriteButton
                                     isFavorite={isFavorite}
                                     favoriteCount={favoriteCount}

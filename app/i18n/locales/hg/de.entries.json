@@ -1,0 +1,170 @@
+{
+  "hg_c_01": {
+    "title": "App-Aufbau und Entdecken",
+    "description": "Im Hauptpanel sehen Sie Friseursalons und freie Friseure in der Nähe auf Karte oder Listen. Die unteren Tabs sind für alle Rollen gleich: Termine bündelt alle Buchungen; Nachrichten zeigt nur aktive Favoriten-Threads; Favoriten speichert Shops und Barber; Profil enthält Einstellungen, Sprache, Beschwerden, Anfragen und blockierte Kontakte. Die Glocke öffnet Benachrichtigungen – Tippen springt zum Termin, falls verknüpfbar."
+  },
+  "hg_c_02": {
+    "title": "Standortfreigabe",
+    "description": "Näherungslisten brauchen Vordergrund-Standort. Danach öffnen Sie Karten mit Adresse, Öffnungszeiten, Services und Buchungsflow. Ohne Freigabe bleiben Listen leer, bis Sie sie in den Systemeinstellungen aktivieren. Entfernungsregeln gelten weiter, wenn ein freier Friseur nahe am gewählten Salon sein muss."
+  },
+  "hg_c_03": {
+    "title": "Zwei-Parteien-Termine",
+    "description": "Direktbuchung bei einem Salon oder einem freien Friseur umfasst nur Sie und diesen Anbieter. Freigaben, Ablehnungen, Stornierungen und Abschluss laufen zwischen diesen beiden Parteien. Push- und In-App-Hinweise zeigen, wenn Sie handeln müssen."
+  },
+  "hg_c_04": {
+    "title": "Drei-Parteien-Termine",
+    "description": "Wenn der freie Friseur Sie im Salonstuhl bedient, erstellen Sie die Kundenanfrage; der Friseur wählt Salon, Stuhl und Zeit; der Salonbesitzer entscheidet über die Stuhlnutzung. Es folgen ggf. finale Bestätigungen oder Timeouts. Jeder Schritt hat einen eigenen Benachrichtigungstyp."
+  },
+  "hg_c_05": {
+    "title": "Salonwahlmodi",
+    "description": "Nach meinem Bedarf startet schlank, oft nur Sie und der Friseur, bis ein Salon nötig ist. Salon wählen verbindet früh einen konkreten Betrieb oft mit Notiz und startet die Drei-Parteien-Kette. Das Formular zeigt den Modus vor dem Bestätigen."
+  },
+  "hg_c_06": {
+    "title": "Terminstatus",
+    "description": "Ausstehend wartet auf Entscheidungen. Genehmigt ist fix. Abgelehnt/Storniert beendet den Flow. Unbeantwortet bedeutet Timeout. Abgeschlossen erlaubt Bewertung. Lesen Sie die Kartenzeile für den nächsten erlaubten Button."
+  },
+  "hg_c_07": {
+    "title": "Benachrichtigungen",
+    "description": "Die Glocke spiegelt Kartenereignisse: Erstellung, Freigaben, Ablehnungen, Stornierungen, Erinnerungen und Zwischenschritte bei drei Parteien. Für Aktionen nutzen Sie weiter den Termine-Tab. Push aktiv lassen, damit Fristen nicht verpasst werden."
+  },
+  "hg_c_08": {
+    "title": "Favoriten und Chat",
+    "description": "Favoriten legen oder reaktivieren Threads in Nachrichten. Senden setzt eine aktive Favoritenbeziehung voraus. Entfernen trennt den Kanal bis zur erneuten Favorisierung."
+  },
+  "hg_c_09": {
+    "title": "Nachrichten-Tab",
+    "description": "Nur Favoriten-Threads erscheinen. Innerhalb können Profile, verknüpfte Termine und Medien genutzt werden. Blockieren stoppt den Chat sofort und kann Buchungen beeinflussen."
+  },
+  "hg_c_10": {
+    "title": "Stuhl, Zeit, Services",
+    "description": "Salonbuchungen brauchen freien Stuhl und Slot. Prozent-Modell erzwingt mindestens einen Service. Mietmodell pro Stunde kann ohne Services funktionieren, die Dauer bestimmt aber die Mietrechnung. Überschneidungen blockiert der Server."
+  },
+  "hg_c_11": {
+    "title": "Bewertungen",
+    "description": "Nach Abschluss bewerten Sie die passende Partei. Überspringen ist möglich, Feedback hilft aber allen."
+  },
+  "hg_c_12": {
+    "title": "Gemeinsame Kundennummer",
+    "description": "Mehrere Rollen pro Telefon teilen sich eine Kundennummer für Support. Profile aktuell halten."
+  },
+  "hg_c_13": {
+    "title": "Beschwerden & Sperren",
+    "description": "Profil bündelt Beschwerden, Anfragen und Blocklisten. Sperren wirken auf Chat und ggf. Buchungen."
+  },
+  "hg_c_14": {
+    "title": "Sprachassistent",
+    "description": "Schwebendes Menü öffnet den KI-Terminassistenten; Mikrofon kann angefragt werden. Verbindliche Schritte laufen weiter über die normale UI."
+  },
+  "hg_fb_01": {
+    "title": "Panel und Sichtbarkeit",
+    "description": "Steuern Sie Live-Standort, Verfügbarkeit und Profil. Kunden finden Sie nur bei Regelkonformität. Hintergrundstandort aktualisiert Nähe nach Distanz/Zeit und zeigt ggf. eine Android-Dauerbenachrichtigung. Halten Sie Fotos und Services aktuell."
+  },
+  "hg_fb_02": {
+    "title": "Direkte Zwei-Parteien-Termine",
+    "description": "Nur Sie und der Kunde steuern Freigaben, Ablehnungen, Stornos und Abschluss. Hinweise spiegeln jeden erforderlichen Schritt."
+  },
+  "hg_fb_03": {
+    "title": "Drei-Parteien-Flows",
+    "description": "Nach Kundenstart wählen Sie Salon, Stuhl und Slot; der Salonbesitzer entscheidet; spätere Kundenbestätigungen oder Timeouts folgen. Benachrichtigungstypen zeigen, wer dran ist."
+  },
+  "hg_fb_04": {
+    "title": "Salonmodus beim Kunden",
+    "description": "Nach Bedarf verzögert den Salon bis nötig. Salon wählen verpflichtet früh einen Betrieb meist mit Notiz und startet die Dreierkette sofort."
+  },
+  "hg_fb_05": {
+    "title": "Eigener Stuhl ohne Endkunden",
+    "description": "Stuhl für eigene Arbeit blockieren; der Salon prüft den Slot. Prozent-Modell kann Services erzwingen; Mietmodell evtl. nicht."
+  },
+  "hg_fb_06": {
+    "title": "Status und Timeouts",
+    "description": "Ausstehend wartet auf Entscheidung. Unbeantwortet = Frist abgelaufen. Frühe Ablehnungen haben eigene Meldungen."
+  },
+  "hg_fb_07": {
+    "title": "Benachrichtigungen",
+    "description": "Push aktiv lassen; Dreierketten stocken bei verpassten Fristen. Glocke = Historie."
+  },
+  "hg_fb_08": {
+    "title": "Favoriten und Chat",
+    "description": "Kunden chatten nur über Favoriten; Entfernen stoppt bis zur erneuten Favorisierung."
+  },
+  "hg_fb_09": {
+    "title": "Einnahmen",
+    "description": "Prozent: Summe der Services minus Prozentsatz. Miete: Summe minus Stunden × Miete, nie negativ. Ohne Salon volle Service-Summe."
+  },
+  "hg_fb_10": {
+    "title": "Abonnement",
+    "description": "Trial oder Plan im Profil prüfen; abgelaufen oder gesperrt begrenzt das Panel."
+  },
+  "hg_fb_11": {
+    "title": "Standort",
+    "description": "Vordergrund für aktive Nutzung; Hintergrund braucht Extra-Recht und schont Batterie."
+  },
+  "hg_fb_12": {
+    "title": "Profilqualität",
+    "description": "Präzise Daten reduzieren Konflikte."
+  },
+  "hg_fb_13": {
+    "title": "Sprachassistent",
+    "description": "Mikrofon optional; kritische Schritte am Bildschirm bestätigen."
+  },
+  "hg_fb_14": {
+    "title": "Beschwerden & Block",
+    "description": "Formale Wege im Profil; Block wirkt auf Chat und ggf. Buchungen."
+  },
+  "hg_st_01": {
+    "title": "Shop-Dashboard",
+    "description": "Marke, Zeiten, Stühle, manuelle Barber, Services und Preismodell zentral steuern. Kunden- und Freelancer-Anfragen landen im Termine-Tab."
+  },
+  "hg_st_02": {
+    "title": "Stühle & manuelle Barber",
+    "description": "Jeder Stuhl hat Kalender. Manuelle Barber dienen der Info, Kollisionen laufen auf Stuhlebene. Inaktive Stühle deaktivieren."
+  },
+  "hg_st_03": {
+    "title": "Prozent-Provision",
+    "description": "Prozentsatz festlegen; jeder Abschluss braucht mindestens einen Service als Basis."
+  },
+  "hg_st_04": {
+    "title": "Stundenmiete",
+    "description": "Stundensatz × Dauer von der Service-Summe abziehen, nie unter null."
+  },
+  "hg_st_05": {
+    "title": "Direkte Kundenbesuche",
+    "description": "Nur Sie und der Kunde; Freigaben im selben UI."
+  },
+  "hg_st_06": {
+    "title": "Freelancer-Stuhl",
+    "description": "Freelancer buchen Stühle für ihre Kunden oder Dreierketten; Sie prüfen Besitz und Öffnungszeiten."
+  },
+  "hg_st_07": {
+    "title": "Rolle in Dreierketten",
+    "description": "Nach Stuhlwahl durch Freelancer akzeptieren oder ablehnen; später Kunde oder Timeouts. Text der Push sagt, worauf Sie warten."
+  },
+  "hg_st_08": {
+    "title": "Betriebsstatus",
+    "description": "Gleiche Begriffe wie beim Kunden für konsistente Bewertungen."
+  },
+  "hg_st_09": {
+    "title": "Benachrichtigungen",
+    "description": "Jede Stuhl-relevante Änderung kommt als Push."
+  },
+  "hg_st_10": {
+    "title": "Chat & Favoriten",
+    "description": "Chat nur bei Gegenseitigkeit; Eskalation über Beschwerden."
+  },
+  "hg_st_11": {
+    "title": "Umsatzberichte",
+    "description": "Summiert abgeschlossene Termine; Prozent vs. Mietabzug getrennt sichtbar."
+  },
+  "hg_st_12": {
+    "title": "Abonnement",
+    "description": "Rechtzeitig verlängern, Sichtbarkeit zu erhalten."
+  },
+  "hg_st_13": {
+    "title": "Profiltreue",
+    "description": "Fotos, Pin und Öffnungszeiten real halten, um Zögerer-Timeouts zu vermeiden."
+  },
+  "hg_st_14": {
+    "title": "Tickets",
+    "description": "Profilformulare nutzen; Termin-IDs angeben."
+  }
+}

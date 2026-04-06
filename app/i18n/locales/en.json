@@ -85,6 +85,16 @@
     "phoneFormat": "Enter in 5XX XXX XX XX format",
     "phoneOtpSent": "Verification code sent.",
     "phoneOtpResend": "Resend code",
+    "deleteAccount": "Delete Account",
+    "deleteAccountConfirmTitle": "Delete Account",
+    "deleteAccountConfirmMessage": "Are you sure you want to delete your account? This action cannot be undone and all your data will be deleted.",
+    "deleteAccountOtpTitle": "Account Deletion Verification",
+    "deleteAccountOtpDesc": "A verification code has been sent to your registered phone number. Enter the code to delete your account.",
+    "deleteAccountOtpSend": "Send Verification Code",
+    "deleteAccountOtpVerify": "Delete Account",
+    "deleteAccountOtpResend": "Resend code",
+    "deleteAccountSuccess": "Your account has been successfully deleted.",
+    "deleteAccountError": "An error occurred while deleting the account.",
     "otpCode": "Verification Code",
     "shopInfoTitle": "Shop Insights",
     "informationSection": "Information",
@@ -180,7 +190,9 @@
     "paytrSecure": "Secure Payment",
     "paytrNote": "All payments are processed through PayTR's secure infrastructure. Your card details are encrypted and protected.",
     "paymentTitle": "Secure Payment",
-    "paymentComingSoon": "Payment system integration coming soon."
+    "paymentComingSoon": "Payment system integration coming soon.",
+    "webSubscribeInfo": "Subscriptions are purchased via the web. To subscribe, please contact us by email.",
+    "webSubscribeButton": "Send Email"
   },
   "navigation": {
     "welcome": "Welcome",
@@ -199,6 +211,12 @@
     "shopping": "Shopping",
     "usageInfo": "Usage Information",
     "notifications": "Notifications"
+  },
+  "helpGuide": {
+    "screenTitle": "User guide",
+    "onboardingTitle": "User guide",
+    "onboardingMessage": "Please read the guide sections to use the app effectively. You can open it anytime from the menu: Info.",
+    "openGuide": "Open guide"
   },
   "appointment": {
     "status": {
@@ -238,6 +256,8 @@
       "deleteTitle": "Delete Appointment",
       "deleteAllTitle": "Delete All Appointments",
       "confirmCancellation": "Do you want to cancel the appointment?",
+      "cancellationReasonOptional": "Cancellation reason (optional)",
+      "cancellationReasonPlaceholder": "You can briefly explain why you're cancelling…",
       "confirmCompletion": "Mark service as completed?",
       "confirmDelete": "Are you sure you want to delete this appointment?",
       "confirmDeleteAll": "Are you sure you want to delete all deletable appointments?",
@@ -277,7 +297,7 @@
       "services": "Services",
       "scheduleDate": "Date",
       "scheduleTime": "Time",
-      "chair": "Chair"
+      "cancellationReason": "Cancellation reason"
     }
   },
   "time": {
@@ -853,7 +873,11 @@
     "fileOpenFailed": "Could not open the file",
     "fileLinkCopied": "Link copied to clipboard — paste it in Safari or another app.",
     "tapToOpen": "Tap to open",
-    "file": "File"
+    "file": "File",
+    "restrictedThreadTitle": "Add to Favorites to View Messages",
+    "restrictedThreadMessage": "You need to add this person to your favorites to continue messaging.",
+    "restrictedThreadBanner": "Add this person to your favorites to view messages.",
+    "restrictedInputPlaceholder": "Add to favorites to send messages"
   },
   "ai": {
     "assistantTitle": "AI Assistant",
@@ -1032,9 +1056,6 @@
     "deletedSuccess": "Category deleted successfully",
     "mainCategoriesRetrieved": "Main categories retrieved",
     "subCategoriesRetrieved": "Sub categories retrieved"
-  },
-  "helpGuide": {
-    "invalidUserType": "Invalid user type"
   },
   "general": {
     "entityNotFound": "Record not found",

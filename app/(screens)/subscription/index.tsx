@@ -1,5 +1,5 @@
 import { Icon } from "react-native-paper";
-import { View, ScrollView, TouchableOpacity, Modal, ActivityIndicator, Alert } from 'react-native';
+import { View, ScrollView, TouchableOpacity, Modal, ActivityIndicator, Alert, Platform, Linking } from 'react-native';
 import { Text } from '../../components/common/Text';
 
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -10,6 +10,7 @@ import { useCancelSubscriptionMutation, useCreatePaytrTokenMutation, useGetSubsc
 import { UserType } from '../../types';
 import { WebView } from 'react-native-webview';
 import { useState } from 'react';
+import { useActionGuard } from '../../hook/useActionGuard';
 
 type PlanCardProps = {
     planName: string;
@@ -123,8 +124,8 @@ function PlanCard({ planName, planDesc, price, features, isCurrent, accentColor,
                     </View>
                 ))}
 
-                {/* CTA button */}
-                {canBuy && (
+                {/* CTA button — Android'de gösterilmez, web notu aşağıda var */}
+                {canBuy && Platform.OS !== 'android' && (
                     <TouchableOpacity
                         onPress={onBuy}
                         disabled={isBuying}
@@ -165,6 +166,7 @@ export default function SubscriptionPage() {
     const [createPaytrToken, { isLoading: isCreatingToken }] = useCreatePaytrTokenMutation();
     const [cancelSubscription, { isLoading: isCancelling }] = useCancelSubscriptionMutation();
     const [reactivateSubscription, { isLoading: isReactivating }] = useReactivateSubscriptionMutation();
+    const guard = useActionGuard();
     const [paytrUrl, setPaytrUrl] = useState<string | null>(null);
     const [paytrMerchantOid, setPaytrMerchantOid] = useState<string | null>(null);
 
@@ -222,7 +224,7 @@ export default function SubscriptionPage() {
         t('subscription.feature_multi_staff'),
     ];
 
-    const handleBuy = async (plan: 'FreeBarber' | 'BarberStore') => {
+    const handleBuy = async (plan: 'FreeBarber' | 'BarberStore') => guard(async () => {
         try {
             const res = await createPaytrToken({ plan, months: 1 }).unwrap();
             const token = res?.data?.token;
@@ -233,7 +235,7 @@ export default function SubscriptionPage() {
         } catch {
             // errorHandler zaten global toast/alert yapıyor
         }
-    };
+    });
 
     const handleCancelSubscription = () => {
         Alert.alert(
@@ -244,25 +246,25 @@ export default function SubscriptionPage() {
                 {
                     text: t('subscription.cancelButton'),
                     style: 'destructive',
-                    onPress: async () => {
+                    onPress: () => guard(async () => {
                         try {
                             await cancelSubscription().unwrap();
                         } catch {
                             // global error handler
                         }
-                    },
+                    }),
                 },
             ],
         );
     };
 
-    const handleReactivateSubscription = async () => {
+    const handleReactivateSubscription = () => guard(async () => {
         try {
             await reactivateSubscription().unwrap();
         } catch {
             // global error handler
         }
-    };
+    });
 
     return (
         <SafeAreaView style={{ flex: 1, backgroundColor: colors.screenBg }}>
@@ -499,34 +501,77 @@ export default function SubscriptionPage() {
                     />
                 )}
 
-                {/* PayTR Güvenlik Notu */}
-                <View
-                    style={{
-                        backgroundColor: colors.cardBg,
-                        borderRadius: 12,
-                        padding: 14,
-                        borderWidth: 1,
-                        borderColor: colors.borderColor,
-                        flexDirection: 'row',
-                        alignItems: 'flex-start',
-                        gap: 10,
-                        marginTop: 4,
-                    }}
-                >
-                    <Icon source="shield-check-outline" size={20} color="#22c55e" />
-                    <View style={{ flex: 1 }}>
-                        <Text style={{ color: colors.sectionHeaderText, fontSize: 13, fontFamily: 'CenturyGothic-Bold', marginBottom: 2 }}>
-                            {t('subscription.paytrSecure')}
-                        </Text>
-                        <Text style={{ color: colors.textSecondary, fontSize: 12, fontFamily: 'CenturyGothic' }}>
-                            {t('subscription.paytrNote')}
-                        </Text>
+                {/* Android: web üzerinden abone ol notu */}
+                {Platform.OS === 'android' && (showFreeBarberPlan || showBarberStorePlan) && (
+                    <View
+                        style={{
+                            backgroundColor: colors.cardBg,
+                            borderRadius: 12,
+                            padding: 14,
+                            borderWidth: 1,
+                            borderColor: colors.borderColor,
+                            flexDirection: 'column',
+                            gap: 12,
+                            marginTop: 4,
+                        }}
+                    >
+                        <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10 }}>
+                            <Icon source="information-outline" size={20} color={colors.primary} />
+                            <Text style={{ color: colors.textSecondary, fontSize: 12, fontFamily: 'CenturyGothic', flex: 1, lineHeight: 18 }}>
+                                {t('subscription.webSubscribeInfo')}
+                            </Text>
+                        </View>
+                        <TouchableOpacity
+                            onPress={() => Linking.openURL('mailto:yavuzanteknoloji@gmail.com?subject=Abonelik')}
+                            activeOpacity={0.8}
+                            style={{
+                                backgroundColor: colors.primary,
+                                borderRadius: 10,
+                                paddingVertical: 11,
+                                alignItems: 'center',
+                                flexDirection: 'row',
+                                justifyContent: 'center',
+                                gap: 8,
+                            }}
+                        >
+                            <Icon source="email-outline" size={17} color="#fff" />
+                            <Text style={{ color: '#fff', fontSize: 13, fontFamily: 'CenturyGothic-Bold' }}>
+                                {t('subscription.webSubscribeButton')}
+                            </Text>
+                        </TouchableOpacity>
                     </View>
-                </View>
+                )}
+
+                {/* PayTR Güvenlik Notu — sadece Android dışında göster */}
+                {Platform.OS !== 'android' && (
+                    <View
+                        style={{
+                            backgroundColor: colors.cardBg,
+                            borderRadius: 12,
+                            padding: 14,
+                            borderWidth: 1,
+                            borderColor: colors.borderColor,
+                            flexDirection: 'row',
+                            alignItems: 'flex-start',
+                            gap: 10,
+                            marginTop: 4,
+                        }}
+                    >
+                        <Icon source="shield-check-outline" size={20} color="#22c55e" />
+                        <View style={{ flex: 1 }}>
+                            <Text style={{ color: colors.sectionHeaderText, fontSize: 13, fontFamily: 'CenturyGothic-Bold', marginBottom: 2 }}>
+                                {t('subscription.paytrSecure')}
+                            </Text>
+                            <Text style={{ color: colors.textSecondary, fontSize: 12, fontFamily: 'CenturyGothic' }}>
+                                {t('subscription.paytrNote')}
+                            </Text>
+                        </View>
+                    </View>
+                )}
 
             </ScrollView>
 
-            <Modal visible={!!paytrUrl} animationType="slide" onRequestClose={() => setPaytrUrl(null)}>
+            <Modal visible={Platform.OS !== 'android' && !!paytrUrl} animationType="slide" onRequestClose={() => setPaytrUrl(null)}>
                 <SafeAreaView style={{ flex: 1, backgroundColor: colors.screenBg }}>
                     <View
                         style={{

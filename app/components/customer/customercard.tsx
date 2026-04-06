@@ -96,7 +96,7 @@ const CustomerCard: React.FC<Props> = ({
 
                     {!isList && (
                         <View className="flex-row justify-between pr-2">
-                            <Text className='text-base text-gray-500'>{t('card.customer')}</Text>
+                            <Text className="text-sm text-gray-500 font-century-gothic-sans-medium">{t('card.customer')}</Text>
                             <FavoriteButton
                                 isFavorite={isFavorite}
                                 favoriteCount={favoriteCount}

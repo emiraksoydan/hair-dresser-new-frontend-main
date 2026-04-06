@@ -1,10 +1,10 @@
 import { Icon } from "react-native-paper";
-import React, { useState } from 'react';
+import React from 'react';
 import { View, TouchableOpacity } from 'react-native';
 import { Text } from '../common/Text';
 
 import { useLanguage } from '../../hook/useLanguage';
-import { LegalModal } from '../common/LegalModal';
+import { useSafeNavigation } from '../../hook/useSafeNavigation';
 import { LegalDocumentType } from '../../constants/legal';
 
 interface LegalAgreementCheckboxProps {
@@ -17,11 +17,11 @@ export const LegalAgreementCheckbox: React.FC<LegalAgreementCheckboxProps> = ({
     checked, onToggle, error,
 }) => {
     const { t } = useLanguage();
-    const [modalDoc, setModalDoc] = useState<LegalDocumentType | null>(null);
+    const router = useSafeNavigation();
 
     const LinkText = ({ docType, label }: { docType: LegalDocumentType; label: string }) => (
         <TouchableOpacity
-            onPress={() => setModalDoc(docType)}
+            onPress={() => router.push(`/(screens)/legal/${docType}`)}
             activeOpacity={0.6}
             hitSlop={{ top: 6, bottom: 6, left: 2, right: 2 }}
         >
@@ -89,12 +89,6 @@ export const LegalAgreementCheckbox: React.FC<LegalAgreementCheckboxProps> = ({
                     {error}
                 </Text>
             )}
-
-            <LegalModal
-                visible={modalDoc !== null}
-                onClose={() => setModalDoc(null)}
-                documentType={modalDoc || 'kvkk'}
-            />
         </View>
     );
 };

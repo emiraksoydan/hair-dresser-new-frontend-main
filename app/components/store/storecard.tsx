@@ -14,6 +14,7 @@ import { ServiceOfferingsList } from '../common/ServiceOfferingsList';
 import { PricingInfo } from '../common/PricingInfo';
 import { getBarberTypeLabel } from '../../utils/card-helpers';
 import { useTheme } from '../../hook/useTheme';
+import { useLanguage } from '../../hook/useLanguage';
 import { PanelImageOverflowMenu } from '../panel/PanelImageOverflowMenu';
 
 type Props = {
@@ -35,6 +36,7 @@ type Props = {
 
 const StoreCard: React.FC<Props> = ({ store, isList, expanded, cardWidthStore, isViewerFromFreeBr = false, typeLabel, typeLabelColor = 'bg-blue-500', onPressUpdate, onPressRatings, showImageAnimation = true, panelCompare, compactMeta = false }) => {
     const { colors } = useTheme();
+    const { t } = useLanguage();
     const carouselWidth = Math.max(0, cardWidthStore - 20);
     const { isFavorite, favoriteCount, isLoading, favoriteDisabled, toggleFavorite } = useFavoriteToggle({
         targetId: store.id,
@@ -55,11 +57,19 @@ const StoreCard: React.FC<Props> = ({ store, isList, expanded, cardWidthStore, i
 
     return (
         <View
-            style={{ width: cardWidthStore, borderRadius: 12 }}
+            style={{ width: cardWidthStore, marginBottom: 12 }}
             className="mt-4"
         >
             <View
-                className={` ${!isList ? "pl-4 py-2 rounded-lg" : "rounded-xl p-3"}`}
+                style={{
+                    borderRadius: 12,
+                    overflow: "hidden",
+                    borderWidth: 1,
+                    borderColor: colors.borderColor2,
+                }}
+            >
+            <View
+                className={` ${!isList ? "pl-4 py-2 rounded-lg" : "rounded-xl px-3 pt-3 pb-4"}`}
                 style={{ backgroundColor: colors.cardBg }}
             >
                 {!isList && (
@@ -101,7 +111,7 @@ const StoreCard: React.FC<Props> = ({ store, isList, expanded, cardWidthStore, i
                             </View>
                         )}
                     </View>
-                    <View className="flex-1 flex-col gap-2" style={{ minWidth: 0, maxWidth: '100%' }}>
+                    <View className={`flex-1 flex-col ${isList ? 'gap-2' : 'gap-1'}`} style={{ minWidth: 0, maxWidth: '100%' }}>
                         <View
                             className={`flex-row justify-between ${!isList ? 'items-start' : 'items-center'}`}
                             style={{ minWidth: 0, maxWidth: '100%' }}
@@ -128,7 +138,7 @@ const StoreCard: React.FC<Props> = ({ store, isList, expanded, cardWidthStore, i
 
                         {!isList && (
                             <View className="flex-row justify-between pr-2">
-                                <Text style={{ color: colors.textSecondary }} className={compactMeta ? 'text-sm' : 'text-base'}>{getBarberTypeLabel(store.type)}</Text>
+                                <Text style={{ color: colors.textSecondary }} className="text-sm font-century-gothic-sans-medium">{getBarberTypeLabel(store.type)}</Text>
                                 <FavoriteButton
                                     isFavorite={isFavorite}
                                     favoriteCount={favoriteCount}
@@ -136,7 +146,6 @@ const StoreCard: React.FC<Props> = ({ store, isList, expanded, cardWidthStore, i
                                     favoriteDisabled={favoriteDisabled}
                                     onPress={toggleFavorite}
                                     variant="button"
-                                    className="pb-1"
                                 />
                             </View>
                         )}
@@ -153,9 +162,9 @@ const StoreCard: React.FC<Props> = ({ store, isList, expanded, cardWidthStore, i
                             />
                         </View>
                         {store.storeNo && (
-                            <View className="flex-row items-center mt-1">
+                            <View className="flex-row items-center">
                                 <Text style={{ color: colors.textSecondary, fontSize: compactMeta ? 10 : 11, fontFamily: 'CenturyGothic' }}>
-                                    {'#'}{store.storeNo}
+                                    {t('card.storeNo')}{': #'}{store.storeNo}
                                 </Text>
                             </View>
                         )}
@@ -176,6 +185,7 @@ const StoreCard: React.FC<Props> = ({ store, isList, expanded, cardWidthStore, i
                         />
                     )}
                 </View>
+            </View>
             </View>
         </View>
     );

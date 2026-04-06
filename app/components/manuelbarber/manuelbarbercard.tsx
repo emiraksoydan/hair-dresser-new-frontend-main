@@ -60,8 +60,8 @@ const ManuelBarberCard: React.FC<Props> = ({
                     {isList && (
                         <View className="absolute top-3 right-3 flex-row gap-2 z-10">
                             {typeLabel && (
-                                <View className={`${typeLabelColor} px-2 py-1 rounded-xl flex-row items-center justify-center`}>
-                                    <Text className="text-white text-base font-century-gothic-sans-medium">
+                                <View className={`${typeLabelColor} px-2.5 py-1 rounded-xl flex-row items-center justify-center`}>
+                                    <Text className="text-white text-sm font-century-gothic-sans-medium">
                                         {typeLabel}
                                     </Text>
                                 </View>

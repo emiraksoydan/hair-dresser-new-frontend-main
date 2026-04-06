@@ -167,95 +167,95 @@ export default function RequestsPage() {
         const processed = item.isProcessed;
         return (
             <ScrollStackItem index={index} scroll={scrollY} vanish>
-            <View
-                className="mb-3 overflow-hidden rounded-xl pl-3 pr-3 py-3"
-                style={{
-                    backgroundColor: colors.cardBg2,
-                    borderWidth: 1,
-                    borderColor: colors.borderColor,
-                    borderLeftWidth: 3,
-                    borderLeftColor: ACCENT,
-                }}
-            >
-                <View className="flex-row items-start justify-between">
-                    <View className="flex-1 pr-2">
-                        <Text
-                            style={{
-                                color: colors.sectionHeaderText,
-                                fontFamily: "CenturyGothic-Bold",
-                                fontSize: 15,
-                            }}
-                        >
-                            {item.requestTitle}
-                        </Text>
-                        <View className="mt-1 flex-row items-center">
-                            <Icon source="clock-outline" size={12} color={colors.textSecondary} />
-                            <Text
-                                style={{
-                                    color: colors.textSecondary,
-                                    fontFamily: "CenturyGothic",
-                                    fontSize: 11,
-                                    marginLeft: 4,
-                                }}
-                            >
-                                {formatDateTime(item.createdAt)}
-                            </Text>
-                        </View>
-                    </View>
-                    <View className="flex-row items-center">
-                        <View
-                            style={{
-                                paddingHorizontal: 8,
-                                paddingVertical: 4,
-                                borderRadius: 999,
-                                backgroundColor: processed
-                                    ? isDark
-                                        ? "rgba(34, 197, 94, 0.15)"
-                                        : "rgba(34, 197, 94, 0.12)"
-                                    : isDark
-                                      ? "rgba(245, 158, 11, 0.15)"
-                                      : "rgba(245, 158, 11, 0.14)",
-                            }}
-                        >
-                            <Text
-                                style={{
-                                    fontFamily: "CenturyGothic-Bold",
-                                    fontSize: 10,
-                                    color: processed ? "#22c55e" : "#f59e0b",
-                                }}
-                            >
-                                {processed ? t("profile.processed") : t("profile.pending")}
-                            </Text>
-                        </View>
-                        <TouchableOpacity
-                            onPress={() => handleDelete(item.id)}
-                            disabled={isDeleting}
-                            style={{
-                                marginLeft: 8,
-                                padding: 8,
-                                borderRadius: 10,
-                                backgroundColor: colors.cardBg3,
-                                borderWidth: 1,
-                                borderColor: colors.borderColor2,
-                            }}
-                        >
-                            <Icon source="delete-outline" size={18} color="#ef4444" />
-                        </TouchableOpacity>
-                    </View>
-                </View>
                 <View
-                    className="mt-2.5 rounded-lg px-3 py-2.5"
+                    className="mb-3 overflow-hidden rounded-xl pl-3 pr-3 py-3"
                     style={{
-                        backgroundColor: colors.cardBg3,
+                        backgroundColor: colors.cardBg2,
                         borderWidth: 1,
                         borderColor: colors.borderColor,
+                        borderLeftWidth: 3,
+                        borderLeftColor: ACCENT,
                     }}
                 >
-                    <Text style={{ color: colors.sectionHeaderText, fontFamily: "CenturyGothic", fontSize: 13, lineHeight: 19 }}>
-                        {item.requestMessage}
-                    </Text>
+                    <View className="flex-row items-start justify-between">
+                        <View className="flex-1 pr-2">
+                            <Text
+                                style={{
+                                    color: colors.sectionHeaderText,
+                                    fontFamily: "CenturyGothic-Bold",
+                                    fontSize: 15,
+                                }}
+                            >
+                                {item.requestTitle}
+                            </Text>
+                            <View className="mt-1 flex-row items-center">
+                                <Icon source="clock-outline" size={12} color={colors.textSecondary} />
+                                <Text
+                                    style={{
+                                        color: colors.textSecondary,
+                                        fontFamily: "CenturyGothic",
+                                        fontSize: 11,
+                                        marginLeft: 4,
+                                    }}
+                                >
+                                    {formatDateTime(item.createdAt)}
+                                </Text>
+                            </View>
+                        </View>
+                        <View className="flex-row items-center">
+                            <View
+                                style={{
+                                    paddingHorizontal: 8,
+                                    paddingVertical: 4,
+                                    borderRadius: 999,
+                                    backgroundColor: processed
+                                        ? isDark
+                                            ? "rgba(34, 197, 94, 0.15)"
+                                            : "rgba(34, 197, 94, 0.12)"
+                                        : isDark
+                                            ? "rgba(245, 158, 11, 0.15)"
+                                            : "rgba(245, 158, 11, 0.14)",
+                                }}
+                            >
+                                <Text
+                                    style={{
+                                        fontFamily: "CenturyGothic-Bold",
+                                        fontSize: 10,
+                                        color: processed ? "#22c55e" : "#f59e0b",
+                                    }}
+                                >
+                                    {processed ? t("profile.processed") : t("profile.pending")}
+                                </Text>
+                            </View>
+                            <TouchableOpacity
+                                onPress={() => handleDelete(item.id)}
+                                disabled={isDeleting}
+                                style={{
+                                    marginLeft: 8,
+                                    padding: 8,
+                                    borderRadius: 10,
+                                    backgroundColor: colors.cardBg3,
+                                    borderWidth: 1,
+                                    borderColor: colors.borderColor2,
+                                }}
+                            >
+                                <Icon source="delete-outline" size={18} color="#ef4444" />
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                    <View
+                        className="mt-2.5 rounded-lg px-3 py-2.5"
+                        style={{
+                            backgroundColor: colors.cardBg3,
+                            borderWidth: 1,
+                            borderColor: colors.borderColor,
+                        }}
+                    >
+                        <Text style={{ color: colors.sectionHeaderText, fontFamily: "CenturyGothic", fontSize: 13, lineHeight: 19 }}>
+                            {item.requestMessage}
+                        </Text>
+                    </View>
                 </View>
-            </View>
             </ScrollStackItem>
         );
     };
@@ -362,85 +362,85 @@ export default function RequestsPage() {
                     keyboardVerticalOffset={Platform.OS === "ios" ? formMetrics.iosKbOffset : 0}
                 >
                     <Pressable style={{ flex: 1 }} onPress={Keyboard.dismiss} accessible={false}>
-                    <View
-                        style={{
-                            flex: 1,
-                            paddingHorizontal: formMetrics.padH,
-                            paddingTop: formMetrics.padTop,
-                        }}
-                    >
                         <View
-                            className="mb-3 rounded-xl p-3.5"
                             style={{
-                                backgroundColor: colors.cardBg2,
-                                borderWidth: 1,
-                                borderColor: colors.borderColor,
+                                flex: 1,
+                                paddingHorizontal: formMetrics.padH,
+                                paddingTop: formMetrics.padTop,
                             }}
                         >
-                            <View className="flex-row items-center">
-                                <View
-                                    style={{
-                                        padding: 8,
-                                        borderRadius: 10,
-                                        backgroundColor: isDark ? "rgba(255, 185, 0, 0.12)" : "#fffbeb",
-                                        marginRight: 12,
-                                    }}
-                                >
-                                    <Icon source="information-outline" size={22} color={ACCENT} />
+                            <View
+                                className="mb-3 rounded-xl p-3.5"
+                                style={{
+                                    backgroundColor: colors.cardBg2,
+                                    borderWidth: 1,
+                                    borderColor: colors.borderColor,
+                                }}
+                            >
+                                <View className="flex-row items-center">
+                                    <View
+                                        style={{
+                                            padding: 8,
+                                            borderRadius: 10,
+                                            backgroundColor: isDark ? "rgba(255, 185, 0, 0.12)" : "#fffbeb",
+                                            marginRight: 12,
+                                        }}
+                                    >
+                                        <Icon source="information-outline" size={22} color={ACCENT} />
+                                    </View>
+                                    <Text
+                                        style={{
+                                            flex: 1,
+                                            color: colors.textSecondary,
+                                            fontFamily: "CenturyGothic",
+                                            fontSize: 15,
+                                            lineHeight: 22,
+                                        }}
+                                    >
+                                        {t("profile.formDescription")}
+                                    </Text>
                                 </View>
-                                <Text
-                                    style={{
-                                        flex: 1,
-                                        color: colors.textSecondary,
-                                        fontFamily: "CenturyGothic",
-                                        fontSize: 15,
-                                        lineHeight: 22,
-                                    }}
-                                >
-                                    {t("profile.formDescription")}
-                                </Text>
+                            </View>
+
+                            <Text style={labelAccent}>{t("profile.titleLabel")}</Text>
+                            <TextInput
+                                value={title}
+                                onChangeText={setTitle}
+                                placeholder={t("profile.titlePlaceholder")}
+                                placeholderTextColor={colors.textSecondary}
+                                maxLength={200}
+                                style={[inputStyle, { marginBottom: formMetrics.titleBottom }]}
+                            />
+
+                            <Text style={labelAccent}>{t("profile.messageLabel")}</Text>
+                            <View style={{ flex: 1, minHeight: formMetrics.msgMin, marginBottom: formMetrics.msgGap }}>
+                                <TextInput
+                                    value={message}
+                                    onChangeText={setMessage}
+                                    placeholder={t("profile.messagePlaceholder")}
+                                    placeholderTextColor={colors.textSecondary}
+                                    multiline
+                                    maxLength={2000}
+                                    textAlignVertical="top"
+                                    style={[
+                                        inputStyle,
+                                        {
+                                            flex: 1,
+                                            minHeight: formMetrics.msgMin,
+                                            paddingTop: formMetrics.inputPadTop,
+                                        },
+                                    ]}
+                                />
+                            </View>
+
+                            <View
+                                style={{
+                                    paddingBottom: formMetrics.btnBottom,
+                                }}
+                            >
+                                {primaryButton(handleSubmit, isCreating, t("profile.submit"))}
                             </View>
                         </View>
-
-                        <Text style={labelAccent}>{t("profile.titleLabel")}</Text>
-                        <TextInput
-                            value={title}
-                            onChangeText={setTitle}
-                            placeholder={t("profile.titlePlaceholder")}
-                            placeholderTextColor={colors.textSecondary}
-                            maxLength={200}
-                            style={[inputStyle, { marginBottom: formMetrics.titleBottom }]}
-                        />
-
-                        <Text style={labelAccent}>{t("profile.messageLabel")}</Text>
-                        <View style={{ flex: 1, minHeight: formMetrics.msgMin, marginBottom: formMetrics.msgGap }}>
-                            <TextInput
-                                value={message}
-                                onChangeText={setMessage}
-                                placeholder={t("profile.messagePlaceholder")}
-                                placeholderTextColor={colors.textSecondary}
-                                multiline
-                                maxLength={2000}
-                                textAlignVertical="top"
-                                style={[
-                                    inputStyle,
-                                    {
-                                        flex: 1,
-                                        minHeight: formMetrics.msgMin,
-                                        paddingTop: formMetrics.inputPadTop,
-                                    },
-                                ]}
-                            />
-                        </View>
-
-                        <View
-                            style={{
-                                paddingBottom: formMetrics.btnBottom,
-                            }}
-                        >
-                            {primaryButton(handleSubmit, isCreating, t("profile.submit"))}
-                        </View>
-                    </View>
                     </Pressable>
                 </KeyboardAvoidingView>
             ) : (

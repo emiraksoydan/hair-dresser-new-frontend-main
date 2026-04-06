@@ -1,6 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { View, Dimensions } from 'react-native';
-import Animated, { useAnimatedScrollHandler, useSharedValue } from 'react-native-reanimated';
+import { View, Dimensions, FlatList } from 'react-native';
 import { PerplexityListItem } from './PerplexityListItem';
 import { PerplexityHorizontalList } from './PerplexityHorizontalList';
 import { Text } from '../common/Text';
@@ -48,13 +47,7 @@ export const StoresSection = React.memo(({ stores, loading, hasLocation, locatio
     const { t } = useLanguage();
     const [expanded, setExpanded] = useState(true);
     const screenWidth = Dimensions.get('window').width;
-    const cardWidth = expanded ? screenWidth * 0.92 : screenWidth * 0.94;
-    const scrollY = useSharedValue(0);
-    const onScroll = useAnimatedScrollHandler({
-        onScroll: (e) => {
-            scrollY.value = e.contentOffset.y / storeRowStride;
-        },
-    });
+    const cardWidth = expanded ? screenWidth * 0.935 : screenWidth * 0.955;
 
     // Network/Server error — panel keşif ile aynı kart + tekrar dene
     if (error) {
@@ -128,23 +121,17 @@ export const StoresSection = React.memo(({ stores, loading, hasLocation, locatio
         );
     }
 
-    const storeRowStride = isList ? 300 : 270;
-
     return (
         <View>
             <SectionHeader title="İşletmeler" expanded={expanded} onToggle={() => setExpanded(!expanded)} />
             {expanded ? (
-                <Animated.FlatList
+                <FlatList
                     data={stores}
                     keyExtractor={(s: any) => s.id}
-                    onScroll={onScroll}
                     scrollEventThrottle={16}
                     showsVerticalScrollIndicator={false}
-                    renderItem={({ item: s, index }: { item: any; index: number }) => (
-                        <PerplexityListItem
-                            scrollPos={scrollY}
-                            index={index}
-                        >
+                    renderItem={({ item: s }: { item: any; index: number }) => (
+                        <PerplexityListItem>
                             <StoreCardInner store={s} isList={isList} expanded={expanded} cardWidthStore={cardWidth} compactMeta onPressUpdate={onPressStore} onPressRatings={onPressRatings} showImageAnimation={showImageAnimation} />
                         </PerplexityListItem>
                     )}
@@ -154,7 +141,6 @@ export const StoresSection = React.memo(({ stores, loading, hasLocation, locatio
                 <PerplexityHorizontalList<BarberStoreGetDto>
                     data={stores as BarberStoreGetDto[]}
                     keyExtractor={(item) => item.id}
-                    snapInterval={cardWidth + 12}
                     contentContainerStyle={{ paddingTop: 8, gap: 12, paddingHorizontal: 10 }}
                     nestedScrollEnabled
                     renderItem={({ item }) => (
@@ -170,13 +156,7 @@ export const FreeBarbersSection = React.memo(({ freeBarbers, loading, hasLocatio
     const { t } = useLanguage();
     const [expanded, setExpanded] = useState(false);
     const screenWidth = Dimensions.get('window').width;
-    const cardWidth = expanded ? screenWidth * 0.92 : screenWidth * 0.94;
-    const scrollYFb = useSharedValue(0);
-    const onScrollFb = useAnimatedScrollHandler({
-        onScroll: (e) => {
-            scrollYFb.value = e.contentOffset.y / fbRowStride;
-        },
-    });
+    const cardWidth = expanded ? screenWidth * 0.935 : screenWidth * 0.955;
 
     if (error) {
         return (
@@ -249,23 +229,17 @@ export const FreeBarbersSection = React.memo(({ freeBarbers, loading, hasLocatio
         );
     }
 
-    const fbRowStride = isList ? 300 : 270;
-
     return (
         <View>
             <SectionHeader title="Serbest Berberler" expanded={expanded} onToggle={() => setExpanded(!expanded)} />
             {expanded ? (
-                <Animated.FlatList
+                <FlatList
                     data={freeBarbers}
                     keyExtractor={(fb: any) => fb.id}
-                    onScroll={onScrollFb}
                     scrollEventThrottle={16}
                     showsVerticalScrollIndicator={false}
-                    renderItem={({ item: fb, index }: { item: any; index: number }) => (
-                        <PerplexityListItem
-                            scrollPos={scrollYFb}
-                            index={index}
-                        >
+                    renderItem={({ item: fb }: { item: any; index: number }) => (
+                        <PerplexityListItem>
                             <FreeBarberCardInner freeBarber={fb} isList={isList} expanded={expanded} cardWidthFreeBarber={cardWidth} compactMeta onPressUpdate={onPressFreeBarber} onPressRatings={onPressRatings} showImageAnimation={showImageAnimation} />
                         </PerplexityListItem>
                     )}
@@ -275,7 +249,6 @@ export const FreeBarbersSection = React.memo(({ freeBarbers, loading, hasLocatio
                 <PerplexityHorizontalList<FreeBarGetDto>
                     data={freeBarbers as FreeBarGetDto[]}
                     keyExtractor={(item) => item.id}
-                    snapInterval={cardWidth + 12}
                     contentContainerStyle={{ paddingTop: 8, gap: 12, paddingHorizontal: 10 }}
                     nestedScrollEnabled
                     renderItem={({ item }) => (

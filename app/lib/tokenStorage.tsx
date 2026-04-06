@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { clearHelpGuidePendingLocal } from './helpGuideOnboarding';
 
 const ASYNC_KEY = 'auth_tokens_v1';
 const SERVICE = 'com.hairdresser.app.tokens';
@@ -48,4 +49,5 @@ export async function clearStoredTokens() {
         } catch {}
     }
     await AsyncStorage.removeItem(ASYNC_KEY);
+    await clearHelpGuidePendingLocal();
 }

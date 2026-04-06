@@ -11,7 +11,8 @@ interface TypeLabelProps {
 }
 
 /**
- * Reusable type label badge component
+ * Reusable type label badge — StatusBadge (panel büyük mod) ile aynı metin/padding
+ * compact: pill (rounded-full), aksi: rounded-xl
  */
 export const TypeLabel: React.FC<TypeLabelProps> = ({
   label,
@@ -23,9 +24,9 @@ export const TypeLabel: React.FC<TypeLabelProps> = ({
 
   return (
     <View
-      className={`${color} ${compact ? 'px-2.5 py-1 rounded-full' : 'px-2 py-1 rounded-xl'} flex-row items-center justify-center self-start ${className}`}
+      className={`${color} px-2.5 py-1 ${compact ? 'rounded-full' : 'rounded-xl'} flex-row items-center justify-center self-start ${className}`}
     >
-      <Text className={`text-white font-century-gothic-sans-medium ${compact ? 'text-sm' : 'text-base'}`}>
+      <Text className="text-white font-century-gothic-sans-medium text-sm">
         {label}
       </Text>
     </View>

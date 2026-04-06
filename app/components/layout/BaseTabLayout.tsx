@@ -19,7 +19,7 @@ import {
   type MoreFabMenuItem,
   type HeaderDeleteAction,
 } from "./MoreFabContext";
-import { InfoModal } from "../common/infomodal";
+import { HelpGuideOnboardingNudge } from "./HelpGuideOnboardingNudge";
 import { useAppDispatch, useAppSelector } from "../../store/hook";
 import { showSnack } from "../../store/snackbarSlice";
 import { resetSubscriptionExpired } from "../../store/subscriptionSlice";
@@ -29,10 +29,7 @@ import { useBottomSheet } from "../../hook/useBottomSheet";
 import { useNotificationSound } from "../../hook/useNotificationSound";
 import { useLanguage } from "../../hook/useLanguage";
 import { useTheme } from "../../hook/useTheme";
-import {
-  useGetBadgeCountsQuery,
-  useGetHelpGuideByUserTypeQuery,
-} from "../../store/api";
+import { useGetBadgeCountsQuery } from "../../store/api";
 import { UserType } from "../../types";
 
 export interface TabConfig {
@@ -119,7 +116,6 @@ export const BaseTabLayout: React.FC<BaseTabLayoutProps> = ({
     if (tail.length === 1 && tail[0] === "index") return true;
     return false;
   }, [segments]);
-  const [infoModalVisible, setInfoModalVisible] = useState(false);
   const aiSheetRef = useRef<BottomSheetModal>(null);
   const [aiSheetOpen, setAiSheetOpen] = useState(false);
   const [notiSheetOpen, setNotiSheetOpen] = useState(false);
@@ -163,30 +159,14 @@ export const BaseTabLayout: React.FC<BaseTabLayoutProps> = ({
   // Play notification sound when badge count changes
   useNotificationSound(unreadNoti);
 
-  // Help guide items - API'den dinamik olarak çek
-  const { data: helpGuideResponse } = useGetHelpGuideByUserTypeQuery(
-    userType,
-    { skip: !isAuthenticated },
-  );
-
-  const infoItems = useMemo(() => {
-    if (helpGuideResponse?.success && helpGuideResponse?.data?.length > 0) {
-      return helpGuideResponse.data.map((guide) => ({
-        title: guide.title,
-        description: guide.description,
-      }));
-    }
-    return [];
-  }, [helpGuideResponse]);
-
   // Ortak header actions callbacks
   const handleNotificationPress = useCallback(() => {
     notificationsSheet.present();
   }, [notificationsSheet]);
 
   const handleInfoPress = useCallback(() => {
-    setInfoModalVisible(true);
-  }, []);
+    router.push("/(screens)/help-guide" as any);
+  }, [router]);
 
   const handleAIAssistantPress = useCallback(() => {
     setAiSheetOpen(true);
@@ -437,13 +417,7 @@ export const BaseTabLayout: React.FC<BaseTabLayoutProps> = ({
         />
       </BottomSheetModal>
 
-      {/* Info Modal */}
-      <InfoModal
-        visible={infoModalVisible}
-        onClose={() => setInfoModalVisible(false)}
-        title={t("navigation.usageInfo")}
-        items={infoItems}
-      />
+      <HelpGuideOnboardingNudge />
 
       {/* Additional Bottom Sheets */}
       {renderAdditionalBottomSheets?.()}

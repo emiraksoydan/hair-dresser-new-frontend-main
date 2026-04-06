@@ -85,3 +85,18 @@ export function getProfileNativeSwitchProps(isDark: boolean, value: boolean) {
     };
 }
 
+/**
+ * Kazanç grafiği / tablo switch — track beyaz, thumb duruma göre renkli (açık: sarı, kapalı: nötr gri).
+ */
+export function getEarningsChartSwitchProps(value: boolean) {
+    const s = COLORS.PROFILE_SWITCH;
+    const track = "#ffffff";
+    const thumbOn = s.ACTIVE;
+    const thumbOff = "#94a3b8";
+    return {
+        trackColor: { false: track, true: track } as const,
+        thumbColor: Platform.OS === "ios" ? (value ? thumbOn : thumbOff) : value ? thumbOn : thumbOff,
+        ios_backgroundColor: track,
+    };
+}
+

@@ -1,17 +1,12 @@
-import React, { useState, useMemo, memo } from "react";
-import { View, Dimensions } from "react-native";
-import { IconButton } from "react-native-paper";
-import { Text } from "../common/Text";
+import React, { useMemo, memo } from "react";
+import { View } from "react-native";
 import { PanelEmptyCta } from "../common/PanelEmptyCta";
 import { SkeletonComponent } from "../common/skeleton";
 import { UnifiedStateManager } from "../common/UnifiedStateManager";
-import MotiViewExpand from "../common/motiviewexpand";
 import { FreeBarberMineCardComp } from "./freebarberminecard";
-import { toggleExpand } from "../../utils/common/expand-toggle";
 import { getErrorMessage } from "../../utils/errorHandler";
 import { FreeBarberPanelDto } from "../../types";
 import { useLanguage } from "../../hook/useLanguage";
-import { useTheme } from "../../hook/useTheme";
 
 interface Props {
   isList: boolean;
@@ -30,8 +25,6 @@ interface Props {
   categoryNameById?: Map<string, string>;
   showImageAnimation?: boolean;
   onRetry?: () => void;
-  /** Liste/grid geçişi; verilirse başlık satırında chevron’un solunda gösterilir */
-  onToggleLayout?: () => void;
 }
 
 // React.memo ile sarmaladık. Sadece props değişirse render olur.
@@ -53,15 +46,12 @@ export const FreeBarberPanelSection = memo(
     categoryNameById,
     showImageAnimation = true,
     onRetry,
-    onToggleLayout,
   }: Props) => {
     const { t } = useLanguage();
-    const { colors } = useTheme();
-    const [expandedMineStore, setExpandedMineStore] = useState(true);
     const hasMineFreeBarber = !isLoading && freeBarber?.fullName != null;
     const cardWidthFreeBarber = useMemo(
-      () => (expandedMineStore ? screenWidth * 0.92 : screenWidth * 0.94),
-      [expandedMineStore, screenWidth],
+      () => screenWidth * 0.935,
+      [screenWidth],
     );
 
     // Basit filtre kontrolü - sadece searchQuery
@@ -82,39 +72,6 @@ export const FreeBarberPanelSection = memo(
 
     return (
       <>
-        <View className="flex flex-row justify-between items-center mt-1">
-          <View className="flex-row items-center gap-2 flex-1 mr-2">
-            <Text style={{ color: colors.sectionHeaderText }} className="font-century-gothic-sans-regular text-xl">
-              {t("panel.myPanel")}
-            </Text>
-            {hasMineFreeBarber && isTracking && (
-              <View
-                className={`w-2 h-2 rounded-full ${isUpdating ? "bg-yellow-400" : "bg-green-500"}`}
-              />
-            )}
-          </View>
-
-          {hasMineFreeBarber && (
-            <View className="flex-row items-center shrink-0">
-              {onToggleLayout && (
-                <IconButton
-                  icon={isList ? "format-list-bulleted" : "view-grid-outline"}
-                  iconColor="#ffb900"
-                  size={20}
-                  onPress={onToggleLayout}
-                  style={{ margin: 0 }}
-                />
-              )}
-              <MotiViewExpand
-                expanded={expandedMineStore}
-                onPress={() =>
-                  toggleExpand(expandedMineStore, setExpandedMineStore)
-                }
-                size={20}
-              />
-            </View>
-          )}
-        </View>
         {isLoading ? (
           <View className="flex-1 pt-4">
             {Array.from({ length: 1 }).map((_, i) => (
@@ -157,7 +114,7 @@ export const FreeBarberPanelSection = memo(
             <FreeBarberMineCardComp
               freeBarber={freeBarber as FreeBarberPanelDto}
               isList={isList}
-              expanded={expandedMineStore}
+              expanded={true}
               cardWidthFreeBarber={cardWidthFreeBarber}
               onPressUpdate={(barber) => onOpenPanel(barber.id)}
               onPressRatings={onPressRatings}

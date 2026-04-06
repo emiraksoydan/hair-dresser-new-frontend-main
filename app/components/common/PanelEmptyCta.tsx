@@ -1,5 +1,6 @@
 import React from "react";
 import { View, StyleSheet } from "react-native";
+import { MotiView } from "moti";
 import { LottieViewComponent } from "./lottieview";
 import { Button } from "./Button";
 import { Text } from "./Text";
@@ -27,32 +28,44 @@ export function PanelEmptyCta({ title, subtitle, buttonLabel, onPress }: Props) 
     >
       <LottieViewComponent message={title} animationSize={110} />
       {subtitle ? (
-        <Text
-          numberOfLines={4}
-          style={{
-            color: colors.textSecondary,
-            textAlign: "center",
-            paddingHorizontal: 20,
-            marginTop: 2,
-            marginBottom: 2,
-            fontSize: 15,
-            lineHeight: 21,
-            fontFamily: "CenturyGothic",
-          }}
+        <MotiView
+          from={{ opacity: 0, translateY: 8 }}
+          animate={{ opacity: 1, translateY: 0 }}
+          transition={{ type: "timing", duration: 500, delay: 200 }}
         >
-          {subtitle}
-        </Text>
+          <Text
+            numberOfLines={4}
+            style={{
+              color: colors.textSecondary,
+              textAlign: "center",
+              paddingHorizontal: 20,
+              marginTop: 2,
+              marginBottom: 2,
+              fontSize: 15,
+              lineHeight: 21,
+              fontFamily: "CenturyGothic",
+            }}
+          >
+            {subtitle}
+          </Text>
+        </MotiView>
       ) : null}
-      <Button
-        style={{ marginTop: 12, marginBottom: 16, marginHorizontal: 16 }}
-        buttonColor="#ffb900"
-        mode="contained"
-        icon="plus"
-        onPress={onPress}
-        labelStyle={{ fontFamily: "CenturyGothic-Bold" }}
+      <MotiView
+        from={{ opacity: 0, translateY: 10 }}
+        animate={{ opacity: 1, translateY: 0 }}
+        transition={{ type: "timing", duration: 500, delay: 350 }}
       >
-        {buttonLabel}
-      </Button>
+        <Button
+          style={{ marginTop: 12, marginBottom: 16, marginHorizontal: 16 }}
+          buttonColor="#ffb900"
+          mode="contained"
+          icon="plus"
+          onPress={onPress}
+          labelStyle={{ fontFamily: "CenturyGothic-Bold" }}
+        >
+          {buttonLabel}
+        </Button>
+      </MotiView>
     </View>
   );
 }

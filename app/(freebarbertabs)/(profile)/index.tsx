@@ -4,7 +4,7 @@ import { Text } from '../../components/common/Text'
 import { Avatar, Divider, HelperText, Icon, IconButton, Modal as PaperModal, Portal, Switch, TextInput } from "react-native-paper";
 import { OtpInput } from 'react-native-otp-entry';
 import { Button } from '../../components/common/Button';
-import { useRevokeMutation, useGetMeQuery, useUpdateProfileMutation, useUploadImageMutation, useUpdateImageBlobMutation, useGetSettingQuery, useUpdateSettingMutation, useGetSubscriptionStatusQuery, useSendPhoneChangeOtpMutation, useUpdatePhoneMutation } from '../../store/api';
+import { useRevokeMutation, useGetMeQuery, useUpdateProfileMutation, useUploadImageMutation, useUpdateImageBlobMutation, useGetSettingQuery, useUpdateSettingMutation, useGetSubscriptionStatusQuery, useSendPhoneChangeOtpMutation, useUpdatePhoneMutation, useSendDeleteAccountOtpMutation, useDeleteAccountMutation } from '../../store/api';
 import { tokenStore } from '../../lib/tokenStore';
 import { clearStoredTokens, saveTokens } from '../../lib/tokenStorage';
 import { resetSignalRState } from '../../store/signalrSlice';
@@ -57,6 +57,11 @@ const Index = () => {
     const insets = useSafeAreaInsets();
     const scrollBottomPad = useMemo(() => getTabFabScrollPadding(insets.bottom), [insets.bottom]);
     const [logout, { isLoading: isLoggingOut }] = useRevokeMutation();
+    const [deleteAccount, { isLoading: isDeletingAccount }] = useDeleteAccountMutation();
+    const [sendDeleteAccountOtp, { isLoading: isSendingDeleteOtp }] = useSendDeleteAccountOtpMutation();
+    const [deleteAccountModalVisible, setDeleteAccountModalVisible] = useState(false);
+    const [deleteAccountStep, setDeleteAccountStep] = useState<'confirm' | 'otp'>('confirm');
+    const [deleteAccountOtpCode, setDeleteAccountOtpCode] = useState('');
     const { data: userData, isLoading: isLoadingUser, refetch, isFetching, error: userError, isError: isUserError } = useGetMeQuery();
     const [isLoggingOutState, setIsLoggingOutState] = useState(false);
     const [updateProfile, { isLoading: isUpdating }] = useUpdateProfileMutation();
@@ -286,34 +291,60 @@ const Index = () => {
         try {
             const tokenLoad = tokenStore.refresh;
             if (tokenLoad !== null && tokenLoad !== undefined) {
-                const res = await logout({ refreshToken: tokenLoad });
-                if ('error' in res) {
-                    // Logout hatası sessizce atlanır
-                    setIsLoggingOutState(false);
-                }
-                if (res.data?.success)
-                    InteractionManager.runAfterInteractions(async () => {
-                        // 1. SignalR bağlantısını kapat ve state'i temizle
-                        await resetSignalRState();
-
-                        // 2. RTK Query cache'lerini temizle
-                        dispatch(api.util.resetApiState());
-
-                        // 3. Token'ları temizle
-                        tokenStore.clear();
-                        await clearStoredTokens();
-
-                        // 4. Auth sayfasına yönlendir
-                        router.replace("(auth)");
-                    });
-            } else {
-                setIsLoggingOutState(false);
+                // Best effort — sunucu hatası olsa bile client çıkışı yapılır
+                await logout({ refreshToken: tokenLoad }).catch(() => {});
             }
+            InteractionManager.runAfterInteractions(async () => {
+                // 1. SignalR bağlantısını kapat ve state'i temizle
+                await resetSignalRState();
+
+                // 2. RTK Query cache'lerini temizle
+                dispatch(api.util.resetApiState());
+
+                // 3. Token'ları temizle
+                tokenStore.clear();
+                await clearStoredTokens();
+
+                // 4. Auth sayfasına yönlendir
+                router.replace("(auth)");
+            });
         } catch {
-            // Error handled silently
             setIsLoggingOutState(false);
         }
     }, [logout, router, dispatch]);
+
+    const handleSendDeleteAccountOtp = useCallback(async () => {
+        const result = await sendDeleteAccountOtp({ language: currentLanguage });
+        if ('error' in result) {
+            dispatch(showSnack({ message: (result.error as any)?.data?.message || t('profile.deleteAccountError'), isError: true }));
+            return;
+        }
+        if (result.data?.success) {
+            setDeleteAccountStep('otp');
+            dispatch(showSnack({ message: t('profile.phoneOtpSent'), isError: false }));
+        } else {
+            dispatch(showSnack({ message: result.data?.message || t('profile.deleteAccountError'), isError: true }));
+        }
+    }, [sendDeleteAccountOtp, dispatch, t, currentLanguage]);
+
+    const handleDeleteAccount = useCallback(async () => {
+        try {
+            const result = await deleteAccount({ otpCode: deleteAccountOtpCode }).unwrap();
+            if (result.success) {
+                setDeleteAccountModalVisible(false);
+                dispatch(showSnack({ message: t('profile.deleteAccountSuccess'), isError: false }));
+                await resetSignalRState();
+                dispatch(api.util.resetApiState());
+                tokenStore.clear();
+                await clearStoredTokens();
+                router.replace("(auth)");
+            } else {
+                dispatch(showSnack({ message: result.message || t('profile.deleteAccountError'), isError: true }));
+            }
+        } catch (error: any) {
+            dispatch(showSnack({ message: error?.data?.message || t('profile.deleteAccountError'), isError: true }));
+        }
+    }, [deleteAccount, deleteAccountOtpCode, dispatch, router, t]);
 
     // Memoize error message - Hook'lar early return'lerden önce olmalı
     const errorMessage = useMemo(() => {
@@ -526,17 +557,14 @@ const Index = () => {
                     <TouchableOpacity
                         onPress={() => router.push('/(screens)/profile/free-barber-panel')}
                         activeOpacity={0.7}
-                        className='flex-row items-center justify-between p-4'
+                        className='flex-row items-center p-4'
                         style={{ borderBottomColor: colors.borderColor, borderBottomWidth: 1 }}
                     >
-                        <View className='flex-row items-center flex-1'>
-                            <Icon source="view-dashboard-outline" size={24} color="#ffb900" />
-                            <View className='ml-3 flex-1'>
-                                <Text className='text-lg font-century-gothic-bold' style={{ color: colors.sectionHeaderText }}>{t('panel.viewMyPanel')}</Text>
-                                <Text className='text-sm mt-0.5' style={{ color: colors.textSecondary, fontFamily: 'CenturyGothic' }}>{t('panel.nearbyStores')}</Text>
-                            </View>
+                        <Icon source="view-dashboard-outline" size={24} color="#ffb900" />
+                        <View className='ml-3 flex-1'>
+                            <Text className='text-lg font-century-gothic-bold' style={{ color: colors.sectionHeaderText }}>{t('panel.viewMyPanel')}</Text>
+                            <Text className='text-sm mt-0.5' style={{ color: colors.textSecondary, fontFamily: 'CenturyGothic' }}>{t('panel.nearbyStores')}</Text>
                         </View>
-                        <Icon source="chevron-right" size={24} color="#6b7280" />
                     </TouchableOpacity>
                     <TouchableOpacity
                         onPress={() => router.push('/(screens)/profile/shop-insights')}
@@ -763,6 +791,18 @@ const Index = () => {
                 )}
 
                 <Button
+                    mode='outlined'
+                    icon="account-remove"
+                    onPress={() => setDeleteAccountModalVisible(true)}
+                    disabled={isDeletingAccount}
+                    contentStyle={{ alignItems: 'center', justifyContent: 'center' }}
+                    textColor="#ef4444"
+                    style={{ borderColor: '#ef4444', marginBottom: 8 }}
+                >
+                    {t('profile.deleteAccount')}
+                </Button>
+
+                <Button
                     mode='contained'
                     icon="logout"
                     onPress={handleLogout}
@@ -781,6 +821,89 @@ const Index = () => {
             </View>
 
         <Portal>
+          <PaperModal
+            visible={deleteAccountModalVisible}
+            onDismiss={() => { setDeleteAccountModalVisible(false); setDeleteAccountStep('confirm'); setDeleteAccountOtpCode(''); }}
+            contentContainerStyle={{ padding: 24, margin: 20, borderRadius: 16, backgroundColor: colors.sheetBg }}
+          >
+            {deleteAccountStep === 'confirm' ? (
+              <>
+                <Text style={{ color: colors.sectionHeaderText, fontSize: 18, fontFamily: 'CenturyGothic-Bold', marginBottom: 8 }}>
+                  {t('profile.deleteAccountConfirmTitle')}
+                </Text>
+                <Text style={{ color: '#9ca3af', fontSize: 14, marginBottom: 20, fontFamily: 'CenturyGothic' }}>
+                  {t('profile.deleteAccountConfirmMessage')}
+                </Text>
+                <Button
+                  mode="contained"
+                  onPress={handleSendDeleteAccountOtp}
+                  loading={isSendingDeleteOtp}
+                  disabled={isSendingDeleteOtp}
+                  buttonColor="#ef4444"
+                  textColor="white"
+                  style={{ marginBottom: 8 }}
+                >
+                  {t('profile.deleteAccountOtpSend')}
+                </Button>
+                <Button
+                  mode="outlined"
+                  onPress={() => setDeleteAccountModalVisible(false)}
+                  textColor="#6b7280"
+                  style={{ borderColor: '#6b7280' }}
+                >
+                  {t('common.cancel')}
+                </Button>
+              </>
+            ) : (
+              <>
+                <Text style={{ color: colors.sectionHeaderText, fontSize: 18, fontFamily: 'CenturyGothic-Bold', marginBottom: 8 }}>
+                  {t('profile.deleteAccountOtpTitle')}
+                </Text>
+                <Text style={{ color: '#9ca3af', fontSize: 13, marginBottom: 16, fontFamily: 'CenturyGothic' }}>
+                  {t('profile.deleteAccountOtpDesc')}
+                </Text>
+                <OtpInput
+                  numberOfDigits={6}
+                  onFilled={(code) => { setDeleteAccountOtpCode(code); }}
+                  focusColor="#ef4444"
+                  theme={{
+                    containerStyle: { marginBottom: 12 },
+                    pinCodeContainerStyle: {
+                      width: 44,
+                      height: 52,
+                      borderRadius: 10,
+                      borderWidth: 1,
+                      borderColor: isDark ? '#334155' : '#d1d5db',
+                      backgroundColor: colors.cardBg,
+                    },
+                    pinCodeTextStyle: { fontSize: 20, color: colors.sectionHeaderText },
+                  }}
+                  type="numeric"
+                />
+                <Button
+                  mode="contained"
+                  onPress={handleDeleteAccount}
+                  loading={isDeletingAccount}
+                  disabled={isDeletingAccount || deleteAccountOtpCode.length < 6}
+                  buttonColor="#ef4444"
+                  textColor="white"
+                  style={{ marginBottom: 8 }}
+                >
+                  {t('profile.deleteAccountOtpVerify')}
+                </Button>
+                <Button
+                  mode="text"
+                  onPress={handleSendDeleteAccountOtp}
+                  loading={isSendingDeleteOtp}
+                  disabled={isSendingDeleteOtp}
+                  textColor="#fea60e"
+                >
+                  {t('profile.deleteAccountOtpResend')}
+                </Button>
+              </>
+            )}
+          </PaperModal>
+
           <PaperModal
             visible={phoneModalVisible}
             onDismiss={closePhoneModal}

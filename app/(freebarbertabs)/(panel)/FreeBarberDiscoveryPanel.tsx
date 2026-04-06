@@ -1,5 +1,6 @@
 import {
   Dimensions,
+  FlatList,
   RefreshControl,
   StyleSheet,
   TouchableOpacity,
@@ -13,6 +14,7 @@ import { useBottomSheet } from "../../hook/useBottomSheet";
 import SearchBar from "../../components/common/searchbar";
 import { SkeletonComponent } from "../../components/common/skeleton";
 import MotiViewExpand from "../../components/common/motiviewexpand";
+import { MotiView } from "moti";
 import { toggleExpand } from "../../utils/common/expand-toggle";
 import { FilterDrawer } from "../../components/common/filterdrawer";
 import { BottomSheetModal, BottomSheetView } from "@gorhom/bottom-sheet";
@@ -28,7 +30,7 @@ import {
 } from "../../types";
 import { useLocalSearchParams } from "expo-router";
 import { useSafeNavigation } from "../../hook/useSafeNavigation";
-import MapView from "react-native-maps";
+import MapView, { Marker } from "react-native-maps";
 import { safeCoord } from "../../utils/location/geo";
 import StoreBookingContent from "../../components/store/storebooking";
 import {
@@ -62,10 +64,6 @@ import {
   compareStripOuterStyle,
   useCompareMetrics,
 } from "../../(screens)/compare/compareShared";
-import Animated, {
-  useAnimatedScrollHandler,
-  useSharedValue,
-} from "react-native-reanimated";
 import { PerplexityListItem } from "../../components/panel/PerplexityListItem";
 import { PerplexityHorizontalList } from "../../components/panel/PerplexityHorizontalList";
 import { PanelEmptyCta } from "../../components/common/PanelEmptyCta";
@@ -210,11 +208,9 @@ const Index = () => {
     useFilteredEndpoint: true, // Her zaman filtered endpoint kullan
   });
 
-  // Free barber paneli yoksa nearby stores'u gösterme
+  // Free barber paneli varlığını her zaman kontrol et (lokasyon beklenmeden)
   const { data: freeBarber, refetch: refetchFreeBarber } =
-    useGetFreeBarberMinePanelQuery(undefined, {
-      skip: !hasLocation,
-    });
+    useGetFreeBarberMinePanelQuery(undefined);
 
   // Free barber paneli yoksa stores'u filtrele (backend'de zaten kontrol ediliyor ama ekstra güvenlik için)
   const hasFreeBarberPanel = !!freeBarber?.id;
@@ -270,9 +266,27 @@ const Index = () => {
     locationStatus,
   ]);
 
+  // Bildirimden gelen harita odak parametreleri
+  const { focusLat, focusLng } = useLocalSearchParams<{ focusLat?: string; focusLng?: string }>();
+  const focusRegion = useMemo(() => {
+    const lat = parseFloat(focusLat ?? "");
+    const lng = parseFloat(focusLng ?? "");
+    if (!isNaN(lat) && !isNaN(lng)) {
+      return { latitude: lat, longitude: lng, latitudeDelta: 0.01, longitudeDelta: 0.01 };
+    }
+    return null;
+  }, [focusLat, focusLng]);
+
   const [isMapMode, setIsMapMode] = useState(false);
   const [selectedMapItem, setSelectedMapItem] =
     useState<BarberStoreGetDto | null>(null);
+
+  // Bildirimden gelen focusRegion varsa harita moduna geç
+  useEffect(() => {
+    if (focusRegion) {
+      setIsMapMode(true);
+    }
+  }, [focusRegion]);
 
   const panelMapFabItems = useMemo(
     () => [
@@ -303,14 +317,6 @@ const Index = () => {
     return () => { fabCtx?.reportOverlayOpen(false); };
   }, [anySheetOpen, fabCtx]);
 
-  const ITEM_ANIM_STRIDE = 280;
-  const scrollY = useSharedValue(0);
-  const onVerticalScroll = useAnimatedScrollHandler({
-    onScroll: (e) => {
-      scrollY.value = e.contentOffset.y / 280;
-    },
-  });
-
   const [expandedStoreBarber, setExpandedStoreBarber] = useState(true);
   const [selectedRatingsTarget, setSelectedRatingsTarget] = useState<{
     targetId: string;
@@ -319,7 +325,7 @@ const Index = () => {
   const screenWidth = Dimensions.get("window").width;
 
   const cardWidthStores = useMemo(
-    () => (expandedStoreBarber ? screenWidth * 0.92 : screenWidth * 0.94),
+    () => (expandedStoreBarber ? screenWidth * 0.935 : screenWidth * 0.955),
     [expandedStoreBarber, screenWidth],
   );
 
@@ -424,9 +430,9 @@ const Index = () => {
         panelCompare={
           isOtherUsersStore(item, currentUserId)
             ? {
-                selected: compareStoreIds.includes(item.id),
-                onPress: () => toggleCompareStore(item.id),
-              }
+              selected: compareStoreIds.includes(item.id),
+              onPress: () => toggleCompareStore(item.id),
+            }
             : undefined
         }
       />
@@ -457,43 +463,43 @@ const Index = () => {
 
     type Row =
       | {
-          id: string;
-          type: "stores-header";
-          _scrollStart: number;
-          _scrollLen: number;
-        }
+        id: string;
+        type: "stores-header";
+        _scrollStart: number;
+        _scrollLen: number;
+      }
       | {
-          id: string;
-          type: "stores-loading";
-          _scrollStart: number;
-          _scrollLen: number;
-        }
+        id: string;
+        type: "stores-loading";
+        _scrollStart: number;
+        _scrollLen: number;
+      }
       | {
-          id: string;
-          type: "stores-error";
-          _scrollStart: number;
-          _scrollLen: number;
-        }
+        id: string;
+        type: "stores-error";
+        _scrollStart: number;
+        _scrollLen: number;
+      }
       | {
-          id: string;
-          type: "stores-empty";
-          _scrollStart: number;
-          _scrollLen: number;
-        }
+        id: string;
+        type: "stores-empty";
+        _scrollStart: number;
+        _scrollLen: number;
+      }
       | {
-          id: string;
-          type: "store-row";
-          data: BarberStoreGetDto;
-          _scrollStart: number;
-          _scrollLen: number;
-        }
+        id: string;
+        type: "store-row";
+        data: BarberStoreGetDto;
+        _scrollStart: number;
+        _scrollLen: number;
+      }
       | {
-          id: string;
-          type: "stores-content-horizontal";
-          data: BarberStoreGetDto[];
-          _scrollStart: number;
-          _scrollLen: number;
-        };
+        id: string;
+        type: "stores-content-horizontal";
+        data: BarberStoreGetDto[];
+        _scrollStart: number;
+        _scrollLen: number;
+      };
 
     const rows: Row[] = [];
     let y = 0;
@@ -514,7 +520,10 @@ const Index = () => {
 
     push({ id: "stores-header", type: "stores-header" }, H.header);
 
-    if (!fetchedOnce || (isStoresLoading && filteredStores.length === 0)) {
+    // Panel yoksa lokasyon beklenmeden CTA'yı göster
+    if (!hasFreeBarberPanel) {
+      push({ id: "stores-empty", type: "stores-empty" }, H.empty);
+    } else if (!fetchedOnce || (isStoresLoading && filteredStores.length === 0)) {
       push({ id: "stores-loading", type: "stores-loading" }, H.loading);
     } else if (storeError) {
       push({ id: "stores-error", type: "stores-error" }, H.error);
@@ -556,12 +565,8 @@ const Index = () => {
     filterCriteria.userType,
     fetchedOnce,
     isList,
+    hasFreeBarberPanel,
   ]);
-
-  const verticalSnapOffsets = useMemo(
-    () => listData.map((r) => r._scrollStart),
-    [listData],
-  );
 
   const { present: presentMapDetail } = mapDetailSheet;
   const handleMarkerPress = useCallback(
@@ -654,22 +659,27 @@ const Index = () => {
 
       {isMapMode && (
         <View className="absolute inset-0" style={{ zIndex: 5, elevation: 5 }}>
-          <MapView style={{ flex: 1 }} userInterfaceStyle={isDark ? "dark" : "light"}>
+          <MapView
+            style={{ flex: 1 }}
+            userInterfaceStyle={isDark ? "dark" : "light"}
+            initialRegion={focusRegion ?? undefined}
+          >
             {storeMarkers}
+            {focusRegion && (
+              <Marker
+                coordinate={{ latitude: focusRegion.latitude, longitude: focusRegion.longitude }}
+                pinColor="#f05e23"
+              />
+            )}
           </MapView>
         </View>
       )}
       <View style={{ flex: 1 }} pointerEvents={isMapMode ? 'none' : 'auto'}>
-        <Animated.FlatList
+        <FlatList
           data={listData}
           keyExtractor={(item) => item.id}
-          onScroll={onVerticalScroll}
           scrollEventThrottle={16}
-          decelerationRate="fast"
-          snapToOffsets={
-            verticalSnapOffsets.length > 0 ? verticalSnapOffsets : undefined
-          }
-          contentContainerStyle={{ paddingBottom: 100 }}
+          contentContainerStyle={{ paddingBottom: 80 + insets.bottom }}
           showsVerticalScrollIndicator={false}
           removeClippedSubviews={false}
           refreshControl={
@@ -772,10 +782,7 @@ const Index = () => {
             }
             if (item.type === "store-row") {
               return (
-                <PerplexityListItem
-                  scrollPos={scrollY}
-                  index={item._scrollStart / ITEM_ANIM_STRIDE}
-                >
+                <PerplexityListItem>
                   <StoreCardInner
                     store={item.data}
                     isList={isList}
@@ -791,9 +798,9 @@ const Index = () => {
                     panelCompare={
                       isOtherUsersStore(item.data, currentUserId)
                         ? {
-                            selected: compareStoreIds.includes(item.data.id),
-                            onPress: () => toggleCompareStore(item.data.id),
-                          }
+                          selected: compareStoreIds.includes(item.data.id),
+                          onPress: () => toggleCompareStore(item.data.id),
+                        }
                         : undefined
                     }
                   />
@@ -806,7 +813,6 @@ const Index = () => {
                   <PerplexityHorizontalList
                     data={filteredStores}
                     keyExtractor={(store) => store.id}
-                    snapInterval={cardWidthStores + 12}
                     contentContainerStyle={{
                       gap: 10,
                       paddingTop: 6,

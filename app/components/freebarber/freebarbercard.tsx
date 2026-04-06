@@ -165,179 +165,187 @@ const FreeBarberCard: React.FC<Props> = ({
   ]);
   return (
     <View
-      style={{ width: cardWidthFreeBarber, borderRadius: 12 }}
+      style={{ width: cardWidthFreeBarber, marginBottom: 12 }}
       className="mt-4"
     >
       <View
-        className={` ${!isList ? "pl-4 py-2 rounded-lg" : "rounded-xl p-3"}`}
-        style={{ backgroundColor: colors.cardBg }}
+        style={{
+          borderRadius: 12,
+          overflow: "hidden",
+          borderWidth: 1,
+          borderColor: colors.borderColor2,
+        }}
       >
-        {!isList && (
-          <View className="flex-row justify-end items-center gap-1 px-2 pb-2">
-            {hasBeautySalonCertificate && (
-              <View className="bg-purple-600/90 rounded-full px-2 py-0.5">
-                <Text className="text-white font-century-gothic-sans-semibold text-xs">
-                  {t("card.beautyExpert")}
-                </Text>
-              </View>
-            )}
-            <StatusBadge
-              type={isAvailable ? "available" : "busy"}
-              isList={false}
-            />
-            {mode === "barbershop" && isAvailable && !hasCalled && (
-              <TouchableOpacity
-                onPress={handleCallFreeBarber}
-                disabled={isCalling}
-                className="bg-[#ffb900] flex-row items-center px-2 py-0.5 rounded-full"
-              >
-                <Text className="text-white text-xs font-century-gothic-sans-semibold">
-                  {isCalling ? t("card.calling") : t("card.callBarber")}
-                </Text>
-              </TouchableOpacity>
-            )}
-          </View>
-        )}
-        <View className={isList ? "" : "flex flex-row"}>
-          <View className="relative mr-2">
-            <CardImage
-              images={freeBarber.imageList}
-              onPress={handlePressCard}
-              isList={isList}
-              width={isList ? carouselWidth : 112}
-              height={isList ? 250 : 112}
-              autoPlay={showImageAnimation}
-            />
-            {isList && (
-              <PanelImageOverflowMenu
-                images={freeBarber.imageList}
-                panelCompare={panelCompare ?? undefined}
-                galleryTitle={freeBarber.fullName}
+        <View
+          className={` ${!isList ? "pl-4 py-2 rounded-lg" : "rounded-xl px-3 pt-3 pb-4"}`}
+          style={{ backgroundColor: colors.cardBg }}
+        >
+          {!isList && (
+            <View className="flex-row justify-end items-center gap-1 px-2 pb-2">
+              {hasBeautySalonCertificate && (
+                <View className="bg-purple-600/90 rounded-xl px-2 py-0.5 flex-row items-center justify-center">
+                  <Text className="text-white font-century-gothic-sans-medium text-sm">
+                    {t("card.beautyExpert")}
+                  </Text>
+                </View>
+              )}
+              <StatusBadge
+                type={isAvailable ? "available" : "busy"}
+                isList={false}
               />
-            )}
-            {isList && (
-              <View
-                className="absolute top-2 left-2 right-2 z-10 flex-row flex-wrap justify-end items-center gap-2"
-                pointerEvents="box-none"
-              >
-                {hasBeautySalonCertificate && (
-                  <View className="bg-purple-600/90 rounded-full self-start max-w-full px-2.5 py-1">
-                    <Text className="text-white font-century-gothic-sans-semibold text-sm">
-                      {t("card.beautyExpert")}
-                    </Text>
-                  </View>
-                )}
-                {typeLabel && (
-                  <TypeLabel
-                    label={typeLabel}
-                    color={typeLabelColor}
-                    compact
-                  />
-                )}
-                <StatusBadge
-                  type="barber-type"
-                  barberType={freeBarber.type}
-                  isList={true}
-                />
-                <StatusBadge
-                  type={isAvailable ? "available" : "busy"}
-                  isList={true}
-                />
-                {mode === "barbershop" && isAvailable && !hasCalled && (
-                  <TouchableOpacity
-                    onPress={handleCallFreeBarber}
-                    disabled={isCalling}
-                    className="bg-[#ffb900] flex-row items-center rounded-full px-2.5 py-1"
-                  >
-                    <Text className="text-white font-century-gothic-sans-semibold text-sm">
-                      {isCalling ? t("card.calling") : t("card.callBarber")}
-                    </Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-            )}
-          </View>
-
-          <View className="flex-1 flex-col gap-1">
-            <View
-              className={`flex-row justify-between ${!isList ? "items-start" : "items-center"}`}
-            >
-              <CardHeader
-                title={freeBarber.fullName}
-                isList={isList}
-                barberType={freeBarber.type}
-                compact={compactMeta}
-              />
-              {isList && (
-                <FavoriteButton
-                  isFavorite={isFavorite}
-                  favoriteCount={favoriteCount}
-                  isLoading={isLoading}
-                  favoriteDisabled={favoriteDisabled}
-                  onPress={toggleFavorite}
-                  variant="icon"
-                  className="pb-2"
-                />
+              {mode === "barbershop" && isAvailable && !hasCalled && (
+                <TouchableOpacity
+                  onPress={handleCallFreeBarber}
+                  disabled={isCalling}
+                  className="bg-[#ffb900] flex-row items-center px-2 py-0.5 rounded-xl"
+                >
+                  <Text className="text-white text-sm font-century-gothic-sans-medium">
+                    {isCalling ? t("card.calling") : t("card.callBarber")}
+                  </Text>
+                </TouchableOpacity>
               )}
             </View>
-            {!isList && (
-              <View className="flex-row justify-between pr-2">
-                <Text style={{ color: colors.textSecondary }} className={compactMeta ? "text-sm" : "text-base"}>
-                  {getShortBarberTypeLabel(freeBarber.type)}
-                </Text>
-                <FavoriteButton
-                  isFavorite={isFavorite}
-                  favoriteCount={favoriteCount}
-                  isLoading={isLoading}
-                  favoriteDisabled={favoriteDisabled}
-                  onPress={toggleFavorite}
-                  variant="button"
-                  className="pb-1"
+          )}
+          <View className={isList ? "" : "flex flex-row"}>
+            <View className="relative mr-2">
+              <CardImage
+                images={freeBarber.imageList}
+                onPress={handlePressCard}
+                isList={isList}
+                width={isList ? carouselWidth : 112}
+                height={isList ? 250 : 112}
+                autoPlay={showImageAnimation}
+              />
+              {isList && (
+                <PanelImageOverflowMenu
+                  images={freeBarber.imageList}
+                  panelCompare={panelCompare ?? undefined}
+                  galleryTitle={freeBarber.fullName}
+                />
+              )}
+              {isList && (
+                <View
+                  className="absolute top-2 left-2 right-2 z-10 flex-row flex-wrap justify-end items-center gap-2"
+                  pointerEvents="box-none"
+                >
+                  {hasBeautySalonCertificate && (
+                    <View className="bg-purple-600/90 rounded-xl self-start max-w-full px-2.5 py-1 flex-row items-center justify-center">
+                      <Text className="text-white font-century-gothic-sans-medium text-sm">
+                        {t("card.beautyExpert")}
+                      </Text>
+                    </View>
+                  )}
+                  {typeLabel && (
+                    <TypeLabel
+                      label={typeLabel}
+                      color={typeLabelColor}
+                      compact
+                    />
+                  )}
+                  <StatusBadge
+                    type="barber-type"
+                    barberType={freeBarber.type}
+                    isList={true}
+                  />
+                  <StatusBadge
+                    type={isAvailable ? "available" : "busy"}
+                    isList={true}
+                  />
+                  {mode === "barbershop" && isAvailable && !hasCalled && (
+                    <TouchableOpacity
+                      onPress={handleCallFreeBarber}
+                      disabled={isCalling}
+                      className="bg-[#ffb900] flex-row items-center rounded-full px-2.5 py-1"
+                    >
+                      <Text className="text-white font-century-gothic-sans-semibold text-sm">
+                        {isCalling ? t("card.calling") : t("card.callBarber")}
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              )}
+            </View>
+
+            <View className="flex-1 flex-col gap-1">
+              <View
+                className={`flex-row justify-between ${!isList ? "items-start" : "items-center"}`}
+              >
+                <CardHeader
+                  title={freeBarber.fullName}
+                  isList={isList}
+                  barberType={freeBarber.type}
+                  compact={compactMeta}
+                />
+                {isList && (
+                  <FavoriteButton
+                    isFavorite={isFavorite}
+                    favoriteCount={favoriteCount}
+                    isLoading={isLoading}
+                    favoriteDisabled={favoriteDisabled}
+                    onPress={toggleFavorite}
+                    variant="icon"
+                    className="pb-2"
+                  />
+                )}
+              </View>
+              {!isList && (
+                <View className="flex-row justify-between pr-2">
+                  <Text style={{ color: colors.textSecondary }} className="text-sm font-century-gothic-sans-medium">
+                    {getShortBarberTypeLabel(freeBarber.type)}
+                  </Text>
+                  <FavoriteButton
+                    isFavorite={isFavorite}
+                    favoriteCount={favoriteCount}
+                    isLoading={isLoading}
+                    favoriteDisabled={favoriteDisabled}
+                    onPress={toggleFavorite}
+                    variant="button"
+                  />
+                </View>
+              )}
+
+              <View
+                className="flex-row justify-between items-center"
+              >
+                <RatingSection
+                  rating={freeBarber.rating}
+                  reviewCount={freeBarber.reviewCount}
+                  onPressRatings={handlePressRatings}
+                  compact={compactMeta}
                 />
               </View>
-            )}
-
-            <View
-              className="flex-row justify-between items-center"
-            >
-              <RatingSection
-                rating={freeBarber.rating}
-                reviewCount={freeBarber.reviewCount}
-                onPressRatings={handlePressRatings}
-                compact={compactMeta}
-              />
+              {freeBarber.customerNumber && (
+                <View className="flex-row items-center mt-1">
+                  <Text style={{ color: colors.textSecondary, fontSize: compactMeta ? 10 : 11, fontFamily: 'CenturyGothic' }}>
+                    {t('card.freeBarberNumber')}{': #'}{freeBarber.customerNumber}
+                  </Text>
+                </View>
+              )}
             </View>
-            {freeBarber.customerNumber && (
-              <View className="flex-row items-center mt-1">
-                <Text style={{ color: colors.textSecondary, fontSize: compactMeta ? 10 : 11, fontFamily: 'CenturyGothic' }}>
-                  {'#'}{freeBarber.customerNumber}
-                </Text>
-              </View>
-            )}
           </View>
-        </View>
-        <View className="rounded-xl pr-2 mt-4">
-          {mainOfferings.length > 0 && (
-            <ServiceOfferingsList
-              offerings={mainOfferings}
-              layout="vertical"
-              previewCount={3}
-              showExpandButton={true}
-            />
-          )}
-          {beautyOfferings.length > 0 && (
-            <View className="mt-3">
-              <Text className="text-gray-400 text-sm mb-1.5 font-century-gothic-sans-semibold">
-                {t("form.beautySalonServices")}
-              </Text>
+          <View className="rounded-xl pr-2 mt-4">
+            {mainOfferings.length > 0 && (
               <ServiceOfferingsList
-                offerings={beautyOfferings}
+                offerings={mainOfferings}
                 layout="vertical"
                 previewCount={3}
                 showExpandButton={true}
               />
-            </View>
-          )}
+            )}
+            {beautyOfferings.length > 0 && (
+              <View className="mt-3">
+                <Text className="text-gray-400 text-sm mb-1.5 font-century-gothic-sans-semibold">
+                  {t("form.beautySalonServices")}
+                </Text>
+                <ServiceOfferingsList
+                  offerings={beautyOfferings}
+                  layout="vertical"
+                  previewCount={3}
+                  showExpandButton={true}
+                />
+              </View>
+            )}
+          </View>
         </View>
       </View>
     </View>

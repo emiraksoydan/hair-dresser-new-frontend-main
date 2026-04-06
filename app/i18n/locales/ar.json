@@ -84,6 +84,16 @@
     "phoneFormat": "أدخل بتنسيق 5XX XXX XX XX",
     "phoneOtpSent": "تم إرسال رمز التحقق.",
     "phoneOtpResend": "إعادة إرسال الرمز",
+    "deleteAccount": "حذف الحساب",
+    "deleteAccountConfirmTitle": "حذف الحساب",
+    "deleteAccountConfirmMessage": "هل أنت متأكد أنك تريد حذف حسابك؟ لا يمكن التراجع عن هذا الإجراء وسيتم حذف جميع بياناتك.",
+    "deleteAccountOtpTitle": "التحقق من حذف الحساب",
+    "deleteAccountOtpDesc": "تم إرسال رمز التحقق إلى رقم هاتفك المسجل. أدخل الرمز لحذف حسابك.",
+    "deleteAccountOtpSend": "إرسال رمز التحقق",
+    "deleteAccountOtpVerify": "حذف الحساب",
+    "deleteAccountOtpResend": "إعادة إرسال الرمز",
+    "deleteAccountSuccess": "تم حذف حسابك بنجاح.",
+    "deleteAccountError": "حدث خطأ أثناء حذف الحساب.",
     "otpCode": "رمز التحقق",
     "shopInfoTitle": "إحصائيات المحل",
     "informationSection": "معلومات",
@@ -179,7 +189,9 @@
     "paytrSecure": "دفع آمن",
     "paytrNote": "تتم جميع المدفوعات عبر البنية التحتية الآمنة لـ PayTR. يتم تشفير بيانات بطاقتك وحمايتها.",
     "paymentTitle": "دفع آمن",
-    "paymentComingSoon": "تكامل نظام الدفع قادم قريباً."
+    "paymentComingSoon": "تكامل نظام الدفع قادم قريباً.",
+    "webSubscribeInfo": "يتم شراء الاشتراكات عبر الويب. للاشتراك، يرجى التواصل معنا عبر البريد الإلكتروني.",
+    "webSubscribeButton": "إرسال بريد إلكتروني"
   },
   "navigation": {
     "welcome": "مرحباً",
@@ -198,6 +210,12 @@
     "shopping": "التسوق",
     "usageInfo": "معلومات الاستخدام",
     "notifications": "الإشعارات"
+  },
+  "helpGuide": {
+    "screenTitle": "دليل الاستخدام",
+    "onboardingTitle": "دليل الاستخدام",
+    "onboardingMessage": "Please read the guide sections to use the app effectively. You can open it anytime from the menu: Info.",
+    "openGuide": "فتح الدليل"
   },
   "appointment": {
     "status": {
@@ -237,6 +255,8 @@
       "deleteTitle": "حذف الموعد",
       "deleteAllTitle": "حذف جميع المواعيد",
       "confirmCancellation": "هل تريد إلغاء الموعد؟",
+      "cancellationReasonOptional": "سبب الإلغاء (اختياري)",
+      "cancellationReasonPlaceholder": "يمكنك كتابة سبب الإلغاء باختصار…",
       "confirmCompletion": "وضع علامة على الخدمة كمكتملة؟",
       "confirmDelete": "هل أنت متأكد أنك تريد حذف هذا الموعد؟",
       "confirmDeleteAll": "هل أنت متأكد أنك تريد حذف جميع المواعيد القابلة للحذف؟",
@@ -274,7 +294,7 @@
       "services": "الخدمات",
       "scheduleDate": "التاريخ",
       "scheduleTime": "الوقت",
-      "chair": "الكرسي"
+      "cancellationReason": "سبب الإلغاء"
     }
   },
   "time": {
@@ -825,7 +845,11 @@
     "fileOpenFailed": "تعذر فتح الملف",
     "fileLinkCopied": "تم نسخ الرابط — الصقه في المتصفح أو تطبيق آخر.",
     "tapToOpen": "اضغط للفتح",
-    "file": "ملف"
+    "file": "ملف",
+    "restrictedThreadTitle": "أضف إلى المفضلة لعرض الرسائل",
+    "restrictedThreadMessage": "تحتاج إلى إضافة هذا الشخص إلى مفضلتك لمتابعة المراسلة.",
+    "restrictedThreadBanner": "أضف هذا الشخص إلى مفضلتك لعرض الرسائل.",
+    "restrictedInputPlaceholder": "أضف إلى المفضلة لإرسال الرسائل"
   },
   "ai": {
     "assistantTitle": "المساعد الذكي",
@@ -1004,9 +1028,6 @@
     "deletedSuccess": "تم حذف الفئة بنجاح",
     "mainCategoriesRetrieved": "تم استرداد الفئات الرئيسية",
     "subCategoriesRetrieved": "تم استرداد الفئات الفرعية"
-  },
-  "helpGuide": {
-    "invalidUserType": "نوع مستخدم غير صالح"
   },
   "general": {
     "entityNotFound": "لم يتم العثور على السجل",

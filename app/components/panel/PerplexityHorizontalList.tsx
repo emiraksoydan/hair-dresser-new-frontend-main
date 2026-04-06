@@ -1,13 +1,10 @@
 import React, { ReactElement } from "react";
-import Animated, { useAnimatedScrollHandler, useSharedValue } from "react-native-reanimated";
-import { PerplexityListItem } from "./PerplexityListItem";
+import { FlatList } from "react-native";
 
 type Props<T> = {
   data: T[];
   keyExtractor: (item: T, index: number) => string;
   renderItem: (info: { item: T; index: number }) => React.ReactNode;
-  /** Same value as snapToInterval (card width + gap). */
-  snapInterval: number;
   contentContainerStyle?: object;
   style?: object;
   minHeight?: number;
@@ -16,45 +13,27 @@ type Props<T> = {
 };
 
 /**
- * Horizontal carousel with scale + opacity animation.
- * Scroll is normalized by snapInterval so each card aligns with its integer index.
+ * Yatay liste — kart hizalı snap yok, normal kaydırma.
  */
 export function PerplexityHorizontalList<T>({
   data,
   keyExtractor,
   renderItem,
-  snapInterval,
   contentContainerStyle,
   style,
   minHeight = 200,
   nestedScrollEnabled,
 }: Props<T>): ReactElement {
-  const scrollX = useSharedValue(0);
-  const onScroll = useAnimatedScrollHandler({
-    onScroll: (e) => {
-      scrollX.value = e.contentOffset.x / snapInterval;
-    },
-  });
-
   return (
-    <Animated.FlatList
+    <FlatList
       style={[{ minHeight }, style]}
       horizontal
       nestedScrollEnabled={nestedScrollEnabled}
       data={data}
       keyExtractor={keyExtractor}
-      renderItem={({ item, index }) => (
-        <PerplexityListItem horizontal scrollPos={scrollX} index={index}>
-          {renderItem({ item, index })}
-        </PerplexityListItem>
-      )}
-      onScroll={onScroll}
+      renderItem={({ item, index }) => <>{renderItem({ item, index })}</>}
       scrollEventThrottle={16}
       showsHorizontalScrollIndicator={false}
-      decelerationRate="fast"
-      snapToInterval={snapInterval}
-      snapToAlignment="start"
-      disableIntervalMomentum
       contentContainerStyle={contentContainerStyle}
     />
   );

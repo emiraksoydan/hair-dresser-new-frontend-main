@@ -85,6 +85,16 @@
     "phoneFormat": "5XX XXX XX XX formatında girin",
     "phoneOtpSent": "Doğrulama kodu gönderildi.",
     "phoneOtpResend": "Kodu tekrar gönder",
+    "deleteAccount": "Hesabı Sil",
+    "deleteAccountConfirmTitle": "Hesabı Sil",
+    "deleteAccountConfirmMessage": "Hesabınızı silmek istediğinizden emin misiniz? Bu işlem geri alınamaz ve tüm verileriniz silinecektir.",
+    "deleteAccountOtpTitle": "Hesap Silme Doğrulama",
+    "deleteAccountOtpDesc": "Hesabınıza kayıtlı telefon numarasına doğrulama kodu gönderildi. Hesabı silmek için kodu girin.",
+    "deleteAccountOtpSend": "Doğrulama Kodu Gönder",
+    "deleteAccountOtpVerify": "Hesabı Sil",
+    "deleteAccountOtpResend": "Kodu tekrar gönder",
+    "deleteAccountSuccess": "Hesabınız başarıyla silindi.",
+    "deleteAccountError": "Hesap silinirken hata oluştu.",
     "otpCode": "Doğrulama Kodu",
     "shopInfoTitle": "Dükkan Bilgileri",
     "informationSection": "Bilgiler",
@@ -180,7 +190,9 @@
     "paytrSecure": "Güvenli Ödeme",
     "paytrNote": "Tüm ödemeler PayTR güvenli altyapısı ile gerçekleştirilir. Kart bilgileriniz şifrelenerek korunur.",
     "paymentTitle": "Güvenli Ödeme",
-    "paymentComingSoon": "Ödeme sistemi entegrasyonu yakında aktif olacaktır."
+    "paymentComingSoon": "Ödeme sistemi entegrasyonu yakında aktif olacaktır.",
+    "webSubscribeInfo": "Abonelik satın alımları web üzerinden gerçekleştirilmektedir. Abone olmak için lütfen bizimle e-posta yoluyla iletişime geçin.",
+    "webSubscribeButton": "E-posta Gönder"
   },
   "navigation": {
     "welcome": "Hoşgeldiniz",
@@ -199,6 +211,12 @@
     "shopping": "Alışveriş",
     "usageInfo": "Kullanım Bilgileri",
     "notifications": "Bildirimler"
+  },
+  "helpGuide": {
+    "screenTitle": "Kullanım rehberi",
+    "onboardingTitle": "Kullanım rehberi",
+    "onboardingMessage": "Uygulamayı doğru kullanmak için rehberdeki başlıkları okumanızı öneririz. Rehbere sağ alttaki menüden Bilgi öğesinden de ulaşabilirsiniz.",
+    "openGuide": "Rehberi aç"
   },
   "appointment": {
     "status": {
@@ -238,6 +256,8 @@
       "deleteTitle": "Randevuyu Sil",
       "deleteAllTitle": "Tüm Randevuları Sil",
       "confirmCancellation": "Randevuyu iptal etmek istiyor musunuz?",
+      "cancellationReasonOptional": "İptal nedeni (isteğe bağlı)",
+      "cancellationReasonPlaceholder": "İsterseniz kısaca neden iptal ettiğinizi yazabilirsiniz…",
       "confirmCompletion": "Hizmet tamamlandı olarak işaretlensin mi?",
       "confirmDelete": "Bu randevuyu silmek istediğinize emin misiniz?",
       "confirmDeleteAll": "Silinebilir tüm randevuları silmek istediğinize emin misiniz?",
@@ -277,7 +297,7 @@
       "services": "Hizmetler",
       "scheduleDate": "Tarih",
       "scheduleTime": "Saat",
-      "chair": "Koltuk"
+      "cancellationReason": "İptal nedeni"
     }
   },
   "time": {
@@ -701,10 +721,6 @@
     "selectHolidays": "Tatil günlerini seç",
     "addressPlaceholder": "Örn: X caddesi, Y sk. Z no, dükkan girişi apartman sağında...",
     "selectBarber": "Berber Seçin",
-    "selectChair": "Koltuk Seçin",
-    "selectTime": "Saat Seçin",
-    "selectedTime": "Seçilen Saat",
-    "hours": "saat",
     "workingHoursTitle": "Çalışma Saatleri",
     "pricingTitle": "Fiyatlandırma",
     "beautyExpert": "Güzellik Uzmanı"
@@ -836,7 +852,11 @@
     "fileOpenFailed": "Dosya açılamadı",
     "fileLinkCopied": "Bağlantı panoya kopyalandı — Safari veya başka bir uygulamada yapıştırabilirsiniz.",
     "tapToOpen": "Açmak için dokun",
-    "file": "Dosya"
+    "file": "Dosya",
+    "restrictedThreadTitle": "Mesajları Görüntülemek İçin Favoriye Ekle",
+    "restrictedThreadMessage": "Bu kişiyle mesajlaşmaya devam etmek için onu favorilerinize eklemeniz gerekiyor.",
+    "restrictedThreadBanner": "Mesajları görmek için bu kişiyi favorilerinize ekleyin.",
+    "restrictedInputPlaceholder": "Mesaj göndermek için favoriye ekleyin"
   },
   "ai": {
     "assistantTitle": "AI Asistan",
@@ -943,9 +963,9 @@
     "callBarber": "Berberi Çağır",
     "callBarberConfirm": "{{name}} adlı berberi çağırmak istediğinize emin misiniz?",
     "customerNumber": "Müşteri No",
+    "freeBarberNumber": "Berber No",
     "storeNo": "Dükkan No",
     "storeOwnerNumber": "İşletme Sahibi No",
-    "freeBarberNumber": "Berber No",
     "customerOf": "Müşterisi",
     "pricing": "Fiyatlandırma",
     "pricingPercent": "Fiyatlandırma: yapılan işlemlerin toplamının %{{value}} alınır",
@@ -1015,9 +1035,6 @@
     "deletedSuccess": "Kategori başarıyla silindi",
     "mainCategoriesRetrieved": "Ana kategoriler getirildi",
     "subCategoriesRetrieved": "Alt kategoriler getirildi"
-  },
-  "helpGuide": {
-    "invalidUserType": "Geçersiz kullanıcı tipi"
   },
   "general": {
     "entityNotFound": "Kayıt bulunamadı",

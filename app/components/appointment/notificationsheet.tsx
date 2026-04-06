@@ -55,7 +55,7 @@ export function NotificationsSheet({
   const router = useSafeNavigation();
   const guard = useActionGuard();
   const dispatch = useAppDispatch();
-  const { data, isFetching, refetch } = useGetAllNotificationsQuery();
+  const { data, isFetching, isLoading, refetch } = useGetAllNotificationsQuery();
   const [markRead] = useMarkNotificationReadMutation();
   const [deleteNotification, { isLoading: isDeletingNotification }] =
     useDeleteNotificationMutation();
@@ -461,9 +461,18 @@ export function NotificationsSheet({
         }}
         renderItem={renderItem}
         ListEmptyComponent={
-          <View className="p-4.5">
-            <Text className="text-[#8b8c90]">{t("empty.noNotifications")}</Text>
-          </View>
+          isLoading || (isFetching && (!data || data.length === 0)) ? (
+            <View className="p-8 items-center justify-center min-h-[160px]">
+              <ActivityIndicator size="large" color={isDark ? "#fbbf24" : "#f59e0b"} />
+              <Text className="text-[#8b8c90] mt-3 text-sm" style={{ fontFamily: "CenturyGothic" }}>
+                {t("common.loading") || "…"}
+              </Text>
+            </View>
+          ) : (
+            <View className="p-4.5">
+              <Text className="text-[#8b8c90]">{t("empty.noNotifications")}</Text>
+            </View>
+          )
         }
       />
     </View>

@@ -8,6 +8,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { IconButton } from "react-native-paper";
+import { Text } from "../../components/common/Text";
 import { BottomSheetModal, BottomSheetView } from "@gorhom/bottom-sheet";
 import { useBottomSheet } from "../../hook/useBottomSheet";
 import { FormFreeBarberOperation } from "../../components/freebarber/formfreebarberoper";
@@ -153,6 +154,16 @@ export default function MyPanelScreen() {
             style={{ margin: 0 }}
           />
         </View>
+        <Text style={{ color: colors.sectionHeaderText, fontFamily: 'CenturyGothic-Bold', fontSize: 17, marginLeft: 8, flex: 1 }}>
+          {t("panel.myPanel")}
+        </Text>
+        <IconButton
+          icon={isList ? "format-list-bulleted" : "view-grid-outline"}
+          iconColor="#ffb900"
+          size={20}
+          onPress={() => setIsList((v) => !v)}
+          style={{ margin: 0, marginTop: 8 }}
+        />
       </View>
 
       <ScrollView
@@ -164,7 +175,6 @@ export default function MyPanelScreen() {
       >
         <FreeBarberPanelSection
           isList={isList}
-          onToggleLayout={() => setIsList((v) => !v)}
           locationStatus={locationStatusForForm === "denied" ? "error" : locationStatusForForm}
           locationMessage={
             locationStatusForForm === "denied"

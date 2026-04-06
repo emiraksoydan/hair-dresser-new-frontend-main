@@ -84,6 +84,16 @@
     "phoneFormat": "Im Format 5XX XXX XX XX eingeben",
     "phoneOtpSent": "Verifizierungscode gesendet.",
     "phoneOtpResend": "Code erneut senden",
+    "deleteAccount": "Konto löschen",
+    "deleteAccountConfirmTitle": "Konto löschen",
+    "deleteAccountConfirmMessage": "Sind Sie sicher, dass Sie Ihr Konto löschen möchten? Diese Aktion kann nicht rückgängig gemacht werden und alle Ihre Daten werden gelöscht.",
+    "deleteAccountOtpTitle": "Kontolöschung Verifizierung",
+    "deleteAccountOtpDesc": "Ein Verifizierungscode wurde an Ihre registrierte Telefonnummer gesendet. Geben Sie den Code ein, um Ihr Konto zu löschen.",
+    "deleteAccountOtpSend": "Verifizierungscode senden",
+    "deleteAccountOtpVerify": "Konto löschen",
+    "deleteAccountOtpResend": "Code erneut senden",
+    "deleteAccountSuccess": "Ihr Konto wurde erfolgreich gelöscht.",
+    "deleteAccountError": "Beim Löschen des Kontos ist ein Fehler aufgetreten.",
     "otpCode": "Bestätigungscode",
     "shopInfoTitle": "Shop-Einblicke",
     "informationSection": "Informationen",
@@ -179,7 +189,9 @@
     "paytrSecure": "Sichere Zahlung",
     "paytrNote": "Alle Zahlungen werden über die sichere Infrastruktur von PayTR abgewickelt. Ihre Kartendaten werden verschlüsselt und geschützt.",
     "paymentTitle": "Sichere Zahlung",
-    "paymentComingSoon": "Die Zahlungssystemintegration kommt bald."
+    "paymentComingSoon": "Die Zahlungssystemintegration kommt bald.",
+    "webSubscribeInfo": "Abonnements werden über das Web gekauft. Um sich anzumelden, kontaktieren Sie uns bitte per E-Mail.",
+    "webSubscribeButton": "E-Mail senden"
   },
   "navigation": {
     "welcome": "Willkommen",
@@ -198,6 +210,12 @@
     "shopping": "Einkaufen",
     "usageInfo": "Nutzungsinformationen",
     "notifications": "Benachrichtigungen"
+  },
+  "helpGuide": {
+    "screenTitle": "Nutzungsanleitung",
+    "onboardingTitle": "Nutzungsanleitung",
+    "onboardingMessage": "Bitte lesen Sie die Abschnitte der Anleitung, um die App effektiv zu nutzen. Sie finden sie jederzeit unter Menü: Info.",
+    "openGuide": "Anleitung öffnen"
   },
   "appointment": {
     "status": {
@@ -237,6 +255,8 @@
       "deleteTitle": "Termin löschen",
       "deleteAllTitle": "Alle Termine löschen",
       "confirmCancellation": "Möchtest du den Termin stornieren?",
+      "cancellationReasonOptional": "Grund für die Stornierung (optional)",
+      "cancellationReasonPlaceholder": "Du kannst kurz angeben, warum du stornierst …",
       "confirmCompletion": "Service als abgeschlossen markieren?",
       "confirmDelete": "Bist du sicher, dass du diesen Termin löschen möchtest?",
       "confirmDeleteAll": "Bist du sicher, dass du alle löschbaren Termine löschen möchtest?",
@@ -274,7 +294,7 @@
       "services": "Dienstleistungen",
       "scheduleDate": "Datum",
       "scheduleTime": "Uhrzeit",
-      "chair": "Stuhl"
+      "cancellationReason": "Stornierungsgrund"
     }
   },
   "time": {
@@ -825,7 +845,11 @@
     "fileOpenFailed": "Datei konnte nicht geöffnet werden",
     "fileLinkCopied": "Link in die Zwischenablage kopiert — in Safari oder einer anderen App einfügen.",
     "tapToOpen": "Tippen zum Öffnen",
-    "file": "Datei"
+    "file": "Datei",
+    "restrictedThreadTitle": "Zu Favoriten hinzufügen um Nachrichten anzuzeigen",
+    "restrictedThreadMessage": "Sie müssen diese Person zu Ihren Favoriten hinzufügen, um weiter zu chatten.",
+    "restrictedThreadBanner": "Fügen Sie diese Person zu Ihren Favoriten hinzu, um Nachrichten anzuzeigen.",
+    "restrictedInputPlaceholder": "Zu Favoriten hinzufügen, um Nachrichten zu senden"
   },
   "ai": {
     "assistantTitle": "KI-Assistent",
@@ -1004,9 +1028,6 @@
     "deletedSuccess": "Kategorie erfolgreich gelöscht",
     "mainCategoriesRetrieved": "Hauptkategorien abgerufen",
     "subCategoriesRetrieved": "Unterkategorien abgerufen"
-  },
-  "helpGuide": {
-    "invalidUserType": "Ungültiger Benutzertyp"
   },
   "general": {
     "entityNotFound": "Datensatz nicht gefunden",

@@ -21,6 +21,8 @@ export enum NotificationType {
   CustomerRejectedFinal = 11,          // Müşteri final red verdi (FreeBarber+Store'a)
   CustomerApprovedFinal = 12,          // Müşteri final onay verdi (FreeBarber+Store'a)
   CustomerFinalTimeout = 13,           // Müşteri 30dk içinde cevap vermedi (Herkes'e)
+  AppointmentReminder = 14,            // Randevu hatırlatması (30 dk önce)
+  AppointmentCompletionReminder = 15,  // Randevu bitti, tamamlayacak kişiye hatırlatma
 }
 
 export type NotificationDto = {
@@ -56,6 +58,8 @@ export interface NotificationPayload {
     rating?: number;
     isInFavorites?: boolean; // Bu dükkan favorilerde mi?
     addressDescription?: string; // Dükkan adres açıklaması
+    latitude?: number | null;   // Dükkan konumu
+    longitude?: number | null;  // Dükkan konumu
   };
   customer?: {
     userId: string;
@@ -92,6 +96,8 @@ export interface NotificationPayload {
   customerDecision?: number;
   storeSelectionType?: number;
   note?: string | null;
+  /** Randevu iptal bildirimlerinde isteğe bağlı iptal nedeni */
+  cancellationReason?: string | null;
   pendingExpiresAt?: string | null; // UTC formatında ISO string
   serviceOfferings?: Array<{
     id: string;

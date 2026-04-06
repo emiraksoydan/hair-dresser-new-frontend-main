@@ -30,7 +30,7 @@ import { BarChart, LineChart, PieChart } from "react-native-chart-kit";
 import { MultiSelect } from "react-native-element-dropdown";
 import { Text } from "../../components/common/Text";
 import { useTheme } from "../../hook/useTheme";
-import { getProfileNativeSwitchProps } from "../../constants/colors";
+import { getEarningsChartSwitchProps } from "../../constants/colors";
 import { useLanguage } from "../../hook/useLanguage";
 import { useSafeNavigation } from "../../hook/useSafeNavigation";
 import { useBottomSheet } from "../../hook/useBottomSheet";
@@ -53,11 +53,13 @@ import { AnimatedMoneyText } from "../../components/common/AnimatedMoneyText";
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const CURRENCY = "₺";
 
-/** Kazanç kartları yatay liste: ortadaki kart tam, yanlar hafif görünür */
-const EARNINGS_SLIDE_WIDTH = Math.round(SCREEN_WIDTH * 0.74);
-const EARNINGS_CAROUSEL_GAP = 14;
-const EARNINGS_ITEM_STRIDE = EARNINGS_SLIDE_WIDTH + EARNINGS_CAROUSEL_GAP;
+/** Yan peek: dar kart + header/footer spacer + separator — paddingHorizontal yerine */
 const EARNINGS_CARD_HEIGHT = 182;
+const EARNINGS_CARD_WIDTH = Math.round(SCREEN_WIDTH * 0.62);
+const EARNINGS_CARD_GAP = 14;
+const EARNINGS_SNAP_INTERVAL = EARNINGS_CARD_WIDTH + EARNINGS_CARD_GAP;
+const EARNINGS_SIDE_PAD = (SCREEN_WIDTH - EARNINGS_CARD_WIDTH) / 2;
+const EARNINGS_CAROUSEL_HEIGHT = EARNINGS_CARD_HEIGHT + 14;
 
 type ShopInsightsEarningsCardModel = {
   label: string;
@@ -211,7 +213,7 @@ const EarningsCard = ({
   /** Carousel: alt metin + Lottie için merkez odaklı opacity */
   detailAnimatedStyle?: AnimatedStyle<ViewStyle>;
 }) => {
-  const cardBg = isDark ? "rgba(15,23,42,0.96)" : `${accentColor}12`;
+  const cardBg = isDark ? "rgba(30,41,59,0.97)" : `${accentColor}22`;
   const accentBg = `${accentColor}28`;
   const suffix = valueSuffix ?? CURRENCY;
   const subTextStyle = {
@@ -359,61 +361,51 @@ const EarningsCard = ({
   );
 };
 
-function EarningsCarouselSlide({
+function EarningsCarouselItem({
   item,
   index,
-  currentIndex,
+  scrollX,
   isDark,
   showLottie,
 }: {
   item: ShopInsightsEarningsCardModel;
   index: number;
-  currentIndex: SharedValue<number>;
+  scrollX: SharedValue<number>;
   isDark: boolean;
   showLottie: boolean;
 }) {
-  const itemScaleStyle = useAnimatedStyle(() => ({
-    transform: [
-      {
-        scale: interpolate(
-          currentIndex.value,
-          [index - 1, index, index + 1],
-          [0.85, 1, 0.9],
-          Extrapolation.CLAMP
-        ),
-      },
-    ],
-  }));
-
-  const detailOpacityStyle = useAnimatedStyle(() => ({
-    opacity: interpolate(
-      currentIndex.value,
-      [index - 1, index - 0.5, index, index + 1],
-      [0, 0, 1, 0],
-      Extrapolation.CLAMP
-    ),
-  }));
+  const s = EARNINGS_SNAP_INTERVAL;
+  const animStyle = useAnimatedStyle(() => {
+    const x = scrollX.value;
+    return {
+      opacity: interpolate(
+        x,
+        [(index - 1) * s, index * s, (index + 1) * s],
+        [0.45, 1, 0.45],
+        Extrapolation.CLAMP
+      ),
+      transform: [
+        {
+          scale: interpolate(
+            x,
+            [(index - 1) * s, index * s, (index + 1) * s],
+            [0.86, 1, 0.86],
+            Extrapolation.CLAMP
+          ),
+        },
+      ],
+    };
+  }, [index, s]);
 
   return (
     <View
       style={{
-        width: EARNINGS_ITEM_STRIDE,
-        height: EARNINGS_CARD_HEIGHT + 14,
+        width: EARNINGS_CARD_WIDTH,
+        height: EARNINGS_CAROUSEL_HEIGHT,
         justifyContent: "center",
       }}
     >
-      <Animated.View
-        style={[
-          {
-            width: EARNINGS_SLIDE_WIDTH,
-            height: EARNINGS_CARD_HEIGHT,
-            paddingHorizontal: 6,
-            justifyContent: "center",
-            alignSelf: "flex-start",
-          },
-          itemScaleStyle,
-        ]}
-      >
+      <Animated.View style={[{ width: EARNINGS_CARD_WIDTH, height: EARNINGS_CARD_HEIGHT }, animStyle]}>
         <EarningsCard
           label={item.label}
           value={item.value}
@@ -425,7 +417,6 @@ function EarningsCarouselSlide({
           showLottie={showLottie}
           lottieSource={item.lottieSource}
           animateNumbers={item.animateNumbers}
-          detailAnimatedStyle={detailOpacityStyle}
         />
       </Animated.View>
     </View>
@@ -441,36 +432,45 @@ function ShopInsightsEarningsCarousel({
   isDark: boolean;
   showLottie: boolean;
 }) {
-  const currentIndex = useSharedValue(0);
+  const scrollX = useSharedValue(0);
   const onScroll = useAnimatedScrollHandler({
     onScroll: (e) => {
-      currentIndex.value = e.contentOffset.x / EARNINGS_ITEM_STRIDE;
+      scrollX.value = e.contentOffset.x;
     },
   });
 
   return (
-    <Animated.FlatList
-      data={cards}
-      keyExtractor={(_, i) => `earnings-slide-${i}`}
-      horizontal
-      showsHorizontalScrollIndicator={false}
-      snapToInterval={EARNINGS_ITEM_STRIDE}
-      decelerationRate="fast"
-      onScroll={onScroll}
-      scrollEventThrottle={16}
-      contentContainerStyle={{
-        paddingHorizontal: Math.round((SCREEN_WIDTH - EARNINGS_SLIDE_WIDTH) / 2),
-      }}
-      renderItem={({ item, index }) => (
-        <EarningsCarouselSlide
-          item={item}
-          index={index}
-          currentIndex={currentIndex}
-          isDark={isDark}
-          showLottie={showLottie}
-        />
-      )}
-    />
+    <View style={{ overflow: "visible" }}>
+      <Animated.FlatList
+        data={cards}
+        horizontal
+        nestedScrollEnabled
+        showsHorizontalScrollIndicator={false}
+        keyExtractor={(_, i) => `earning-${i}`}
+        snapToInterval={EARNINGS_SNAP_INTERVAL}
+        snapToAlignment="start"
+        decelerationRate="fast"
+        disableIntervalMomentum
+        scrollEventThrottle={16}
+        onScroll={onScroll}
+        ListHeaderComponent={<View style={{ width: EARNINGS_SIDE_PAD }} />}
+        ListFooterComponent={<View style={{ width: EARNINGS_SIDE_PAD }} />}
+        ItemSeparatorComponent={() => <View style={{ width: EARNINGS_CARD_GAP }} />}
+        contentContainerStyle={{
+          paddingVertical: 7,
+        }}
+        style={{ height: EARNINGS_CAROUSEL_HEIGHT }}
+        renderItem={({ item, index }) => (
+          <EarningsCarouselItem
+            item={item}
+            index={index}
+            scrollX={scrollX}
+            isDark={isDark}
+            showLottie={showLottie}
+          />
+        )}
+      />
+    </View>
   );
 }
 
@@ -1051,7 +1051,7 @@ export default function ShopInsightsPage() {
             </View>
           )}
 
-          {/* Kazanç kartları: scroll offset → SharedValue index; scale + detay opacity (Movie slider mantığı) */}
+          {/* Kazanç kartları: yatay snap + scroll’a göre yan kartlar silik/küçük */}
           <ShopInsightsEarningsCarousel
             cards={[
               {
@@ -1141,11 +1141,19 @@ export default function ShopInsightsPage() {
             </View>
             <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
               <Text style={{ color: colors.textSecondary, fontSize: 11 }}>{showChart ? t("profile.viewChart") : t("profile.viewTable")}</Text>
-              <Switch
-                value={showChart}
-                onValueChange={setShowChart}
-                {...getProfileNativeSwitchProps(isDark, showChart)}
-              />
+              <View
+                style={{
+                  borderRadius: 22,
+                  borderWidth: StyleSheet.hairlineWidth,
+                  borderColor: isDark ? "rgba(255,255,255,0.12)" : "rgba(15,23,42,0.12)",
+                }}
+              >
+                <Switch
+                  value={showChart}
+                  onValueChange={setShowChart}
+                  {...getEarningsChartSwitchProps(showChart)}
+                />
+              </View>
             </View>
           </View>
 

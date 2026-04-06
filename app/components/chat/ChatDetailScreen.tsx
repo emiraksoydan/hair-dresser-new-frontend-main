@@ -25,6 +25,7 @@ import { BlurView } from "expo-blur";
 import { MotiView } from "moti";
 import { Text } from "../common/Text";
 import { useSafeNavigation } from "../../hook/useSafeNavigation";
+import { useActionGuard } from "../../hook/useActionGuard";
 
 import {
   BottomSheetModal,
@@ -258,6 +259,9 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({
     return threads?.find((t) => t.threadId === threadId);
   }, [threads, threadId]);
 
+  // Kısıtlı thread: bu kullanıcı karşı tarafı favoriye almamışsa erişim kısıtlı
+  const isRestrictedThread = !!currentThread?.isRestrictedForCurrentUser;
+
   useEffect(() => {
     if (!isLoadingThreads && threads && !currentThread && threadId) {
       setTimeout(() => { refetchThreads(); }, 1000);
@@ -268,19 +272,21 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({
     data: messages,
     isLoading,
     refetch,
-  } = useGetChatMessagesByThreadQuery({ threadId }, { skip: !threadId });
+  } = useGetChatMessagesByThreadQuery({ threadId }, { skip: !threadId || isRestrictedThread });
 
   const canSendMessage = useMemo(() => {
     if (!currentThread) return false;
     if (!isConnected) return false;
+    if (isRestrictedThread) return false;
     if (!currentThread.appointmentId) return true;
     if (currentThread.status === null || currentThread.status === undefined) return false;
     return (
       currentThread.status === AppointmentStatus.Pending ||
       currentThread.status === AppointmentStatus.Approved
     );
-  }, [currentThread, isConnected]);
+  }, [currentThread, isConnected, isRestrictedThread]);
 
+  const guard = useActionGuard();
   const [sendMessageByAppointment, { isLoading: isSendingByAppt }] = useSendChatMessageMutation();
   const [sendMessageByThread, { isLoading: isSendingByThread }] = useSendChatMessageByThreadMutation();
   const [sendChatMedia] = useSendChatMediaMessageMutation();
@@ -297,11 +303,12 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({
   const autoReadTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const markThreadRead = useCallback(async () => {
-    if (!threadId || markReadInFlightRef.current) return;
+    // Kısıtlı thread: kullanıcı favoriye almamışsa read yapamaz, badge düşmesin
+    if (!threadId || markReadInFlightRef.current || isRestrictedThread) return;
     markReadInFlightRef.current = true;
     await markRead(threadId);
     markReadInFlightRef.current = false;
-  }, [threadId, markRead]);
+  }, [threadId, markRead, isRestrictedThread]);
 
   useEffect(() => {
     if (threadId && currentThread && currentThread.unreadCount > 0) {
@@ -401,7 +408,7 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({
     }
   }, [threadId, notifyTyping]);
 
-  const handleSend = useCallback(async () => {
+  const handleSend = useCallback(() => guard(async () => {
     setShowAttachMenu(false);
     if (!messageText.trim() || !threadId || isSending) return;
     if (!canSendMessage) {
@@ -444,8 +451,8 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({
       const errorMessage = (sendResult.error as any)?.data?.message || t("chat.messageSendFailed");
       alertError(t("common.error"), errorMessage);
     }
-  }, [
-    messageText, threadId, isSending, canSendMessage, isConnected, currentUserId,
+  }), [
+    guard, messageText, threadId, isSending, canSendMessage, isConnected, currentUserId,
     currentThread, replyingTo, sendMessageByThread, sendMessageByAppointment,
     stopTyping, t, alertError,
   ]);
@@ -1252,7 +1259,13 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({
             <Text className="text-xs text-center" style={{ color: isDark ? "#fca5a5" : "#b91c1c" }}>{t("chat.serverConnectionError")}</Text>
           </View>
         )}
-        {!canSendMessage && isConnected && (
+        {isRestrictedThread && (
+          <View className="mx-4 mt-3 rounded-lg px-3 py-2.5 flex-row items-center gap-2" style={{ backgroundColor: isDark ? "rgba(99,102,241,0.18)" : "rgba(99,102,241,0.10)", borderWidth: 1, borderColor: "rgba(99,102,241,0.35)" }}>
+            <Icon source="lock" size={14} color={isDark ? "#a5b4fc" : "#4338ca"} />
+            <Text className="text-xs flex-1" style={{ color: isDark ? "#a5b4fc" : "#4338ca" }}>{t("chat.restrictedThreadBanner")}</Text>
+          </View>
+        )}
+        {!canSendMessage && !isRestrictedThread && isConnected && (
           <View className="mx-4 mt-3 rounded-lg px-3 py-2" style={{ backgroundColor: isDark ? "rgba(245,158,11,0.18)" : "rgba(245,158,11,0.12)", borderWidth: 1, borderColor: "rgba(245,158,11,0.35)" }}>
             <Text className="text-xs text-center" style={{ color: isDark ? "#fcd34d" : "#b45309" }}>{t("chat.cannotSendToThread")}</Text>
           </View>
@@ -1296,7 +1309,7 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({
             <TextInput
               value={messageText}
               onChangeText={handleTextChange}
-              placeholder={canSendMessage ? t("chat.messagePlaceholder") : t("chat.messageCannotBeSentPlaceholder")}
+              placeholder={isRestrictedThread ? t("chat.restrictedInputPlaceholder") : canSendMessage ? t("chat.messagePlaceholder") : t("chat.messageCannotBeSentPlaceholder")}
               placeholderTextColor={colors.textSecondary}
               className="flex-1 font-century-gothic"
               multiline

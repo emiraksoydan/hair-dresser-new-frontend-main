@@ -16,7 +16,7 @@ import {
   TextInput,
   Platform,
 } from "react-native";
-import { BottomSheetScrollView } from "@gorhom/bottom-sheet";
+import { BottomSheetScrollView, BottomSheetFlatList } from "@gorhom/bottom-sheet";
 import { Text } from "../common/Text";
 import { useSafeNavigation } from "../../hook/useSafeNavigation";
 import { useActionGuard } from "../../hook/useActionGuard";
@@ -38,6 +38,7 @@ import {
   UserType,
   FreeBarGetDto,
   BarberStoreGetDto,
+  BarberStoreMineDto,
   StoreSelectionType,
 } from "../../types";
 import { MESSAGES } from "../../constants/messages";
@@ -175,10 +176,15 @@ const FreeBarberBookingContent = ({
 
   const screenWidth = Dimensions.get("window").width;
   const cardWidthStore = useMemo(
-    () => (expanded ? screenWidth * 0.92 : screenWidth * 0.94),
+    () => (expanded ? screenWidth * 0.935 : screenWidth * 0.955),
     [expanded, screenWidth],
   );
   const hasStores = (stores ?? []).length > 0;
+
+  const selectedMineStoreName = useMemo(() => {
+    if (!selectedMyStoreId || !myStores?.length) return null;
+    return myStores.find((s) => s.id === selectedMyStoreId)?.storeName ?? null;
+  }, [selectedMyStoreId, myStores]);
 
   const toggleService = useCallback((id: string) => {
     setSelectedServices((prev) =>
@@ -328,7 +334,9 @@ const FreeBarberBookingContent = ({
         nestedScrollEnabled
         className={isAddStoreMode ? "p-4 gap-3" : undefined}
         contentContainerStyle={{ paddingBottom: 140 }}
-        stickyHeaderIndices={!isAddStoreMode ? [0] : undefined}
+        stickyHeaderIndices={
+          !isAddStoreMode && !isBottomSheet ? [0] : undefined
+        }
       >
         {!isAddStoreMode && (
           <View style={{ overflow: "hidden", backgroundColor: colors.sheetBg }}>
@@ -384,50 +392,167 @@ const FreeBarberBookingContent = ({
           </View>
         )}
         <View className={isAddStoreMode ? undefined : "p-4 gap-3"}>
-        {currentUserType === UserType.BarberStore &&
-          isBarberMode &&
-          !isAddStoreMode && (
-            <View className="gap-3 mt-4">
-              <Text style={{ color: colors.sectionHeaderText }} className="font-century-gothic-bold text-lg">
-                Serbest Berber Çağır
-              </Text>
-              <Text className="text-sm" style={{ color: colors.textSecondary }}>
-                Tarih ve saat seçmeden çağrı gönderebilirsiniz.
-              </Text>
-              <TouchableOpacity
-                disabled={isCallingFreeBarber || !freeBarberData?.isAvailable}
-                className={`py-4 flex-row justify-center gap-2 rounded-xl items-center ${!freeBarberData?.isAvailable || isCallingFreeBarber ? "bg-[#4b5563]" : "bg-[#3b82f6]"}`}
-                style={{
-                  opacity:
-                    !freeBarberData?.isAvailable || isCallingFreeBarber
-                      ? 0.7
-                      : 1,
-                }}
-                onPress={() => guard(async () => {
-                  try {
-                    // Eğer dışarıdan storeId geldiyse onu kullan, yoksa kullanıcının dükkanlarını kontrol et
-                    let targetStoreId = storeId || selectedMyStoreId;
+          {currentUserType === UserType.BarberStore &&
+            isBarberMode &&
+            !isAddStoreMode && (
+              <View className="gap-3 mt-4">
+                <Text style={{ color: colors.sectionHeaderText }} className="font-century-gothic-bold text-lg">
+                  Serbest Berber Çağır
+                </Text>
+                <Text className="text-sm" style={{ color: colors.textSecondary }}>
+                  Tarih ve saat seçmeden çağrı gönderebilirsiniz.
+                </Text>
+                {myStores && myStores.length > 1 && (
+                  <TouchableOpacity
+                    onPress={() => myStoreSelectionSheet.present()}
+                    activeOpacity={0.85}
+                    className="mt-2 rounded-xl px-3 py-2.5 border"
+                    style={{
+                      backgroundColor: colors.cardBg2,
+                      borderColor: colors.borderColor,
+                    }}
+                  >
+                    <Text
+                      className="text-xs mb-0.5"
+                      style={{ color: colors.textSecondary, fontFamily: "CenturyGothic" }}
+                    >
+                      {t("labels.storeName")}
+                    </Text>
+                    <View className="flex-row items-center justify-between gap-2">
+                      <Text
+                        className="text-sm flex-1"
+                        numberOfLines={2}
+                        style={{ color: colors.sectionHeaderText, fontFamily: "CenturyGothic-Bold" }}
+                      >
+                        {selectedMineStoreName ?? t("booking.selectStoreFirst")}
+                      </Text>
+                      <Icon source="chevron-down" size={22} color={colors.sectionHeaderText} />
+                    </View>
+                  </TouchableOpacity>
+                )}
+                <TouchableOpacity
+                  disabled={isCallingFreeBarber || !freeBarberData?.isAvailable}
+                  className={`py-4 flex-row justify-center gap-2 rounded-xl items-center ${!freeBarberData?.isAvailable || isCallingFreeBarber ? "bg-[#4b5563]" : "bg-[#3b82f6]"}`}
+                  style={{
+                    opacity:
+                      !freeBarberData?.isAvailable || isCallingFreeBarber
+                        ? 0.7
+                        : 1,
+                  }}
+                  onPress={() => guard(async () => {
+                    try {
+                      // Eğer dışarıdan storeId geldiyse onu kullan, yoksa kullanıcının dükkanlarını kontrol et
+                      let targetStoreId = storeId || selectedMyStoreId;
 
-                    if (!targetStoreId) {
-                      if (!myStores || myStores.length === 0) {
-                        alertError(
-                          t("common.error"),
-                          t("errors.storeNotFound"),
+                      if (!targetStoreId) {
+                        if (!myStores || myStores.length === 0) {
+                          alertError(
+                            t("common.error"),
+                            t("errors.storeNotFound"),
+                          );
+                          return;
+                        }
+
+                        if (myStores.length === 1) {
+                          targetStoreId = myStores[0].id;
+                        } else {
+                          // Show selection UI
+                          myStoreSelectionSheet.present();
+                          return;
+                        }
+                      }
+
+                      if (!targetStoreId) return;
+
+                      if (!freeBarberData?.isAvailable) {
+                        alert(
+                          t("booking.warning"),
+                          t("booking.freebarberNotAvailable"),
+                          undefined,
+                          'warning'
                         );
                         return;
                       }
 
-                      if (myStores.length === 1) {
-                        targetStoreId = myStores[0].id;
-                      } else {
-                        // Show selection UI
-                        myStoreSelectionSheet.present();
+                      if (!freeBarberUserId) {
+                        alert(
+                          t("booking.warning"),
+                          t("booking.freebarberInfoNotFound"),
+                          undefined,
+                          'warning'
+                        );
                         return;
                       }
+
+                      const payload = {
+                        storeId: targetStoreId,
+                        freeBarberUserId: freeBarberUserId,
+                      } as any;
+
+                      const callResult = await callFreeBarber(payload);
+
+                      if ("error" in callResult) {
+                        const errorMessage = getErrorMessage(
+                          callResult.error,
+                        );
+                        alertError(
+                          t("common.error"),
+                          errorMessage || t("booking.callFailed"),
+                        );
+                        return;
+                      }
+                      const result = callResult.data;
+                      if (result?.success) {
+                        alertSuccess(t("common.success"), t("booking.callSent"), [
+                          { text: t("common.ok"), onPress: () => router.back() },
+                        ]);
+                      } else {
+                        alertError(
+                          t("common.error"),
+                          result?.message ?? t("booking.callFailed"),
+                        );
+                      }
+
+                      // handleCallFreeBarberRequest();
+                    } catch (error: any) {
+                      const errorMsg = getErrorMessage(error);
+                      if (errorMsg) {
+                        alertError(t("common.error"), errorMsg);
+                      }
                     }
-
-                    if (!targetStoreId) return;
-
+                  })}
+                >
+                  {isCallingFreeBarber ? (
+                    <ActivityIndicator color="white" />
+                  ) : (
+                    <>
+                      <Icon
+                        source="account-arrow-right"
+                        size={20}
+                        color="white"
+                      />
+                      <Text className="text-white font-century-gothic-bold text-base">
+                        Çağrı Gönder
+                      </Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              </View>
+            )}
+          {/* İsteğime Göre seçilmediyse normal hizmet seçimi göster */}
+          {currentUserType === UserType.Customer &&
+            !isBarberMode &&
+            !isAddStoreMode &&
+            !storeSelectionType && (
+              <View className="gap-3 mt-4">
+                <Text style={{ color: colors.sectionHeaderText }} className="font-century-gothic-bold text-lg">
+                  Randevu Tipi Seçin
+                </Text>
+                <TouchableOpacity
+                  disabled={!freeBarberData?.isAvailable}
+                  className={`py-4 flex-row justify-center gap-2 rounded-xl items-center ${!freeBarberData?.isAvailable ? "bg-[#4b5563]" : "bg-[#3b82f6]"}`}
+                  style={{ opacity: !freeBarberData?.isAvailable ? 0.7 : 1 }}
+                  onPress={() => {
                     if (!freeBarberData?.isAvailable) {
                       alert(
                         t("booking.warning"),
@@ -437,469 +562,380 @@ const FreeBarberBookingContent = ({
                       );
                       return;
                     }
-
-                    if (!freeBarberUserId) {
-                      alert(
-                        t("booking.warning"),
-                        t("booking.freebarberInfoNotFound"),
-                        undefined,
-                        'warning'
-                      );
-                      return;
-                    }
-
-                    const payload = {
-                      storeId: targetStoreId,
-                      freeBarberUserId: freeBarberUserId,
-                    } as any;
-
-                    const callResult = await callFreeBarber(payload);
-
-                    if ("error" in callResult) {
-                      const errorMessage = getErrorMessage(
-                        callResult.error,
-                      );
-                      alertError(
-                        t("common.error"),
-                        errorMessage || t("booking.callFailed"),
-                      );
-                      return;
-                    }
-                    const result = callResult.data;
-                    if (result?.success) {
-                      alertSuccess(t("common.success"), t("booking.callSent"), [
-                        { text: t("common.ok"), onPress: () => router.back() },
-                      ]);
-                    } else {
-                      alertError(
-                        t("common.error"),
-                        result?.message ?? t("booking.callFailed"),
-                      );
-                    }
-
-                    // handleCallFreeBarberRequest();
-                  } catch (error: any) {
-                    const errorMsg = getErrorMessage(error);
-                    if (errorMsg) {
-                      alertError(t("common.error"), errorMsg);
-                    }
-                  }
-                })}
-              >
-                {isCallingFreeBarber ? (
-                  <ActivityIndicator color="white" />
-                ) : (
-                  <>
-                    <Icon
-                      source="account-arrow-right"
-                      size={20}
-                      color="white"
-                    />
-                    <Text className="text-white font-century-gothic-bold text-base">
-                      Çağrı Gönder
-                    </Text>
-                  </>
-                )}
-              </TouchableOpacity>
-            </View>
-          )}
-        {/* İsteğime Göre seçilmediyse normal hizmet seçimi göster */}
-        {currentUserType === UserType.Customer &&
-          !isBarberMode &&
-          !isAddStoreMode &&
-          !storeSelectionType && (
-            <View className="gap-3 mt-4">
-              <Text style={{ color: colors.sectionHeaderText }} className="font-century-gothic-bold text-lg">
-                Randevu Tipi Seçin
-              </Text>
-              <TouchableOpacity
-                disabled={!freeBarberData?.isAvailable}
-                className={`py-4 flex-row justify-center gap-2 rounded-xl items-center ${!freeBarberData?.isAvailable ? "bg-[#4b5563]" : "bg-[#3b82f6]"}`}
-                style={{ opacity: !freeBarberData?.isAvailable ? 0.7 : 1 }}
-                onPress={() => {
-                  if (!freeBarberData?.isAvailable) {
-                    alert(
-                      t("booking.warning"),
-                      t("booking.freebarberNotAvailable"),
-                      undefined,
-                      'warning'
-                    );
-                    return;
-                  }
-                  setStoreSelectionType(StoreSelectionType.CustomRequest);
-                }}
-              >
-                <Icon source="lightbulb-on" size={20} color="white" />
-                <Text className="text-white font-century-gothic-bold text-base">
-                  İsteğime Göre
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                disabled={!freeBarberData?.isAvailable}
-                className={`py-4 flex-row justify-center gap-2 rounded-xl items-center`}
-                style={{
-                  backgroundColor: !freeBarberData?.isAvailable ? '#4b5563' : '#fea60e',
-                  opacity: !freeBarberData?.isAvailable ? 0.7 : 1,
-                }}
-                onPress={() => {
-                  if (!freeBarberData?.isAvailable) {
-                    alert(
-                      t("booking.warning"),
-                      t("booking.freebarberNotAvailable"),
-                      undefined,
-                      'warning'
-                    );
-                    return;
-                  }
-                  setStoreSelectionType(StoreSelectionType.StoreSelection);
-                }}
-              >
-                <Icon source="store" size={20} color="white" />
-                <Text className="text-white font-century-gothic-bold text-base">
-                  Dükkan Seç
-                </Text>
-              </TouchableOpacity>
-            </View>
-          )}
-
-        {/* İsteğime Göre Form */}
-        {currentUserType === UserType.Customer &&
-          !isBarberMode &&
-          !isAddStoreMode &&
-          storeSelectionType === StoreSelectionType.CustomRequest && (
-            <View className="gap-4 mt-4">
-              <View className="flex-row justify-between items-center">
-                <Text style={{ color: colors.sectionHeaderText }} className="font-century-gothic-bold text-lg">
-                  Randevu Detayları
-                </Text>
-                <TouchableOpacity onPress={() => setStoreSelectionType(null)}>
-                  <Icon source="close" size={20} color={colors.sectionHeaderText} />
-                </TouchableOpacity>
-              </View>
-
-              {/* Hizmetler (Seçilebilir - Dikey Liste) */}
-              <View>
-                <View className="flex-row items-center justify-between mb-3">
-                  <Text style={{ color: colors.sectionHeaderText }} className="font-century-gothic-bold text-base">
-                    {t("common.services")}
+                    setStoreSelectionType(StoreSelectionType.CustomRequest);
+                  }}
+                >
+                  <Icon source="lightbulb-on" size={20} color="white" />
+                  <Text className="text-white font-century-gothic-bold text-base">
+                    İsteğime Göre
                   </Text>
-                  <View style={{ backgroundColor: colors.cardBg2 }} className="px-3 py-1.5 rounded-lg">
-                    <Text className="font-century-gothic-bold text-base" style={{ color: '#FFB900' }}>
-                      {totalPrice} {t("card.currencySymbol")}
-                    </Text>
-                  </View>
-                </View>
-                <FlatList
-                  data={freeBarberData?.offerings ?? []}
-                  keyExtractor={(item) => item.id}
-                  scrollEnabled={false}
-                  contentContainerStyle={{ gap: 8 }}
-                  renderItem={({ item }) => {
-                    const isSelected = selectedServices.includes(item.id);
-                    return (
-                      <TouchableOpacity
-                        onPress={() => toggleService(item.id)}
-                        activeOpacity={0.7}
-                        style={isSelected ? { backgroundColor: isDark ? 'rgba(254,166,14,0.2)' : 'rgba(254,166,14,0.1)', borderColor: '#fea60e', borderWidth: 1.5 } : { backgroundColor: colors.cardBg2, borderColor: colors.borderColor, borderWidth: 1 }}
-                        className={`flex-row items-center justify-between px-4 py-3 rounded-xl`}
-                      >
-                        <View className="flex-row items-center flex-1 mr-2">
-                          <Icon
-                            source={isSelected ? "check-circle" : "circle-outline"}
-                            size={22}
-                            color={isSelected ? "#fea60e" : "#6b7280"}
-                          />
-                          <Text
-                            className="ml-3 text-sm flex-1"
-                            style={{ color: isSelected ? (isDark ? '#e2e8f0' : '#166534') : colors.sectionHeaderText }}
-                            numberOfLines={1}
-                          >
-                            {item.serviceName}
-                          </Text>
-                        </View>
-                        <Text
-                          className="text-sm font-century-gothic-bold"
-                          style={{ color: isSelected ? "#fea60e" : colors.textSecondary }}
-                        >
-                          {item.price} {t("card.currencySymbol")}
-                        </Text>
-                      </TouchableOpacity>
-                    );
+                </TouchableOpacity>
+                <TouchableOpacity
+                  disabled={!freeBarberData?.isAvailable}
+                  className={`py-4 flex-row justify-center gap-2 rounded-xl items-center`}
+                  style={{
+                    backgroundColor: !freeBarberData?.isAvailable ? '#4b5563' : '#fea60e',
+                    opacity: !freeBarberData?.isAvailable ? 0.7 : 1,
                   }}
-                />
-              </View>
-
-              {/* Bilgilendirme Mesajlari */}
-              <View
-                className="bg-blue-900/30 border border-blue-700/50 rounded-xl p-4 gap-2"
-                style={{ display: "none" }}
-              >
-                <View className="flex-row items-start gap-2">
-                  <Icon source="information" size={20} color="#60a5fa" />
-                  <View className="flex-1">
-                    <Text className="text-blue-300 font-century-gothic text-sm">
-                      İstek gönderip free barber ile mesajlaşmaya
-                      başlayabilirsiniz.
-                    </Text>
-                  </View>
-                </View>
-                <View className="flex-row items-start gap-2 mt-1">
-                  <Icon
-                    source="clock-alert-outline"
-                    size={20}
-                    color="#fbbf24"
-                  />
-                  <View className="flex-1">
-                    <Text className="text-yellow-300 font-century-gothic text-sm">
-                      5 dakika içinde cevap gelmezse randevu cevapsıza düşecek
-                      ve yeni randevu arayabilirsiniz.
-                    </Text>
-                  </View>
-                </View>
-              </View>
-
-              {/* Randevu Gönder Butonu */}
-              <TouchableOpacity
-                disabled={isCreating}
-                className={`py-4 flex-row justify-center gap-2 rounded-2xl items-center ${isCreating ? "bg-[#4b5563]" : ""}`}
-                style={isCreating ? { opacity: 0.7 } : { backgroundColor: '#fea60e', opacity: 1, elevation: 6, shadowColor: '#fea60e', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.3, shadowRadius: 6 }}
-                onPress={() => guard(async () => {
-                  try {
-                    // Error veya location denied kontrolü
-                    if (!checkCanPerformAction()) {
-                      return;
-                    }
-
-                    if (selectedServices.length === 0) {
+                  onPress={() => {
+                    if (!freeBarberData?.isAvailable) {
                       alert(
                         t("booking.warning"),
-                        t("booking.atLeastOneServiceRequired"),
+                        t("booking.freebarberNotAvailable"),
                         undefined,
                         'warning'
                       );
                       return;
                     }
-
-                    const locationResult = await getCurrentLocationSafe();
-                    if (!locationResult.ok) {
-                      alertError(
-                        t("common.error"),
-                        t("booking.locationNotAvailable"),
-                      );
-                      return;
-                    }
-
-                    if (!freeBarberUserId) {
-                      alert(
-                        t("booking.warning"),
-                        t("booking.freebarberInfoNotFound"),
-                        undefined,
-                        'warning'
-                      );
-                      return;
-                    }
-
-                    const payload = {
-                      freeBarberUserId: freeBarberUserId,
-                      storeSelectionType: StoreSelectionType.CustomRequest,
-                      requestLatitude: locationResult.lat,
-                      requestLongitude: locationResult.lon,
-                      serviceOfferingIds: selectedServices, // ✅ Sadece ID'leri gönder
-                    } as any;
-
-                    const createResult =
-                      await createCustomerToFreeBarberAppointment(payload);
-
-                    if ("error" in createResult) {
-                      const errorMessage = getErrorMessage(
-                        createResult.error,
-                      );
-                      alertError(
-                        t("common.error"),
-                        errorMessage || t("booking.appointmentCreationFailed"),
-                      );
-                      return;
-                    }
-
-                    alertSuccess(
-                      t("common.success"),
-                      t("booking.appointmentRequestSent"),
-                      [{ text: t("common.ok"), onPress: () => router.back() }],
-                    );
-                  } catch (error: any) {
-                    const errorMsg = getErrorMessage(error);
-                    if (errorMsg) {
-                      alertError(t("common.error"), errorMsg);
-                    }
-                  }
-                })}
-              >
-                {isCreating ? (
-                  <ActivityIndicator color="white" />
-                ) : (
-                  <>
-                    <Icon source="send" size={20} color="white" />
-                    <Text className="text-white font-century-gothic-bold text-base">
-                      Randevu Talebi Gönder
-                    </Text>
-                  </>
-                )}
-              </TouchableOpacity>
-            </View>
-          )}
-        {currentUserType === UserType.Customer &&
-          !isBarberMode &&
-          !isAddStoreMode &&
-          storeSelectionType === StoreSelectionType.StoreSelection && (
-            <View className="gap-4 mt-4">
-              <View className="flex-row justify-between items-center">
-                <Text style={{ color: colors.sectionHeaderText }} className="font-century-gothic-bold text-lg">
-                  Randevu Detayları
-                </Text>
-                <TouchableOpacity onPress={() => setStoreSelectionType(null)}>
-                  <Icon source="close" size={20} color={colors.sectionHeaderText} />
+                    setStoreSelectionType(StoreSelectionType.StoreSelection);
+                  }}
+                >
+                  <Icon source="store" size={20} color="white" />
+                  <Text className="text-white font-century-gothic-bold text-base">
+                    Dükkan Seç
+                  </Text>
                 </TouchableOpacity>
               </View>
+            )}
 
-              <View>
-                <Text style={{ color: colors.sectionHeaderText }} className="font-century-gothic text-base mb-2">
-                  Berberin Hizmetleri
-                </Text>
-                <FlatList
-                  data={freeBarberData?.offerings ?? []}
-                  keyExtractor={(item) => item.id}
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={{ gap: 10, paddingHorizontal: 4 }}
-                  renderItem={({ item }) => (
-                    <FilterChip
-                      itemKey={item.id}
-                      selected={false}
-                      isDisabled
-                      className="rounded-xl px-4 py-2 bg-gray-800"
-                    >
-                      <Text style={{ color: "#d1d5db", fontSize: 14 }}>
-                        {item.serviceName}
-                      </Text>
-                    </FilterChip>
-                  )}
-                />
-              </View>
+          {/* İsteğime Göre Form */}
+          {currentUserType === UserType.Customer &&
+            !isBarberMode &&
+            !isAddStoreMode &&
+            storeSelectionType === StoreSelectionType.CustomRequest && (
+              <View className="gap-4 mt-4">
+                <View className="flex-row justify-between items-center">
+                  <Text style={{ color: colors.sectionHeaderText }} className="font-century-gothic-bold text-lg">
+                    Randevu Detayları
+                  </Text>
+                  <TouchableOpacity onPress={() => setStoreSelectionType(null)}>
+                    <Icon source="close" size={20} color={colors.sectionHeaderText} />
+                  </TouchableOpacity>
+                </View>
 
-              <View>
-                <Text style={{ color: colors.sectionHeaderText }} className="font-century-gothic mb-2">
-                  Randevu Notu
-                </Text>
-                <TextInput
-                  value={note}
-                  onChangeText={setNote}
-                  placeholder={t("booking.appointmentNotePlaceholder")}
-                  placeholderTextColor="#9ca3af"
-                  multiline
-                  numberOfLines={3}
-                  style={{
-                    textAlignVertical: "top",
-                    minHeight: 80,
-                    fontFamily: Platform.OS === "ios" ? "CenturyGothic" : "CenturyGothic",
-                    backgroundColor: colors.cardBg2,
-                    color: colors.sectionHeaderText,
-                    borderRadius: 12,
-                    paddingHorizontal: 16,
-                    paddingVertical: 12,
-                  }}
-                />
-              </View>
-
-              <TouchableOpacity
-                disabled={isCreating}
-                className={`py-4 flex-row justify-center gap-2 rounded-xl items-center ${isCreating ? "bg-[#4b5563]" : ""}`}
-                style={isCreating ? { opacity: 0.7 } : { backgroundColor: '#fea60e', opacity: 1 }}
-                onPress={() => guard(async () => {
-                  try {
-                    // Error veya location denied kontrolü
-                    if (!checkCanPerformAction()) {
-                      return;
-                    }
-
-                    const trimmedNote = note.trim();
-                    if (!trimmedNote) {
-                      alert(
-                        t("booking.warning"),
-                        t("booking.appointmentNoteRequired"),
-                        undefined,
-                        'warning'
-                      );
-                      return;
-                    }
-
-                    const locationResult = await getCurrentLocationSafe();
-                    if (!locationResult.ok) {
-                      alertError(
-                        t("location.locationRequired"),
-                        locationResult.message ??
-                          t("location.locationInfoNotAvailable"),
-                      );
-                      return;
-                    }
-
-                    if (!freeBarberUserId) {
-                      alert(
-                        t("booking.warning"),
-                        t("booking.freebarberInfoNotFound"),
-                        undefined,
-                        'warning'
-                      );
-                      return;
-                    }
-
-                    const payload = {
-                      freeBarberUserId: freeBarberUserId,
-                      storeSelectionType: StoreSelectionType.StoreSelection,
-                      requestLatitude: locationResult.lat,
-                      requestLongitude: locationResult.lon,
-                      note: trimmedNote,
-                    } as any;
-
-                    const createResult =
-                      await createCustomerToFreeBarberAppointment(payload);
-
-                    if ("error" in createResult) {
-                      const errorMessage = getErrorMessage(
-                        createResult.error,
-                      );
-                      alertError(
-                        t("common.error"),
-                        errorMessage || t("booking.appointmentCreationFailed"),
-                      );
-                      return;
-                    }
-
-                    alertSuccess(
-                      t("common.success"),
-                      t("booking.appointmentRequestSentSimple"),
-                      [{ text: t("common.ok"), onPress: () => router.back() }],
-                    );
-                  } catch (error: any) {
-                    const errorMsg = getErrorMessage(error);
-                    if (errorMsg) {
-                      alertError(t("common.error"), errorMsg);
-                    }
-                  }
-                })}
-              >
-                {isCreating ? (
-                  <ActivityIndicator color="white" />
-                ) : (
-                  <>
-                    <Icon source="send" size={20} color="white" />
-                    <Text className="text-white font-century-gothic-bold text-base">
-                      Randevu Talebi Gönder
+                {/* Hizmetler (Seçilebilir - Dikey Liste) */}
+                <View>
+                  <View className="flex-row items-center justify-between mb-3">
+                    <Text style={{ color: colors.sectionHeaderText }} className="font-century-gothic-bold text-base">
+                      {t("common.services")}
                     </Text>
-                  </>
-                )}
-              </TouchableOpacity>
-            </View>
-          )}
+                    <View style={{ backgroundColor: colors.cardBg2 }} className="px-3 py-1.5 rounded-lg">
+                      <Text className="font-century-gothic-bold text-base" style={{ color: '#FFB900' }}>
+                        {totalPrice} {t("card.currencySymbol")}
+                      </Text>
+                    </View>
+                  </View>
+                  <FlatList
+                    data={freeBarberData?.offerings ?? []}
+                    keyExtractor={(item) => item.id}
+                    scrollEnabled={false}
+                    contentContainerStyle={{ gap: 8 }}
+                    renderItem={({ item }) => {
+                      const isSelected = selectedServices.includes(item.id);
+                      return (
+                        <TouchableOpacity
+                          onPress={() => toggleService(item.id)}
+                          activeOpacity={0.7}
+                          style={isSelected ? { backgroundColor: isDark ? 'rgba(254,166,14,0.2)' : 'rgba(254,166,14,0.1)', borderColor: '#fea60e', borderWidth: 1.5 } : { backgroundColor: colors.cardBg2, borderColor: colors.borderColor, borderWidth: 1 }}
+                          className={`flex-row items-center justify-between px-4 py-3 rounded-xl`}
+                        >
+                          <View className="flex-row items-center flex-1 mr-2">
+                            <Icon
+                              source={isSelected ? "check-circle" : "circle-outline"}
+                              size={22}
+                              color={isSelected ? "#fea60e" : "#6b7280"}
+                            />
+                            <Text
+                              className="ml-3 text-sm flex-1"
+                              style={{ color: isSelected ? (isDark ? '#e2e8f0' : '#166534') : colors.sectionHeaderText }}
+                              numberOfLines={1}
+                            >
+                              {item.serviceName}
+                            </Text>
+                          </View>
+                          <Text
+                            className="text-sm font-century-gothic-bold"
+                            style={{ color: isSelected ? "#fea60e" : colors.textSecondary }}
+                          >
+                            {item.price} {t("card.currencySymbol")}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    }}
+                  />
+                </View>
+
+                {/* Bilgilendirme Mesajlari */}
+                <View
+                  className="bg-blue-900/30 border border-blue-700/50 rounded-xl p-4 gap-2"
+                  style={{ display: "none" }}
+                >
+                  <View className="flex-row items-start gap-2">
+                    <Icon source="information" size={20} color="#60a5fa" />
+                    <View className="flex-1">
+                      <Text className="text-blue-300 font-century-gothic text-sm">
+                        İstek gönderip free barber ile mesajlaşmaya
+                        başlayabilirsiniz.
+                      </Text>
+                    </View>
+                  </View>
+                  <View className="flex-row items-start gap-2 mt-1">
+                    <Icon
+                      source="clock-alert-outline"
+                      size={20}
+                      color="#fbbf24"
+                    />
+                    <View className="flex-1">
+                      <Text className="text-yellow-300 font-century-gothic text-sm">
+                        5 dakika içinde cevap gelmezse randevu cevapsıza düşecek
+                        ve yeni randevu arayabilirsiniz.
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+
+                {/* Randevu Gönder Butonu */}
+                <TouchableOpacity
+                  disabled={isCreating}
+                  className={`py-4 flex-row justify-center gap-2 rounded-2xl items-center ${isCreating ? "bg-[#4b5563]" : ""}`}
+                  style={isCreating ? { opacity: 0.7 } : { backgroundColor: '#fea60e', opacity: 1, elevation: 6, shadowColor: '#fea60e', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.3, shadowRadius: 6 }}
+                  onPress={() => guard(async () => {
+                    try {
+                      // Error veya location denied kontrolü
+                      if (!checkCanPerformAction()) {
+                        return;
+                      }
+
+                      if (selectedServices.length === 0) {
+                        alert(
+                          t("booking.warning"),
+                          t("booking.atLeastOneServiceRequired"),
+                          undefined,
+                          'warning'
+                        );
+                        return;
+                      }
+
+                      const locationResult = await getCurrentLocationSafe();
+                      if (!locationResult.ok) {
+                        alertError(
+                          t("common.error"),
+                          t("booking.locationNotAvailable"),
+                        );
+                        return;
+                      }
+
+                      if (!freeBarberUserId) {
+                        alert(
+                          t("booking.warning"),
+                          t("booking.freebarberInfoNotFound"),
+                          undefined,
+                          'warning'
+                        );
+                        return;
+                      }
+
+                      const payload = {
+                        freeBarberUserId: freeBarberUserId,
+                        storeSelectionType: StoreSelectionType.CustomRequest,
+                        requestLatitude: locationResult.lat,
+                        requestLongitude: locationResult.lon,
+                        serviceOfferingIds: selectedServices, // ✅ Sadece ID'leri gönder
+                      } as any;
+
+                      const createResult =
+                        await createCustomerToFreeBarberAppointment(payload);
+
+                      if ("error" in createResult) {
+                        const errorMessage = getErrorMessage(
+                          createResult.error,
+                        );
+                        alertError(
+                          t("common.error"),
+                          errorMessage || t("booking.appointmentCreationFailed"),
+                        );
+                        return;
+                      }
+
+                      alertSuccess(
+                        t("common.success"),
+                        t("booking.appointmentRequestSent"),
+                        [{ text: t("common.ok"), onPress: () => router.back() }],
+                      );
+                    } catch (error: any) {
+                      const errorMsg = getErrorMessage(error);
+                      if (errorMsg) {
+                        alertError(t("common.error"), errorMsg);
+                      }
+                    }
+                  })}
+                >
+                  {isCreating ? (
+                    <ActivityIndicator color="white" />
+                  ) : (
+                    <>
+                      <Icon source="send" size={20} color="white" />
+                      <Text className="text-white font-century-gothic-bold text-base">
+                        Randevu Talebi Gönder
+                      </Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              </View>
+            )}
+          {currentUserType === UserType.Customer &&
+            !isBarberMode &&
+            !isAddStoreMode &&
+            storeSelectionType === StoreSelectionType.StoreSelection && (
+              <View className="gap-4 mt-4">
+                <View className="flex-row justify-between items-center">
+                  <Text style={{ color: colors.sectionHeaderText }} className="font-century-gothic-bold text-lg">
+                    Randevu Detayları
+                  </Text>
+                  <TouchableOpacity onPress={() => setStoreSelectionType(null)}>
+                    <Icon source="close" size={20} color={colors.sectionHeaderText} />
+                  </TouchableOpacity>
+                </View>
+
+                <View>
+                  <Text style={{ color: colors.sectionHeaderText }} className="font-century-gothic text-base mb-2">
+                    Berberin Hizmetleri
+                  </Text>
+                  <FlatList
+                    data={freeBarberData?.offerings ?? []}
+                    keyExtractor={(item) => item.id}
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={{ gap: 10, paddingHorizontal: 4 }}
+                    renderItem={({ item }) => (
+                      <FilterChip
+                        itemKey={item.id}
+                        selected={false}
+                        isDisabled
+                        className="rounded-xl px-4 py-2 bg-gray-800"
+                      >
+                        <Text style={{ color: "#d1d5db", fontSize: 14 }}>
+                          {item.serviceName}
+                        </Text>
+                      </FilterChip>
+                    )}
+                  />
+                </View>
+
+                <View>
+                  <Text style={{ color: colors.sectionHeaderText }} className="font-century-gothic mb-2">
+                    Randevu Notu
+                  </Text>
+                  <TextInput
+                    value={note}
+                    onChangeText={setNote}
+                    placeholder={t("booking.appointmentNotePlaceholder")}
+                    placeholderTextColor="#9ca3af"
+                    multiline
+                    numberOfLines={3}
+                    style={{
+                      textAlignVertical: "top",
+                      minHeight: 80,
+                      fontFamily: Platform.OS === "ios" ? "CenturyGothic" : "CenturyGothic",
+                      backgroundColor: colors.cardBg2,
+                      color: colors.sectionHeaderText,
+                      borderRadius: 12,
+                      paddingHorizontal: 16,
+                      paddingVertical: 12,
+                    }}
+                  />
+                </View>
+
+                <TouchableOpacity
+                  disabled={isCreating}
+                  className={`py-4 flex-row justify-center gap-2 rounded-xl items-center ${isCreating ? "bg-[#4b5563]" : ""}`}
+                  style={isCreating ? { opacity: 0.7 } : { backgroundColor: '#fea60e', opacity: 1 }}
+                  onPress={() => guard(async () => {
+                    try {
+                      // Error veya location denied kontrolü
+                      if (!checkCanPerformAction()) {
+                        return;
+                      }
+
+                      const trimmedNote = note.trim();
+                      if (!trimmedNote) {
+                        alert(
+                          t("booking.warning"),
+                          t("booking.appointmentNoteRequired"),
+                          undefined,
+                          'warning'
+                        );
+                        return;
+                      }
+
+                      const locationResult = await getCurrentLocationSafe();
+                      if (!locationResult.ok) {
+                        alertError(
+                          t("location.locationRequired"),
+                          locationResult.message ??
+                          t("location.locationInfoNotAvailable"),
+                        );
+                        return;
+                      }
+
+                      if (!freeBarberUserId) {
+                        alert(
+                          t("booking.warning"),
+                          t("booking.freebarberInfoNotFound"),
+                          undefined,
+                          'warning'
+                        );
+                        return;
+                      }
+
+                      const payload = {
+                        freeBarberUserId: freeBarberUserId,
+                        storeSelectionType: StoreSelectionType.StoreSelection,
+                        requestLatitude: locationResult.lat,
+                        requestLongitude: locationResult.lon,
+                        note: trimmedNote,
+                      } as any;
+
+                      const createResult =
+                        await createCustomerToFreeBarberAppointment(payload);
+
+                      if ("error" in createResult) {
+                        const errorMessage = getErrorMessage(
+                          createResult.error,
+                        );
+                        alertError(
+                          t("common.error"),
+                          errorMessage || t("booking.appointmentCreationFailed"),
+                        );
+                        return;
+                      }
+
+                      alertSuccess(
+                        t("common.success"),
+                        t("booking.appointmentRequestSentSimple"),
+                        [{ text: t("common.ok"), onPress: () => router.back() }],
+                      );
+                    } catch (error: any) {
+                      const errorMsg = getErrorMessage(error);
+                      if (errorMsg) {
+                        alertError(t("common.error"), errorMsg);
+                      }
+                    }
+                  })}
+                >
+                  {isCreating ? (
+                    <ActivityIndicator color="white" />
+                  ) : (
+                    <>
+                      <Icon source="send" size={20} color="white" />
+                      <Text className="text-white font-century-gothic-bold text-base">
+                        Randevu Talebi Gönder
+                      </Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              </View>
+            )}
         </View>
       </ScrollContainer>
 
@@ -1072,6 +1108,75 @@ const FreeBarberBookingContent = ({
               mode="add-store"
               appointmentId={appointmentId}
             />
+          </BottomSheetView>
+        </BottomSheetModal>
+      )}
+
+      {currentUserType === UserType.BarberStore && isBarberMode && !isAddStoreMode && (
+        <BottomSheetModal
+          ref={myStoreSelectionSheet.ref}
+          index={0}
+          snapPoints={myStoreSelectionSheet.snapPoints}
+          enablePanDownToClose={myStoreSelectionSheet.enablePanDownToClose}
+          handleIndicatorStyle={{ backgroundColor: colors.sheetHandle }}
+          backgroundStyle={{ backgroundColor: colors.sheetBg }}
+          backdropComponent={myStoreSelectionSheet.makeBackdrop()}
+          onChange={(idx) => {
+            myStoreSelectionSheet.handleChange(idx);
+          }}
+        >
+          <BottomSheetView style={{ flex: 1, paddingHorizontal: 16, paddingBottom: 12 }}>
+            <Text
+              className="text-lg mb-1"
+              style={{ color: colors.sectionHeaderText, fontFamily: "CenturyGothic-Bold" }}
+            >
+              {t("panel.shops")}
+            </Text>
+            <Text className="text-sm mb-3" style={{ color: colors.textSecondary }}>
+              {t("booking.selectStoreFirst")}
+            </Text>
+            {isLoadingMyStores ? (
+              <SkeletonComponent />
+            ) : (
+              <BottomSheetFlatList<BarberStoreMineDto>
+                data={myStores ?? []}
+                keyExtractor={(s: BarberStoreMineDto) => s.id}
+                keyboardShouldPersistTaps="handled"
+                contentContainerStyle={{ paddingBottom: 24 }}
+                renderItem={({ item }: { item: BarberStoreMineDto }) => (
+                  <TouchableOpacity
+                    onPress={() => {
+                      setSelectedMyStoreId(item.id);
+                      myStoreSelectionSheet.dismiss();
+                    }}
+                    className="rounded-xl px-3 py-3 mb-2 border"
+                    style={{
+                      backgroundColor: colors.cardBg2,
+                      borderColor:
+                        selectedMyStoreId === item.id ? "#3b82f6" : colors.borderColor,
+                      borderWidth: selectedMyStoreId === item.id ? 2 : 1,
+                    }}
+                  >
+                    <Text
+                      className="text-base"
+                      style={{ color: colors.sectionHeaderText, fontFamily: "CenturyGothic-Bold" }}
+                      numberOfLines={2}
+                    >
+                      {item.storeName}
+                    </Text>
+                    {item.addressDescription ? (
+                      <Text
+                        className="text-xs mt-1"
+                        style={{ color: colors.textSecondary }}
+                        numberOfLines={2}
+                      >
+                        {item.addressDescription}
+                      </Text>
+                    ) : null}
+                  </TouchableOpacity>
+                )}
+              />
+            )}
           </BottomSheetView>
         </BottomSheetModal>
       )}

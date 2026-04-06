@@ -48,7 +48,8 @@ export function useNearbyControl({
     // Başlangıç değeri undefined olarak ayarlandı
     const savedFetchHandler = useRef<((lat: number, lon: number) => Promise<void>) | undefined>(undefined);
 
-    const initialLoading = !fetchedOnce && locationStatus !== "denied";
+    const [gateTimedOut, setGateTimedOut] = useState(false);
+    const initialLoading = !fetchedOnce && locationStatus !== "denied" && !gateTimedOut;
 
     function shouldFetchByMoveOrAge(lat: number, lon: number) {
         const now = Date.now();
@@ -189,8 +190,15 @@ export function useNearbyControl({
             return;
         }
 
-        gateAndStart();
+        // Güvenlik timeout'u: izin diyaloğu 10 saniyede tamamlanmazsa loading'i kaldır
+        const safetyTimer = setTimeout(() => {
+            setGateTimedOut(true);
+        }, 10_000);
+
+        gateAndStart().finally(() => clearTimeout(safetyTimer));
+
         return () => {
+            clearTimeout(safetyTimer);
             watchRef.current?.remove();
             watchRef.current = null;
             if (enableBackgroundTracking) stopBackgroundLocation();

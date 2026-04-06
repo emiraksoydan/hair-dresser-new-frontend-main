@@ -18,6 +18,7 @@ import { useLanguage } from "../../hook/useLanguage";
 import { NotificationParticipantView } from "./NotificationParticipantView";
 import { getMessage } from "../../utils/errorHandler";
 import { useTheme } from "../../hook/useTheme";
+import { useSafeNavigation } from "../../hook/useSafeNavigation";
 
 // ---------------------------------------------------------------------------
 // Sadeleştirilmiş Notification Item Component
@@ -178,6 +179,7 @@ export const NotificationItemOptimized = React.memo<NotificationItemProps>(
     const { colors, isDark } = useTheme();
     const { isAuthenticated } = useAuth();
     const { t } = useLanguage();
+    const router = useSafeNavigation();
 
     // ========== PAYLOAD PARSING ==========
     const payload = React.useMemo<NotificationPayload | null>(() => {
@@ -490,6 +492,16 @@ export const NotificationItemOptimized = React.memo<NotificationItemProps>(
       if (onAddStore && item.appointmentId) onAddStore(item.appointmentId);
     }, [item.appointmentId, onAddStore]);
 
+    const handleShowOnMap = React.useCallback(() => {
+      const lat = payload?.store?.latitude;
+      const lng = payload?.store?.longitude;
+      if (!lat || !lng) return;
+      router.push({
+        pathname: "/(freebarbertabs)/(panel)",
+        params: { focusLat: String(lat), focusLng: String(lng) },
+      });
+    }, [payload?.store?.latitude, payload?.store?.longitude, router]);
+
     // Tıklama: Aksiyon bildirimlerinde (onay/red) dokunarak okuma yok; sadece diğer türlerde.
     // Karar bekleyen + süresi dolmamış aksiyonlarda kart tıklanmasın (butonlara odaklanılsın).
     // ANCAK: Status belli olan bildirimlerde (onaylandı/reddedildi/iptal vb.) tap ile okunabilir.
@@ -782,6 +794,29 @@ export const NotificationItemOptimized = React.memo<NotificationItemProps>(
                   </View>
                 </View>
               )}
+            {/* Haritada Göster butonu (FreeBarber - dükkan konumu var ise) */}
+            {recipientRole === "freebarber" &&
+              payload?.store &&
+              payload.store.latitude != null &&
+              payload.store.longitude != null && (
+                <TouchableOpacity
+                  onPress={handleShowOnMap}
+                  className="mt-2 rounded-xl py-3 items-center justify-center flex-row gap-2"
+                  style={{
+                    backgroundColor: isDark ? "rgba(56,189,248,0.12)" : "rgba(224,242,254,0.7)",
+                    borderWidth: 1,
+                    borderColor: isDark ? "rgba(56,189,248,0.35)" : "rgba(14,165,233,0.28)",
+                  }}
+                >
+                  <Icon source="map-marker-outline" size={18} color={isDark ? "#7dd3fc" : "#0284c7"} />
+                  <Text
+                    className="text-sm font-semibold"
+                    style={{ color: isDark ? "#bae6fd" : "#0369a1", fontFamily: "CenturyGothic-Bold" }}
+                  >
+                    Haritada Göster
+                  </Text>
+                </TouchableOpacity>
+              )}
           </View>
         )}
 
@@ -819,6 +854,23 @@ export const NotificationItemOptimized = React.memo<NotificationItemProps>(
                     {t(`status.${statusKind}`)}
                   </Text>
                 </View>
+                {statusKind === "cancelled" &&
+                  payload?.cancellationReason?.trim() && (
+                    <Text
+                      style={{
+                        marginTop: 12,
+                        fontSize: 13,
+                        lineHeight: 19,
+                        fontFamily: "CenturyGothic",
+                        color: st.textColor,
+                        textAlign: "center",
+                        opacity: 0.92,
+                      }}
+                    >
+                      {t("appointment.labels.cancellationReason")}:{" "}
+                      {payload.cancellationReason.trim()}
+                    </Text>
+                  )}
               </View>
             </View>
           );

@@ -1,6 +1,7 @@
 import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import {
   Dimensions,
+  FlatList,
   RefreshControl,
   TouchableOpacity,
   View,
@@ -31,6 +32,7 @@ import { getErrorMessage, getMessage } from "../../utils/errorHandler";
 import { SavedFilterChips } from "../../components/common/savedfilterchips";
 import { FilterDrawer } from "../../components/common/filterdrawer";
 import FormStoreUpdate from "../../components/store/formstoreupdate";
+import FormStoreAdd from "../../components/store/formstoreadd";
 import { StoreMineCardComp } from "../../components/store/storeminecard";
 import { FreeBarberCardInner } from "../../components/freebarber/freebarbercard";
 import FreeBarberBookingContent from "../../components/freebarber/freebarberbooking";
@@ -58,10 +60,6 @@ import {
   compareStripOuterStyle,
   useCompareMetrics,
 } from "../compare/compareShared";
-import Animated, {
-  useAnimatedScrollHandler,
-  useSharedValue,
-} from "react-native-reanimated";
 import { PerplexityListItem } from "../../components/panel/PerplexityListItem";
 import { PerplexityHorizontalList } from "../../components/panel/PerplexityHorizontalList";
 
@@ -182,6 +180,12 @@ const Index = () => {
     snapPoints: ["90%", "100%"],
     enablePanDownToClose: true,
   });
+  const addStoreSheet = useBottomSheet({
+    snapPoints: ["100%"],
+    enablePanDownToClose: false,
+    enableOverDrag: false,
+    enableHandlePanningGesture: false,
+  });
   const updateStoreSheet = useBottomSheet({
     snapPoints: ["100%"],
     enablePanDownToClose: false,
@@ -228,14 +232,6 @@ const Index = () => {
     }
   }, [manualFetch, refetchStores, storesError]);
 
-  const ITEM_ANIM_STRIDE = 280;
-  const scrollY = useSharedValue(0);
-  const onVerticalScroll = useAnimatedScrollHandler({
-    onScroll: (e) => {
-      scrollY.value = e.contentOffset.y / 280;
-    },
-  });
-
   const [expandedStores, setExpandedStores] = useState(true);
   const [expandedFreeBarbers, setExpandedFreeBarbers] = useState(true);
 
@@ -248,11 +244,11 @@ const Index = () => {
   const screenWidth = Dimensions.get("window").width;
 
   const cardWidthStore = useMemo(
-    () => (expandedStores ? screenWidth * 0.92 : screenWidth * 0.94),
+    () => (expandedStores ? screenWidth * 0.935 : screenWidth * 0.955),
     [expandedStores, screenWidth],
   );
   const cardWidthFreeBarber = useMemo(
-    () => (expandedFreeBarbers ? screenWidth * 0.92 : screenWidth * 0.94),
+    () => (expandedFreeBarbers ? screenWidth * 0.935 : screenWidth * 0.955),
     [expandedFreeBarbers, screenWidth],
   );
 
@@ -415,9 +411,9 @@ const Index = () => {
         panelCompare={
           filteredStores.length >= 2
             ? {
-                selected: compareStoreIds.includes(item.id),
-                onPress: () => toggleCompareStore(item.id),
-              }
+              selected: compareStoreIds.includes(item.id),
+              onPress: () => toggleCompareStore(item.id),
+            }
             : undefined
         }
       />
@@ -455,9 +451,9 @@ const Index = () => {
         panelCompare={
           isOtherUsersFreeBarber(item, currentUserId)
             ? {
-                selected: compareFbIds.includes(item.id),
-                onPress: () => toggleCompareFb(item.id),
-              }
+              selected: compareFbIds.includes(item.id),
+              onPress: () => toggleCompareFb(item.id),
+            }
             : undefined
         }
       />
@@ -494,81 +490,81 @@ const Index = () => {
 
     type Row =
       | {
-          id: string;
-          type: "stores-header";
-          _scrollStart: number;
-          _scrollLen: number;
-        }
+        id: string;
+        type: "stores-header";
+        _scrollStart: number;
+        _scrollLen: number;
+      }
       | {
-          id: string;
-          type: "stores-loading";
-          _scrollStart: number;
-          _scrollLen: number;
-        }
+        id: string;
+        type: "stores-loading";
+        _scrollStart: number;
+        _scrollLen: number;
+      }
       | {
-          id: string;
-          type: "stores-error";
-          _scrollStart: number;
-          _scrollLen: number;
-        }
+        id: string;
+        type: "stores-error";
+        _scrollStart: number;
+        _scrollLen: number;
+      }
       | {
-          id: string;
-          type: "stores-empty";
-          _scrollStart: number;
-          _scrollLen: number;
-        }
+        id: string;
+        type: "stores-empty";
+        _scrollStart: number;
+        _scrollLen: number;
+      }
       | {
-          id: string;
-          type: "store-row";
-          data: BarberStoreMineDto;
-          _scrollStart: number;
-          _scrollLen: number;
-        }
+        id: string;
+        type: "store-row";
+        data: BarberStoreMineDto;
+        _scrollStart: number;
+        _scrollLen: number;
+      }
       | {
-          id: string;
-          type: "stores-content-horizontal";
-          data: BarberStoreMineDto[];
-          _scrollStart: number;
-          _scrollLen: number;
-        }
+        id: string;
+        type: "stores-content-horizontal";
+        data: BarberStoreMineDto[];
+        _scrollStart: number;
+        _scrollLen: number;
+      }
       | {
-          id: string;
-          type: "freebarbers-header";
-          _scrollStart: number;
-          _scrollLen: number;
-        }
+        id: string;
+        type: "freebarbers-header";
+        _scrollStart: number;
+        _scrollLen: number;
+      }
       | {
-          id: string;
-          type: "freebarbers-loading";
-          _scrollStart: number;
-          _scrollLen: number;
-        }
+        id: string;
+        type: "freebarbers-loading";
+        _scrollStart: number;
+        _scrollLen: number;
+      }
       | {
-          id: string;
-          type: "freebarbers-error";
-          _scrollStart: number;
-          _scrollLen: number;
-        }
+        id: string;
+        type: "freebarbers-error";
+        _scrollStart: number;
+        _scrollLen: number;
+      }
       | {
-          id: string;
-          type: "freebarbers-empty";
-          _scrollStart: number;
-          _scrollLen: number;
-        }
+        id: string;
+        type: "freebarbers-empty";
+        _scrollStart: number;
+        _scrollLen: number;
+      }
       | {
-          id: string;
-          type: "freebarber-row";
-          data: FreeBarGetDto;
-          _scrollStart: number;
-          _scrollLen: number;
-        }
+        id: string;
+        type: "freebarber-row";
+        data: FreeBarGetDto;
+        _scrollStart: number;
+        _scrollLen: number;
+      }
       | {
-          id: string;
-          type: "freebarbers-content-horizontal";
-          data: FreeBarGetDto[];
-          _scrollStart: number;
-          _scrollLen: number;
-        };
+        id: string;
+        type: "freebarbers-content-horizontal";
+        data: FreeBarGetDto[];
+        _scrollStart: number;
+        _scrollLen: number;
+      };
 
     const rows: Row[] = [];
     let y = 0;
@@ -633,11 +629,6 @@ const Index = () => {
     filterCriteria.userType,
     isList,
   ]);
-
-  const verticalSnapOffsets = useMemo(
-    () => listData.map((r) => r._scrollStart),
-    [listData],
-  );
 
   const mapInitialRegion = useMemo(() => {
     const storeCandidate = displayStores
@@ -709,6 +700,9 @@ const Index = () => {
           accessibilityLabel={t("common.goBack")}
           style={{ margin: 0 }}
         />
+        <Text style={{ color: colors.sectionHeaderText, fontFamily: 'CenturyGothic-Bold', fontSize: 17, marginLeft: 4, flex: 1 }}>
+          {t("panel.myStores")}
+        </Text>
       </View>
       <View
         className={
@@ -753,15 +747,10 @@ const Index = () => {
         </View>
       )}
       <View style={{ flex: 1 }} pointerEvents={isMapMode ? 'none' : 'auto'}>
-        <Animated.FlatList
+        <FlatList
           data={listData}
           keyExtractor={(item) => item.id}
-          onScroll={onVerticalScroll}
           scrollEventThrottle={16}
-          decelerationRate="fast"
-          snapToOffsets={
-            verticalSnapOffsets.length > 0 ? verticalSnapOffsets : undefined
-          }
           contentContainerStyle={{ paddingBottom: 100 }}
           showsVerticalScrollIndicator={false}
           removeClippedSubviews={false}
@@ -776,20 +765,16 @@ const Index = () => {
           windowSize={21}
           renderItem={({ item }) => {
             if (item.type === "stores-header") {
+              if (!hasStores) return null;
               return (
-                <View className="flex flex-row justify-between items-center mt-4">
-                  <Text className="font-century-gothic text-xl" style={{ color: colors.sectionHeaderText }}>
-                    {t("panel.myStores")}
-                  </Text>
-                  {hasStores && (
-                    <MotiViewExpand
-                      expanded={expandedStores}
-                      onPress={() =>
-                        toggleExpand(expandedStores, setExpandedStores)
-                      }
-                      size={20}
-                    />
-                  )}
+                <View className="flex flex-row justify-end items-center mt-2">
+                  <MotiViewExpand
+                    expanded={expandedStores}
+                    onPress={() =>
+                      toggleExpand(expandedStores, setExpandedStores)
+                    }
+                    size={20}
+                  />
                 </View>
               );
             }
@@ -829,9 +814,7 @@ const Index = () => {
                       title={t("empty.noStoresAdded")}
                       subtitle={t("panel.emptyStateHintStore")}
                       buttonLabel={t("panel.openStorePanelToAdd")}
-                      onPress={() =>
-                        router.push("/(barberstoretabs)/(panel)")
-                      }
+                      onPress={() => addStoreSheet.present()}
                     />
                   </View>
                 );
@@ -856,10 +839,7 @@ const Index = () => {
             }
             if (item.type === "store-row") {
               return (
-                <PerplexityListItem
-                  scrollPos={scrollY}
-                  index={item._scrollStart / ITEM_ANIM_STRIDE}
-                >
+                <PerplexityListItem>
                   {renderStoreItem({ item: item.data })}
                 </PerplexityListItem>
               );
@@ -870,7 +850,6 @@ const Index = () => {
                   <PerplexityHorizontalList
                     data={filteredStores}
                     keyExtractor={(store) => store.id}
-                    snapInterval={cardWidthStore + 12}
                     contentContainerStyle={{ gap: 12, paddingTop: 8 }}
                     renderItem={({ item: store }) =>
                       renderStoreItem({ item: store })
@@ -952,10 +931,7 @@ const Index = () => {
             }
             if (item.type === "freebarber-row") {
               return (
-                <PerplexityListItem
-                  scrollPos={scrollY}
-                  index={item._scrollStart / ITEM_ANIM_STRIDE}
-                >
+                <PerplexityListItem>
                   {renderFreeBarberItem({ item: item.data })}
                 </PerplexityListItem>
               );
@@ -966,7 +942,6 @@ const Index = () => {
                   <PerplexityHorizontalList
                     data={filteredFreeBarbers}
                     keyExtractor={(fb: FreeBarGetDto) => (fb as any).id}
-                    snapInterval={cardWidthFreeBarber + 12}
                     contentContainerStyle={{ gap: 12, paddingTop: 8 }}
                     renderItem={({ item: fb }) =>
                       renderFreeBarberItem({ item: fb })
@@ -1087,6 +1062,27 @@ const Index = () => {
           }
         })}
       />
+
+      <BottomSheetModal
+        ref={addStoreSheet.ref}
+        backdropComponent={addStoreSheet.makeBackdrop()}
+        handleIndicatorStyle={{ backgroundColor: colors.sheetHandle }}
+        backgroundStyle={{ backgroundColor: colors.sheetBg }}
+        onChange={addStoreSheet.handleChange}
+        snapPoints={addStoreSheet.snapPoints}
+        enableOverDrag={addStoreSheet.enableOverDrag}
+        enablePanDownToClose={addStoreSheet.enablePanDownToClose}
+        enableHandlePanningGesture={addStoreSheet.enableHandlePanningGesture}
+      >
+        <BottomSheetView className="h-full pt-2">
+          <DeferredRender
+            active={addStoreSheet.isOpen}
+            placeholder={<View className="flex-1 pt-4"><CrudSkeletonComponent /></View>}
+          >
+            <FormStoreAdd onClose={() => addStoreSheet.dismiss()} />
+          </DeferredRender>
+        </BottomSheetView>
+      </BottomSheetModal>
 
       <BottomSheetModal
         ref={updateStoreSheet.ref}

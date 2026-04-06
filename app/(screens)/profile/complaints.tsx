@@ -92,100 +92,100 @@ export default function ComplaintsPage() {
 
         return (
             <ScrollStackItem index={index} scroll={scrollY} vanish>
-            <View
-                className="mb-3 overflow-hidden rounded-xl p-4"
-                style={{
-                    backgroundColor: colors.cardBg2,
-                    borderWidth: 1,
-                    borderColor: colors.borderColor,
-                    borderLeftWidth: 3,
-                    borderLeftColor: ACCENT,
-                }}
-            >
-                <View className="flex-row items-start">
-                    <View className="mr-3">
-                        <Image
-                            source={imageUrl ? { uri: imageUrl } : DEFAULT_AVATAR}
-                            style={{ width: AVATAR, height: AVATAR, borderRadius: AVATAR_RADIUS }}
-                            resizeMode="cover"
-                        />
+                <View
+                    className="mb-3 overflow-hidden rounded-xl p-4"
+                    style={{
+                        backgroundColor: colors.cardBg2,
+                        borderWidth: 1,
+                        borderColor: colors.borderColor,
+                        borderLeftWidth: 3,
+                        borderLeftColor: ACCENT,
+                    }}
+                >
+                    <View className="flex-row items-start">
+                        <View className="mr-3">
+                            <Image
+                                source={imageUrl ? { uri: imageUrl } : DEFAULT_AVATAR}
+                                style={{ width: AVATAR, height: AVATAR, borderRadius: AVATAR_RADIUS }}
+                                resizeMode="cover"
+                            />
+                        </View>
+                        <View className="min-w-0 flex-1 pr-2">
+                            <Text
+                                style={{
+                                    color: colors.sectionHeaderText,
+                                    fontFamily: "CenturyGothic-Bold",
+                                    fontSize: 16,
+                                }}
+                                numberOfLines={2}
+                            >
+                                {displayName}
+                            </Text>
+                            {userTypeName ? (
+                                <View
+                                    className="mt-1.5 self-start rounded-full px-2.5 py-1"
+                                    style={{
+                                        backgroundColor: isDark ? "rgba(255, 185, 0, 0.14)" : "rgba(255, 185, 0, 0.12)",
+                                        borderWidth: 1,
+                                        borderColor: isDark ? "rgba(255, 185, 0, 0.35)" : "rgba(251, 191, 36, 0.45)",
+                                    }}
+                                >
+                                    <Text
+                                        style={{
+                                            color: colors.sectionHeaderText,
+                                            fontFamily: "CenturyGothic-Bold",
+                                            fontSize: 12,
+                                        }}
+                                    >
+                                        {userTypeName}
+                                    </Text>
+                                </View>
+                            ) : null}
+                            <Text
+                                style={{
+                                    marginTop: 6,
+                                    color: colors.textSecondary,
+                                    fontFamily: "CenturyGothic",
+                                    fontSize: 13,
+                                }}
+                            >
+                                {formatDateTime(item.createdAt)}
+                            </Text>
+                        </View>
+                        <TouchableOpacity
+                            onPress={() => handleDelete(item.id)}
+                            disabled={isDeleting}
+                            style={{
+                                padding: 8,
+                                borderRadius: 10,
+                                backgroundColor: colors.cardBg3,
+                                borderWidth: 1,
+                                borderColor: colors.borderColor2,
+                            }}
+                        >
+                            <Icon source="delete-outline" size={22} color="#ef4444" />
+                        </TouchableOpacity>
                     </View>
-                    <View className="min-w-0 flex-1 pr-2">
+                    <View
+                        className="mt-3 rounded-xl px-3.5 py-3"
+                        style={{
+                            backgroundColor: colors.cardBg3,
+                            borderWidth: 1,
+                            borderColor: colors.borderColor,
+                        }}
+                    >
                         <Text
                             style={{
                                 color: colors.sectionHeaderText,
-                                fontFamily: "CenturyGothic-Bold",
-                                fontSize: 16,
-                            }}
-                            numberOfLines={2}
-                        >
-                            {displayName}
-                        </Text>
-                        {userTypeName ? (
-                            <View
-                                className="mt-1.5 self-start rounded-full px-2.5 py-1"
-                                style={{
-                                    backgroundColor: isDark ? "rgba(255, 185, 0, 0.14)" : "rgba(255, 185, 0, 0.12)",
-                                    borderWidth: 1,
-                                    borderColor: isDark ? "rgba(255, 185, 0, 0.35)" : "rgba(251, 191, 36, 0.45)",
-                                }}
-                            >
-                                <Text
-                                    style={{
-                                        color: colors.sectionHeaderText,
-                                        fontFamily: "CenturyGothic-Bold",
-                                        fontSize: 12,
-                                    }}
-                                >
-                                    {userTypeName}
-                                </Text>
-                            </View>
-                        ) : null}
-                        <Text
-                            style={{
-                                marginTop: 6,
-                                color: colors.textSecondary,
                                 fontFamily: "CenturyGothic",
-                                fontSize: 13,
+                                fontSize: 15,
+                                lineHeight: 22,
                             }}
                         >
-                            {formatDateTime(item.createdAt)}
+                            {item.complaintReason}
                         </Text>
                     </View>
-                    <TouchableOpacity
-                        onPress={() => handleDelete(item.id)}
-                        disabled={isDeleting}
-                        style={{
-                            padding: 8,
-                            borderRadius: 10,
-                            backgroundColor: colors.cardBg3,
-                            borderWidth: 1,
-                            borderColor: colors.borderColor2,
-                        }}
-                    >
-                        <Icon source="delete-outline" size={22} color="#ef4444" />
-                    </TouchableOpacity>
                 </View>
-                <View
-                    className="mt-3 rounded-xl px-3.5 py-3"
-                    style={{
-                        backgroundColor: colors.cardBg3,
-                        borderWidth: 1,
-                        borderColor: colors.borderColor,
-                    }}
-                >
-                    <Text
-                        style={{
-                            color: colors.sectionHeaderText,
-                            fontFamily: "CenturyGothic",
-                            fontSize: 15,
-                            lineHeight: 22,
-                        }}
-                    >
-                        {item.complaintReason}
-                    </Text>
-                </View>
-            </View>
             </ScrollStackItem>
         );
     };

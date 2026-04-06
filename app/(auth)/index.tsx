@@ -42,6 +42,8 @@ import { useLanguage } from "../hook/useLanguage";
 import { LanguageSelector } from "../components/common/LanguageSelector";
 import { LegalAgreementCheckbox } from "../components/auth/LegalAgreementCheckbox";
 import { useSafeNavigation } from "../hook/useSafeNavigation";
+import { persistHelpGuideOnboardingFromAuthPayload } from "../lib/helpGuideOnboarding";
+import { useActionGuard } from "../hook/useActionGuard";
 
 /** NetGsmSmsManager OTP_VALIDITY_SECONDS ile aynı (60 sn). */
 const OTP_COUNTDOWN_SECONDS = 60;
@@ -196,6 +198,7 @@ const Index = () => {
     setValue("mode", isRegister === true ? "login" : "register");
   const [sendOtp, { isLoading, isError, data, error }] = useSendOtpMutation();
   const [verifyOtp] = useVerifyOtpMutation();
+  const guard = useActionGuard();
 
   /** Modal kapalıyken de geri saysın; kapatıp "Doğrulama ekranına dön" ile süre doğru kalır. */
   const otpCountdownActive = left > 0;
@@ -205,7 +208,7 @@ const Index = () => {
     return () => clearInterval(t);
   }, [otpCountdownActive]);
 
-  const onSubmit = async (data: FormData) => {
+  const onSubmit = async (data: FormData) => guard(async () => {
     try {
       let normalizedPhone = data.phone;
       if (normalizedPhone.startsWith("0")) {
@@ -276,7 +279,7 @@ const Index = () => {
         }),
       );
     }
-  };
+  });
 
   const mmss = useMemo(() => {
     const m = Math.floor(left / 60).toString().padStart(2, "0");
@@ -317,7 +320,7 @@ const Index = () => {
     setOtpResetSignal((s) => s + 1);
   };
 
-  const doVerify = async (code: string, phoneNumber?: string) => {
+  const doVerify = async (code: string, phoneNumber?: string) => guard(async () => {
     try {
       const f = getValues();
       const userTypeToSend =
@@ -385,6 +388,8 @@ const Index = () => {
           refreshToken: response.data.refreshToken,
         });
 
+        await persistHelpGuideOnboardingFromAuthPayload(response.data);
+
         dispatch(api.util.invalidateTags(["Notification"]));
         dispatch(
           showSnack({
@@ -424,7 +429,7 @@ const Index = () => {
       );
       setOtpResetSignal((s) => s + 1);
     }
-  };
+  });
 
   const mapUserTypeToNumber = (ut: FormData["userType"]) => {
     switch (ut) {
@@ -443,7 +448,7 @@ const Index = () => {
   // left > 0 ise kod hala geçerli, resend devre dışı
   // left === 0 ise kod süresi doldu, resend aktif
   const canResend = left === 0;
-  const onResend = async () => {
+  const onResend = async () => guard(async () => {
     if (!phone) return;
 
     try {
@@ -507,7 +512,7 @@ const Index = () => {
         }),
       );
     }
-  };
+  });
 
   return (
     <KeyboardAvoidingView

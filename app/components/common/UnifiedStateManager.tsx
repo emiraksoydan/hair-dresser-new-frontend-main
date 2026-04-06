@@ -121,7 +121,13 @@ export const UnifiedStateManager: React.FC<UnifiedStateProps> = ({
     );
   }
 
-  const displayMessage = message || t(config.defaultMessage);
+  const fallbackText = t(config.defaultMessage);
+  const displayMessage =
+    message != null && String(message).trim() !== "" && String(message) !== "undefined"
+      ? String(message)
+      : typeof fallbackText === "string" && fallbackText.length > 0
+        ? fallbackText
+        : t("error.general");
   const animationSource = customAnimation || config.animation;
   const shouldShowRetry = showRetryButton && config.showRetry && onRetry;
 
@@ -136,7 +142,7 @@ export const UnifiedStateManager: React.FC<UnifiedStateProps> = ({
           borderWidth: 1,
           borderColor: colors.borderColor2,
         }}
-        className="rounded-2xl p-6 items-center w-full"
+        className="rounded-2xl p-6 pb-8 items-center w-full"
       >
         <LottieViewComponent
           animationSource={animationSource}

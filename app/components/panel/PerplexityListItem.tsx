@@ -1,41 +1,19 @@
 import React, { ReactNode } from "react";
-import Animated, {
-  Extrapolation,
-  SharedValue,
-  interpolate,
-  useAnimatedStyle,
-} from "react-native-reanimated";
+import { View } from "react-native";
 
+/**
+ * Önceki sürümde scroll ile opacity/scale vardı; animasyonlar kaldırıldı.
+ * Eski çağrılar uyumluluk için aynı prop imzası korunur (yok sayılır).
+ */
 type Props = {
-  /** Normalized scroll position: contentOffset / itemStride */
-  scrollPos: SharedValue<number>;
-  /** Normalized index of this item in the list (can be fractional for heterogeneous lists). */
-  index: number;
+  scrollPos?: unknown;
+  index?: number;
   horizontal?: boolean;
+  pixelSpace?: boolean;
+  pixelFocusHalfWidth?: number;
   children: ReactNode;
 };
 
-export function PerplexityListItem({
-  scrollPos,
-  index,
-  children,
-}: Props) {
-  const animatedStyle = useAnimatedStyle(() => {
-    "worklet";
-    const opacity = interpolate(
-      scrollPos.value,
-      [index - 1, index, index + 1],
-      [0.3, 1, 0.3],
-      Extrapolation.CLAMP,
-    );
-    const scale = interpolate(
-      scrollPos.value,
-      [index - 1, index, index + 1],
-      [0.92, 1, 0.92],
-      Extrapolation.CLAMP,
-    );
-    return { opacity, transform: [{ scale }] };
-  }, [index]);
-
-  return <Animated.View style={animatedStyle}>{children}</Animated.View>;
+export function PerplexityListItem({ children }: Props) {
+  return <View>{children}</View>;
 }

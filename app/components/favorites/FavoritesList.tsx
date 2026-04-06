@@ -81,7 +81,8 @@ const FavoritesList: React.FC<FavoritesListProps> = ({ mode = 'store' }) => {
     const [selectedStoreForUpdate, setSelectedStoreForUpdate] = useState<BarberStoreGetDto | null>(null);
 
     const screenWidth = Dimensions.get("window").width;
-    const cardWidth = screenWidth * 0.92;
+    /** Panel keşif kartları (≈0.935–0.955) ile aynı genişlikte olmamalı — biraz daha dar */
+    const cardWidth = screenWidth * 0.88;
 
     // Kullanıcının kendi user ID'sini al
     const currentUserId = useMemo(() => {
@@ -221,6 +222,7 @@ const FavoritesList: React.FC<FavoritesListProps> = ({ mode = 'store' }) => {
                     onPressRatings={handlePressRatings}
                     isViewerFromFreeBr={mode === 'freebarber'}
                     showImageAnimation={settingData?.data?.showImageAnimation ?? true}
+                    compactMeta
                 />
             );
         } else if (item.targetType === FavoriteTargetType.FreeBarber && item.freeBarber) {
@@ -235,6 +237,7 @@ const FavoritesList: React.FC<FavoritesListProps> = ({ mode = 'store' }) => {
                     onPressUpdate={goFreeBarberDetail}
                     onPressRatings={handlePressRatings}
                     showImageAnimation={settingData?.data?.showImageAnimation ?? true}
+                    compactMeta
                 />
             );
         } else if (item.targetType === FavoriteTargetType.Customer && item.customer) {
@@ -277,7 +280,7 @@ const FavoritesList: React.FC<FavoritesListProps> = ({ mode = 'store' }) => {
         return (
             <View className="flex-1 " style={{ backgroundColor: colors.screenBg }}>
                 <ScrollView
-                    contentContainerStyle={{ flexGrow: 1 }}
+                    contentContainerStyle={{ flexGrow: 1, paddingBottom: 32, paddingHorizontal: 8 }}
                     refreshControl={
                         <RefreshControl
                             refreshing={isFetching && !isLoading}
@@ -338,7 +341,13 @@ const FavoritesList: React.FC<FavoritesListProps> = ({ mode = 'store' }) => {
                 keyExtractor={(item) => item.id}
                 renderItem={renderItem as (info: { item: FavoriteGetDto; index: number }) => React.ReactNode}
                 itemStride={FAVORITE_CARD_STRIDE}
-                contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 100, paddingTop: 10 }}
+                contentPaddingTop={10}
+                contentContainerStyle={{
+                    paddingHorizontal: 16,
+                    paddingBottom: 100,
+                    paddingTop: 10,
+                    alignItems: "center",
+                }}
                 refreshControl={
                     <RefreshControl
                         refreshing={isFetching && !isLoading}

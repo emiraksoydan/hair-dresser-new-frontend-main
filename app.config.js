@@ -29,11 +29,6 @@ module.exports = {
     icon: "./assets/adaptive-icon.png",
     userInterfaceStyle: "automatic",
     newArchEnabled: true,
-    // Görsel marka intro’su tamamen React (BrandIntro). Native: sadece düz renk.
-    splash: {
-      backgroundColor: "#ffffff",
-      resizeMode: "cover",
-    },
     ios: {
       supportsTablet: false,
       requireFullScreen: true,
@@ -70,6 +65,16 @@ module.exports = {
       "expo-router",
       "./plugins/withNotificationChannel",
       "./plugins/withGradleProperties",
+      /** Android manifest: büyük/tablet ekranları desteklenmiyor (telefon odaklı). */
+      "./plugins/withPhoneOnly",
+      [
+        "expo-splash-screen",
+        {
+          image: "./assets/splash-icon.png",
+          backgroundColor: "#ffffff",
+          resizeMode: "contain",
+        },
+      ],
       [
         "expo-build-properties",
         {

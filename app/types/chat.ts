@@ -16,6 +16,12 @@ export type ChatThreadListItemDto = {
   unreadCount: number;
   currentUserImageUrl?: string | null; // Mevcut kullanıcının profil resmi (mesaj balonlarında göstermek için)
   participants: ChatThreadParticipantDto[];
+  /**
+   * true: mevcut kullanıcı karşı tarafı favoriye ALMAMIŞSA.
+   * Thread listede görünür ve badge alınmaya devam eder,
+   * ancak detaya girilemez, mesaj gönderilemez, okundu yapılamaz.
+   */
+  isRestrictedForCurrentUser: boolean;
 };
 
 export type ChatThreadParticipantDto = {

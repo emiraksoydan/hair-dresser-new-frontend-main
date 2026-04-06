@@ -93,7 +93,9 @@ export function useAIAssistant(): AIAssistantState {
 
       if (!uri) throw new Error("recording_failed");
 
-      if (durationMs < 800) {
+      // durationMillis bazı cihazlarda 0 / undefined dönebilir; ancak gerçekten kısa
+      // kayıtları (< 500ms) reddet — kota harcamamak için.
+      if (durationMs > 0 && durationMs < 500) {
         setPhase("error");
         setErrorMessage("transcription_empty");
         return;

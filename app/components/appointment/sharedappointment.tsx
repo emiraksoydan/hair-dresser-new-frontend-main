@@ -12,17 +12,10 @@ import {
   Platform,
   Dimensions,
   Modal,
-  NativeScrollEvent,
-  NativeSyntheticEvent,
-  type LayoutChangeEvent,
+  TextInput,
+  KeyboardAvoidingView,
+  Keyboard,
 } from "react-native";
-import Animated, {
-  useSharedValue,
-  useAnimatedStyle,
-  interpolate,
-  Extrapolation,
-} from "react-native-reanimated";
-import { PerplexityListItem } from "../panel/PerplexityListItem";
 import { MotiView } from "moti";
 import { Text } from "../common/Text";
 import { LegendList } from "@legendapp/list";
@@ -65,26 +58,6 @@ export default function SharedAppointmentScreen() {
     AppointmentFilter.Active,
   );
 
-  // Scroll-linked header animation (Reanimated)
-  // LegendList onScroll gerçek bir JS fonksiyonu bekler; useAnimatedScrollHandler worklet nesnesi verir → "Object is not a function"
-  const listScrollY = useSharedValue(0);
-  const listScrollYNorm = useSharedValue(0);
-  const onListScroll = useCallback(
-    (e: NativeSyntheticEvent<NativeScrollEvent>) => {
-      const y = e.nativeEvent.contentOffset.y;
-      listScrollY.value = y;
-      listScrollYNorm.value = y / APPT_ROW_DEFAULT_STRIDE;
-    },
-    [listScrollY, listScrollYNorm],
-  );
-  const filterBarAnimStyle = useAnimatedStyle(() => {
-    const opacity = interpolate(listScrollY.value, [0, 30], [0, isDark ? 0.35 : 0.1], Extrapolation.CLAMP);
-    const border = interpolate(listScrollY.value, [0, 30], [0, 1], Extrapolation.CLAMP);
-    return {
-      borderBottomWidth: border,
-      shadowOpacity: opacity,
-    };
-  });
   const ratingSheet = useBottomSheet({
     enablePanDownToClose: true,
   });
@@ -121,6 +94,8 @@ export default function SharedAppointmentScreen() {
 
   // Randevu card aksiyonları menüsü (dots-vertical) — tam ekran overlay + MotiView animasyon, kart yüksekliğini değiştirmez
   const [openCardMenuId, setOpenCardMenuId] = useState<string | null>(null);
+  const [cancelModalAppointmentId, setCancelModalAppointmentId] = useState<string | null>(null);
+  const [cancelReasonDraft, setCancelReasonDraft] = useState("");
   /** Menü konumu köke göre; yatayda ekran içinde kalacak şekilde clamp */
   const [cardMenuLayout, setCardMenuLayout] = useState<{
     top: number;
@@ -146,19 +121,6 @@ export default function SharedAppointmentScreen() {
     error,
     isError,
   } = useGetAllAppointmentByFilterQuery(activeFilter);
-
-  /** LegendList satır yüksekliği değişken; Perplexity scroll eşlemesi için ölçülen stride */
-  const appointmentRowStrideRef = useRef<Map<string, number>>(new Map());
-  const [appointmentLayoutVersion, setAppointmentLayoutVersion] = useState(0);
-
-  useEffect(() => {
-    appointmentRowStrideRef.current.clear();
-    setAppointmentLayoutVersion((v) => v + 1);
-  }, [activeFilter]);
-
-  const APPT_LIST_PAD = 10;
-  const APPT_LIST_GAP = 12;
-  const APPT_ROW_DEFAULT_STRIDE = 292;
 
   const filteredAppointments = useMemo(() => {
     const items = appointments ?? [];
@@ -188,21 +150,6 @@ export default function SharedAppointmentScreen() {
 
     return items;
   }, [appointments, activeFilter]);
-
-  const appointmentListScrollLayout = useMemo(() => {
-    const starts: number[] = [];
-    const lengths: number[] = [];
-    let y = APPT_LIST_PAD;
-    filteredAppointments.forEach((app) => {
-      starts.push(y);
-      const stride =
-        appointmentRowStrideRef.current.get(app.id) ?? APPT_ROW_DEFAULT_STRIDE;
-      const L = Math.max(stride, 1);
-      lengths.push(L);
-      y += L;
-    });
-    return { starts, lengths };
-  }, [filteredAppointments, appointmentLayoutVersion]);
 
   const [cancelAppointment, { isLoading: isCancelling }] =
     useCancelAppointmentMutation();
@@ -528,26 +475,48 @@ export default function SharedAppointmentScreen() {
   );
 
   // --- İşlemler ---
-  const handleCancel = async (id: string) => {
-    confirm(
-      t("appointment.alerts.cancellationTitle"),
-      t("appointment.alerts.confirmCancellation"),
-      () => guard(async () => {
-        const cancelResult = await cancelAppointment(id);
-        if ("error" in cancelResult) {
-          const errorMessage =
-            (cancelResult.error as any)?.data?.message ||
-            t("appointment.alerts.cancelFailed");
-          alertError(t("common.error"), errorMessage);
-          return;
-        }
-        alertSuccess(t("common.success"), t("appointment.alerts.cancelled"));
-      }),
-      undefined,
-      t("appointment.actions.cancel"),
-      t("appointment.alerts.cancel"),
-    );
-  };
+  const handleCancel = useCallback((id: string) => {
+    setCancelReasonDraft("");
+    setCancelModalAppointmentId(id);
+  }, []);
+
+  const closeCancelModal = useCallback(() => {
+    if (isCancelling) return;
+    Keyboard.dismiss();
+    setCancelModalAppointmentId(null);
+    setCancelReasonDraft("");
+  }, [isCancelling]);
+
+  const submitCancel = useCallback(() => {
+    const id = cancelModalAppointmentId;
+    if (!id) return;
+    const trimmed = cancelReasonDraft.trim();
+    void guard(async () => {
+      const cancelResult = await cancelAppointment({
+        appointmentId: id,
+        cancellationReason: trimmed.length > 0 ? trimmed : undefined,
+      });
+      if ("error" in cancelResult) {
+        const errorMessage =
+          (cancelResult.error as any)?.data?.message ||
+          t("appointment.alerts.cancelFailed");
+        alertError(t("common.error"), errorMessage);
+        return;
+      }
+      Keyboard.dismiss();
+      setCancelModalAppointmentId(null);
+      setCancelReasonDraft("");
+      alertSuccess(t("common.success"), t("appointment.alerts.cancelled"));
+    });
+  }, [
+    cancelModalAppointmentId,
+    cancelReasonDraft,
+    cancelAppointment,
+    guard,
+    t,
+    alertError,
+    alertSuccess,
+  ]);
 
   const handleComplete = async (id: string) => {
     confirm(
@@ -669,7 +638,7 @@ export default function SharedAppointmentScreen() {
           rootRef.measureInWindow((rx, ry, rw, _rh) => {
             const sw = Dimensions.get("window").width;
             const pad = 10;
-            const menuW = Math.min(240, Math.max(176, rw - pad * 2));
+            const menuW = Math.min(190, Math.max(148, rw - pad * 2));
             const dotRight = ax + aw;
             let menuLeftWin = dotRight - menuW;
             menuLeftWin = Math.max(pad, Math.min(menuLeftWin, sw - pad - menuW));
@@ -707,7 +676,7 @@ export default function SharedAppointmentScreen() {
       fabCtx?.setHeaderDeleteAction(null);
     }
     return () => { fabCtx?.setHeaderDeleteAction(null); };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showHeaderDeleteAction, isDeletingAllAppointments]);
 
   // Rating Component - Ortalama rating ve kullanıcının rating'i göster
@@ -955,1001 +924,991 @@ export default function SharedAppointmentScreen() {
           : currentLanguage === "ar"
             ? "ar-SA"
             : "en-US";
-    const itemStart =
-      appointmentListScrollLayout.starts[index] ??
-      APPT_LIST_PAD + index * APPT_ROW_DEFAULT_STRIDE;
-
     return (
-    <PerplexityListItem
-      scrollPos={listScrollYNorm}
-      index={itemStart / APPT_ROW_DEFAULT_STRIDE}
-    >
-      <View
-        onLayout={(e: LayoutChangeEvent) => {
-          const innerH = e.nativeEvent.layout.height;
-          const stride = innerH + APPT_LIST_GAP;
-          const id = item.id;
-          const prev = appointmentRowStrideRef.current.get(id);
-          if (prev === undefined || Math.abs(prev - stride) > 2) {
-            appointmentRowStrideRef.current.set(id, stride);
-            setAppointmentLayoutVersion((v) => v + 1);
-          }
-        }}
-      >
-      <View
-        className="rounded-2xl mb-3 overflow-hidden"
-        style={{
-          backgroundColor: colors.cardBg,
-          borderColor: isCompletedOrCancelled ? colors.borderColor : "rgba(255, 185, 0, 0.22)",
-          borderWidth: 1,
-          borderRadius: 14,
-          borderLeftWidth: 2,
-          borderLeftColor: statusColor,
-          shadowColor: statusColor,
-          shadowOffset: { width: 0, height: 2 },
-          shadowOpacity: isDark ? 0.07 : isCompletedOrCancelled ? 0.025 : 0.05,
-          shadowRadius: 6,
-          elevation: 2,
-        }}
-      >
-        <View className="pt-2 px-3 pb-3">
-        <View style={{ marginBottom: 2 }}>
-          {(activeFilter === AppointmentFilter.Active ||
-            activeFilter === AppointmentFilter.Pending ||
-            isCompletedOrCancelled) && (
-            <View
-              className="mb-1 pb-1"
-              style={{ borderBottomWidth: 1, borderBottomColor: colors.borderColor }}
-            >
-              <View
-                className="flex-row items-center gap-2 justify-between"
-                style={{
-                  backgroundColor: isDark ? `${statusColor}18` : `${statusColor}10`,
-                  borderRadius: 10,
-                  paddingVertical: 7,
-                  paddingHorizontal: 10,
-                  borderWidth: 1,
-                  borderColor: isDark ? `${statusColor}32` : `${statusColor}22`,
-                }}
-              >
-                <View className="flex-row items-center gap-2 flex-1 flex-wrap">
-                  <Icon source={statusIconName} size={16} color={statusColor} />
-                  <Text
-                    className="text-sm font-semibold flex-shrink"
-                    style={{ color: statusColor, fontFamily: "CenturyGothic-Bold" }}
-                    numberOfLines={2}
-                  >
-                    {statusText}
-                  </Text>
-                  {passed && isApproved && (
-                    <View className="flex-row items-center">
-                      <Icon source="alert-circle" size={14} color="#ffb900" />
-                      <Text className="text-[#ffb900] text-xs ml-1">
-                        {t("appointment.labels.timePassed")}
+          <View
+            className="rounded-2xl mb-3 overflow-hidden"
+            style={{
+              backgroundColor: colors.cardBg,
+              borderColor: isCompletedOrCancelled ? colors.borderColor : "rgba(255, 185, 0, 0.22)",
+              borderWidth: 1,
+              borderRadius: 14,
+              borderLeftWidth: 2,
+              borderLeftColor: statusColor,
+              shadowColor: statusColor,
+              shadowOffset: { width: 0, height: 2 },
+              shadowOpacity: isDark ? 0.07 : isCompletedOrCancelled ? 0.025 : 0.05,
+              shadowRadius: 6,
+              elevation: 2,
+            }}
+          >
+            <View className="pt-2 px-3 pb-3">
+              <View style={{ marginBottom: 2 }}>
+                {(activeFilter === AppointmentFilter.Active ||
+                  activeFilter === AppointmentFilter.Pending ||
+                  isCompletedOrCancelled) && (
+                    <View
+                      className="mb-1 pb-1"
+                      style={{ borderBottomWidth: 1, borderBottomColor: colors.borderColor }}
+                    >
+                      <View
+                        className="flex-row items-center gap-2 justify-between"
+                        style={{
+                          backgroundColor: isDark ? `${statusColor}18` : `${statusColor}10`,
+                          borderRadius: 10,
+                          paddingVertical: 7,
+                          paddingHorizontal: 10,
+                          borderWidth: 1,
+                          borderColor: isDark ? `${statusColor}32` : `${statusColor}22`,
+                        }}
+                      >
+                        <View className="flex-row items-center gap-2 flex-1 flex-wrap">
+                          <Icon source={statusIconName} size={16} color={statusColor} />
+                          <Text
+                            className="text-sm font-semibold flex-shrink"
+                            style={{ color: statusColor, fontFamily: "CenturyGothic-Bold" }}
+                            numberOfLines={2}
+                          >
+                            {statusText}
+                          </Text>
+                          {passed && isApproved && (
+                            <View className="flex-row items-center">
+                              <Icon source="alert-circle" size={14} color="#ffb900" />
+                              <Text className="text-[#ffb900] text-xs ml-1">
+                                {t("appointment.labels.timePassed")}
+                              </Text>
+                            </View>
+                          )}
+                        </View>
+                        {/* Dots menu button — only shown when card has actions */}
+                        {(showDeleteButton || ((activeFilter === AppointmentFilter.Completed || activeFilter === AppointmentFilter.Cancelled) && getAllComplaintTargets(item).length > 0)) && (
+                          <View ref={(r) => { cardMenuDotRefs.current[item.id] = r; }} collapsable={false}>
+                            <TouchableOpacity
+                              onPress={() => handleOpenCardMenu(item)}
+                              hitSlop={8}
+                              style={{
+                                width: 30,
+                                height: 30,
+                                borderRadius: 15,
+                                alignItems: "center",
+                                justifyContent: "center",
+                                backgroundColor: openCardMenuId === item.id
+                                  ? (isDark ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.06)")
+                                  : "transparent",
+                              }}
+                            >
+                              <Icon source="dots-vertical" size={18} color={statusColor} />
+                            </TouchableOpacity>
+                          </View>
+                        )}
+                      </View>
+                    </View>
+                  )}
+
+                {item.status === AppointmentStatus.Cancelled &&
+                  item.cancellationReason?.trim() && (
+                    <View style={{ marginTop: 8, marginBottom: 6 }}>
+                      <Text style={sectionLabelStyle}>
+                        {t("appointment.labels.cancellationReason")}
+                      </Text>
+                      <Text style={[metaLineStyle, { marginTop: 4 }]}>
+                        {item.cancellationReason.trim()}
                       </Text>
                     </View>
                   )}
-                </View>
-                {/* Dots menu button — only shown when card has actions */}
-                {(showDeleteButton || ((activeFilter === AppointmentFilter.Completed || activeFilter === AppointmentFilter.Cancelled) && getAllComplaintTargets(item).length > 0)) && (
-                  <View ref={(r) => { cardMenuDotRefs.current[item.id] = r; }} collapsable={false}>
-                    <TouchableOpacity
-                      onPress={() => handleOpenCardMenu(item)}
-                      hitSlop={8}
-                      style={{
-                        width: 30,
-                        height: 30,
-                        borderRadius: 15,
-                        alignItems: "center",
-                        justifyContent: "center",
-                        backgroundColor: openCardMenuId === item.id
-                          ? (isDark ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.06)")
-                          : "transparent",
-                      }}
-                    >
-                      <Icon source="dots-vertical" size={18} color={statusColor} />
-                    </TouchableOpacity>
+
+                {item.startTime && item.endTime && item.appointmentDate && (
+                  <View className="flex-row gap-2" style={{ marginBottom: 0, marginTop: 2 }}>
+                    <View style={schedulePill}>
+                      <View
+                        style={{
+                          padding: 5,
+                          borderRadius: 8,
+                          backgroundColor: isDark ? "#f05e2318" : "#fff7ed",
+                          marginRight: 7,
+                        }}
+                      >
+                        <Icon source="calendar-month" size={16} color="#f05e23" />
+                      </View>
+                      <View className="flex-1" style={{ minWidth: 0 }}>
+                        <Text
+                          style={{
+                            color: isDark ? "#fb923c" : "#c2410c",
+                            fontFamily: "CenturyGothic-Bold",
+                            fontSize: 10,
+                            marginBottom: 1,
+                            letterSpacing: 0.2,
+                          }}
+                        >
+                          {t("appointment.labels.scheduleDate")}
+                        </Text>
+                        <Text
+                          style={{
+                            color: colors.sectionHeaderText,
+                            fontFamily: "CenturyGothic-Bold",
+                            fontSize: 12,
+                          }}
+                          numberOfLines={2}
+                        >
+                          {new Date(item.appointmentDate).toLocaleDateString(dateLocale, {
+                            weekday: "short",
+                            day: "numeric",
+                            month: "short",
+                          })}
+                        </Text>
+                      </View>
+                    </View>
+                    <View style={schedulePill}>
+                      <View
+                        style={{
+                          padding: 5,
+                          borderRadius: 8,
+                          backgroundColor: isDark ? "#f05e2318" : "#fff7ed",
+                          marginRight: 7,
+                        }}
+                      >
+                        <Icon source="clock-outline" size={16} color="#f05e23" />
+                      </View>
+                      <View className="flex-1" style={{ minWidth: 0 }}>
+                        <Text
+                          style={{
+                            color: isDark ? "#fb923c" : "#c2410c",
+                            fontFamily: "CenturyGothic-Bold",
+                            fontSize: 10,
+                            marginBottom: 1,
+                            letterSpacing: 0.2,
+                          }}
+                        >
+                          {t("appointment.labels.scheduleTime")}
+                        </Text>
+                        <Text
+                          style={{
+                            color: colors.sectionHeaderText,
+                            fontFamily: "CenturyGothic-Bold",
+                            fontSize: 13,
+                          }}
+                          numberOfLines={1}
+                        >
+                          {item.startTime.substring(0, 5)} – {item.endTime.substring(0, 5)}
+                        </Text>
+                      </View>
+                    </View>
                   </View>
                 )}
               </View>
-            </View>
-          )}
 
-          {item.startTime && item.endTime && item.appointmentDate && (
-            <View className="flex-row gap-2" style={{ marginBottom: 0, marginTop: 2 }}>
-                <View style={schedulePill}>
-                  <View
-                    style={{
-                      padding: 5,
-                      borderRadius: 8,
-                      backgroundColor: isDark ? "#f05e2318" : "#fff7ed",
-                      marginRight: 7,
-                    }}
-                  >
-                    <Icon source="calendar-month" size={16} color="#f05e23" />
-                  </View>
-                  <View className="flex-1" style={{ minWidth: 0 }}>
-                    <Text
-                      style={{
-                        color: isDark ? "#fb923c" : "#c2410c",
-                        fontFamily: "CenturyGothic-Bold",
-                        fontSize: 10,
-                        marginBottom: 1,
-                        letterSpacing: 0.2,
-                      }}
-                    >
-                      {t("appointment.labels.scheduleDate")}
-                    </Text>
-                    <Text
-                      style={{
-                        color: colors.sectionHeaderText,
-                        fontFamily: "CenturyGothic-Bold",
-                        fontSize: 12,
-                      }}
-                      numberOfLines={2}
-                    >
-                      {new Date(item.appointmentDate).toLocaleDateString(dateLocale, {
-                        weekday: "short",
-                        day: "numeric",
-                        month: "short",
-                      })}
-                    </Text>
-                  </View>
-                </View>
-                <View style={schedulePill}>
-                  <View
-                    style={{
-                      padding: 5,
-                      borderRadius: 8,
-                      backgroundColor: isDark ? "#f05e2318" : "#fff7ed",
-                      marginRight: 7,
-                    }}
-                  >
-                    <Icon source="clock-outline" size={16} color="#f05e23" />
-                  </View>
-                  <View className="flex-1" style={{ minWidth: 0 }}>
-                    <Text
-                      style={{
-                        color: isDark ? "#fb923c" : "#c2410c",
-                        fontFamily: "CenturyGothic-Bold",
-                        fontSize: 10,
-                        marginBottom: 1,
-                        letterSpacing: 0.2,
-                      }}
-                    >
-                      {t("appointment.labels.scheduleTime")}
-                    </Text>
-                    <Text
-                      style={{
-                        color: colors.sectionHeaderText,
-                        fontFamily: "CenturyGothic-Bold",
-                        fontSize: 13,
-                      }}
-                      numberOfLines={1}
-                    >
-                      {item.startTime.substring(0, 5)} – {item.endTime.substring(0, 5)}
-                    </Text>
-                  </View>
-                </View>
-              </View>
-          )}
-        </View>
-
-        <View className="mb-1 gap-1.5" style={{ marginTop: 8 }}>
-          {/* Birincil aksiyonlar */}
-          {(showCompleteButton || showCancelButton) && (
-            <View className="flex-row gap-3 justify-end">
-              {showCompleteButton && (
-                <TouchableOpacity
-                  onPress={() => handleComplete(item.id)}
-                  disabled={isCompleting}
-                  className="flex-1 py-2.5 rounded-xl flex-row items-center justify-center"
-                  style={{
-                    backgroundColor: isDark ? "rgba(34,197,94,0.14)" : "rgba(187,247,208,0.65)",
-                    borderWidth: 1,
-                    borderColor: isDark ? "rgba(34,197,94,0.38)" : "rgba(22,163,74,0.28)",
-                  }}
-                >
-                  {isCompleting ? (
-                    <ActivityIndicator color={isDark ? "#86efac" : "#15803d"} size="small" />
-                  ) : (
-                    <>
-                      <Icon source="check-all" size={16} color={isDark ? "#86efac" : "#15803d"} />
-                      <Text
-                        className="text-sm font-semibold ml-2"
-                        style={{ color: isDark ? "#bbf7d0" : "#166534", fontFamily: "CenturyGothic-Bold" }}
-                      >
-                        {t("appointment.actions.complete")}
-                      </Text>
-                    </>
-                  )}
-                </TouchableOpacity>
-              )}
-              {showCancelButton && (
-                <TouchableOpacity
-                  onPress={() => handleCancel(item.id)}
-                  disabled={isCancelling}
-                  className="flex-1 py-2.5 rounded-xl flex-row items-center justify-center"
-                  style={{
-                    backgroundColor: isDark ? "rgba(248,113,113,0.14)" : "rgba(254,202,202,0.55)",
-                    borderWidth: 1,
-                    borderColor: isDark ? "rgba(248,113,113,0.38)" : "rgba(220,38,38,0.22)",
-                  }}
-                >
-                  {isCancelling ? (
-                    <ActivityIndicator color={isDark ? "#fca5a5" : "#dc2626"} size="small" />
-                  ) : (
-                    <>
-                      <Icon source="close-circle-outline" size={16} color={isDark ? "#fca5a5" : "#b91c1c"} />
-                      <Text
-                        className="text-sm font-semibold ml-2"
-                        style={{ color: isDark ? "#fecaca" : "#991b1b", fontFamily: "CenturyGothic-Bold" }}
-                      >
-                        {t("appointment.actions.cancel")}
-                      </Text>
-                    </>
-                  )}
-                </TouchableOpacity>
-              )}
-            </View>
-          )}
-        </View>
-
-        <View className="mb-0" style={{ marginTop: 8 }}>
-          {userType === UserType.BarberStore && (
-            <View className="gap-3">
-              {item.customerUserId && (
-                <View style={participantCardStyle}>
-                  <View className="flex-row items-start mb-1">
-                    <OwnerAvatar
-                      wrapperStyle={avatarRingWrap}
-                      ownerId={item.customerUserId}
-                      ownerType={ImageOwnerType.User}
-                      fallbackUrl={item.customerImage}
-                      imageClassName="w-14 h-14 rounded-xl"
-                      iconSource="account"
-                      iconSize={24}
-                      iconColor="#6b7280"
-                    />
-                    <View className="flex-1">
-                      <Text style={sectionLabelStyle}>
-                        {t("appointment.labels.customer")}
-                      </Text>
-                      <Text
-                        className="mb-1"
+              <View className="mb-1 gap-1.5" style={{ marginTop: 8 }}>
+                {/* Birincil aksiyonlar */}
+                {(showCompleteButton || showCancelButton) && (
+                  <View className="flex-row gap-3 justify-end">
+                    {showCompleteButton && (
+                      <TouchableOpacity
+                        onPress={() => handleComplete(item.id)}
+                        disabled={isCompleting}
+                        className="flex-1 py-2.5 rounded-xl flex-row items-center justify-center"
                         style={{
-                          color: colors.sectionHeaderText,
-                          fontFamily: "CenturyGothic-Bold",
-                          fontSize: 15,
+                          backgroundColor: isDark ? "rgba(34,197,94,0.14)" : "rgba(187,247,208,0.65)",
+                          borderWidth: 1,
+                          borderColor: isDark ? "rgba(34,197,94,0.38)" : "rgba(22,163,74,0.28)",
                         }}
-                        numberOfLines={1}
-                        ellipsizeMode="tail"
                       >
-                        {item.customerName}
-                      </Text>
-                      {item.customerNumber && (
-                        <Text style={metaLineStyle}>
-                          {t("card.customerNumber")}: {item.customerNumber}
-                        </Text>
-                      )}
-                    </View>
-                    <View className="mb-1">
-                      <FavoriteHeartButton
-                        active={!!item.isCustomerFavorite}
-                        onPress={() =>
-                          item.customerUserId &&
-                          handleToggleFavorite(item.customerUserId, item.id)
-                        }
-                        disabled={favoriteHeartDisabled(item, "customer")}
-                        style={favoriteBtnWrap}
-                        size={20}
-                      />
-                    </View>
-                  </View>
-                  <RatingDisplay
-                    myRating={item.myRatingForCustomer}
-                    myComment={item.myCommentForCustomer}
-                    averageRating={item.customerAverageRating}
-                    canRateNow={canRateTarget(item, "customer")}
-                    onRatePress={() =>
-                      item.customerUserId &&
-                      openRatingSheet(
-                        item.id,
-                        item.customerUserId,
-                        item.customerName || t("labels.customerDefaultName"),
-                        "customer",
-                        item.customerImage,
-                      )
-                    }
-                  />
-                </View>
-              )}
-              <View style={participantCardStyle}>
-                {item.freeBarberId ? (
-                  <View>
-                    <View className="flex-row items-start mb-1">
-                      <OwnerAvatar
-                        wrapperStyle={avatarRingWrap}
-                        ownerId={item.freeBarberId}
-                        ownerType={ImageOwnerType.FreeBarber}
-                        fallbackUrl={item.freeBarberImage}
-                        imageClassName="w-14 h-14 rounded-xl"
-                        iconSource="account-supervisor"
-                        iconSize={24}
-                        iconColor="#6b7280"
-                      />
-                      <View className="flex-1">
-                        <Text style={sectionLabelStyle}>
-                          {t("appointment.labels.rentingBarber")}
-                        </Text>
-                        <Text
-                          className="mb-1"
-                          style={{
-                            color: colors.sectionHeaderText,
-                            fontFamily: "CenturyGothic-Bold",
-                            fontSize: 15,
-                          }}
-                          numberOfLines={1}
-                          ellipsizeMode="tail"
-                        >
-                          {item.freeBarberName ||
-                            t("labels.freeBarberDefaultName")}
-                        </Text>
-                        {item.freeBarberNumber && (
-                          <Text style={metaLineStyle}>
-                            {t("card.freeBarberNumber")}: {item.freeBarberNumber}
-                          </Text>
+                        {isCompleting ? (
+                          <ActivityIndicator color={isDark ? "#86efac" : "#15803d"} size="small" />
+                        ) : (
+                          <>
+                            <Icon source="check-all" size={16} color={isDark ? "#86efac" : "#15803d"} />
+                            <Text
+                              className="text-sm font-semibold ml-2"
+                              style={{ color: isDark ? "#bbf7d0" : "#166534", fontFamily: "CenturyGothic-Bold" }}
+                            >
+                              {t("appointment.actions.complete")}
+                            </Text>
+                          </>
                         )}
-                      </View>
-                      <View className="mb-1">
-                        <FavoriteHeartButton
-                          active={!!item.isFreeBarberFavorite}
-                          onPress={() =>
-                            item.freeBarberId &&
-                            handleToggleFavorite(item.freeBarberId, item.id)
+                      </TouchableOpacity>
+                    )}
+                    {showCancelButton && (
+                      <TouchableOpacity
+                        onPress={() => handleCancel(item.id)}
+                        disabled={isCancelling}
+                        className="flex-1 py-2.5 rounded-xl flex-row items-center justify-center"
+                        style={{
+                          backgroundColor: isDark ? "rgba(248,113,113,0.14)" : "rgba(254,202,202,0.55)",
+                          borderWidth: 1,
+                          borderColor: isDark ? "rgba(248,113,113,0.38)" : "rgba(220,38,38,0.22)",
+                        }}
+                      >
+                        {isCancelling ? (
+                          <ActivityIndicator color={isDark ? "#fca5a5" : "#dc2626"} size="small" />
+                        ) : (
+                          <>
+                            <Icon source="close-circle-outline" size={16} color={isDark ? "#fca5a5" : "#b91c1c"} />
+                            <Text
+                              className="text-sm font-semibold ml-2"
+                              style={{ color: isDark ? "#fecaca" : "#991b1b", fontFamily: "CenturyGothic-Bold" }}
+                            >
+                              {t("appointment.actions.cancel")}
+                            </Text>
+                          </>
+                        )}
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                )}
+              </View>
+
+              <View className="mb-0" style={{ marginTop: 8 }}>
+                {userType === UserType.BarberStore && (
+                  <View className="gap-3">
+                    {item.customerUserId && (
+                      <View style={participantCardStyle}>
+                        <View className="flex-row items-start mb-1">
+                          <OwnerAvatar
+                            wrapperStyle={avatarRingWrap}
+                            ownerId={item.customerUserId}
+                            ownerType={ImageOwnerType.User}
+                            fallbackUrl={item.customerImage}
+                            imageClassName="w-14 h-14 rounded-xl"
+                            iconSource="account"
+                            iconSize={24}
+                            iconColor="#6b7280"
+                          />
+                          <View className="flex-1">
+                            <Text style={sectionLabelStyle}>
+                              {t("appointment.labels.customer")}
+                            </Text>
+                            <Text
+                              className="mb-1"
+                              style={{
+                                color: colors.sectionHeaderText,
+                                fontFamily: "CenturyGothic-Bold",
+                                fontSize: 15,
+                              }}
+                              numberOfLines={1}
+                              ellipsizeMode="tail"
+                            >
+                              {item.customerName}
+                            </Text>
+                            {item.customerNumber && (
+                              <Text style={metaLineStyle}>
+                                {t("card.customerNumber")}: {item.customerNumber}
+                              </Text>
+                            )}
+                          </View>
+                          <View className="mb-1">
+                            <FavoriteHeartButton
+                              active={!!item.isCustomerFavorite}
+                              onPress={() =>
+                                item.customerUserId &&
+                                handleToggleFavorite(item.customerUserId, item.id)
+                              }
+                              disabled={favoriteHeartDisabled(item, "customer")}
+                              style={favoriteBtnWrap}
+                              size={20}
+                            />
+                          </View>
+                        </View>
+                        <RatingDisplay
+                          myRating={item.myRatingForCustomer}
+                          myComment={item.myCommentForCustomer}
+                          averageRating={item.customerAverageRating}
+                          canRateNow={canRateTarget(item, "customer")}
+                          onRatePress={() =>
+                            item.customerUserId &&
+                            openRatingSheet(
+                              item.id,
+                              item.customerUserId,
+                              item.customerName || t("labels.customerDefaultName"),
+                              "customer",
+                              item.customerImage,
+                            )
                           }
-                          disabled={favoriteHeartDisabled(item, "freeBarber")}
-                          style={favoriteBtnWrap}
-                          size={20}
                         />
                       </View>
+                    )}
+                    <View style={participantCardStyle}>
+                      {item.freeBarberId ? (
+                        <View>
+                          <View className="flex-row items-start mb-1">
+                            <OwnerAvatar
+                              wrapperStyle={avatarRingWrap}
+                              ownerId={item.freeBarberId}
+                              ownerType={ImageOwnerType.FreeBarber}
+                              fallbackUrl={item.freeBarberImage}
+                              imageClassName="w-14 h-14 rounded-xl"
+                              iconSource="account-supervisor"
+                              iconSize={24}
+                              iconColor="#6b7280"
+                            />
+                            <View className="flex-1">
+                              <Text style={sectionLabelStyle}>
+                                {t("appointment.labels.rentingBarber")}
+                              </Text>
+                              <Text
+                                className="mb-1"
+                                style={{
+                                  color: colors.sectionHeaderText,
+                                  fontFamily: "CenturyGothic-Bold",
+                                  fontSize: 15,
+                                }}
+                                numberOfLines={1}
+                                ellipsizeMode="tail"
+                              >
+                                {item.freeBarberName ||
+                                  t("labels.freeBarberDefaultName")}
+                              </Text>
+                              {item.freeBarberNumber && (
+                                <Text style={metaLineStyle}>
+                                  {t("card.freeBarberNumber")}: {item.freeBarberNumber}
+                                </Text>
+                              )}
+                            </View>
+                            <View className="mb-1">
+                              <FavoriteHeartButton
+                                active={!!item.isFreeBarberFavorite}
+                                onPress={() =>
+                                  item.freeBarberId &&
+                                  handleToggleFavorite(item.freeBarberId, item.id)
+                                }
+                                disabled={favoriteHeartDisabled(item, "freeBarber")}
+                                style={favoriteBtnWrap}
+                                size={20}
+                              />
+                            </View>
+                          </View>
+                          <RatingDisplay
+                            myRating={item.myRatingForFreeBarber}
+                            myComment={item.myCommentForFreeBarber}
+                            averageRating={item.freeBarberAverageRating}
+                            canRateNow={canRateTarget(item, "freeBarber")}
+                            onRatePress={() =>
+                              item.freeBarberId &&
+                              openRatingSheet(
+                                item.id,
+                                item.freeBarberId,
+                                item.freeBarberName ||
+                                t("labels.freeBarberDefaultName"),
+                                "freeBarber",
+                                item.freeBarberImage,
+                              )
+                            }
+                          />
+                        </View>
+                      ) : item.manuelBarberId ? (
+                        <View>
+                          <View className="flex-row items-start mb-1">
+                            <OwnerAvatar
+                              wrapperStyle={avatarRingWrap}
+                              ownerId={item.manuelBarberId}
+                              ownerType={ImageOwnerType.ManuelBarber}
+                              fallbackUrl={item.manuelBarberImage}
+                              imageClassName="w-14 h-14 rounded-xl"
+                              iconSource="account"
+                              iconSize={24}
+                              iconColor="#6b7280"
+                            />
+                            <View className="flex-1">
+                              <Text style={sectionLabelStyle}>
+                                {t("appointment.labels.storeBarber")}
+                              </Text>
+                              <Text
+                                className="mb-1"
+                                style={{
+                                  color: colors.sectionHeaderText,
+                                  fontFamily: "CenturyGothic-Bold",
+                                  fontSize: 15,
+                                }}
+                                numberOfLines={1}
+                                ellipsizeMode="tail"
+                              >
+                                {item.manuelBarberName}
+                              </Text>
+                            </View>
+                          </View>
+                          {/* Manuel barber için rating yapılabilir (sadece Customer) */}
+                          <RatingDisplay
+                            myRating={item.myRatingForManuelBarber}
+                            myComment={item.myCommentForManuelBarber}
+                            averageRating={item.manuelBarberAverageRating}
+                            canRateNow={canRateTarget(item, "manuelBarber")}
+                            onRatePress={() =>
+                              item.manuelBarberId &&
+                              openRatingSheet(
+                                item.id,
+                                item.manuelBarberId,
+                                item.manuelBarberName || t("favorites.manuelBarber"),
+                                "manuelBarber",
+                                item.manuelBarberImage,
+                              )
+                            }
+                          />
+                        </View>
+                      ) : (item.chairId || item.chairName) ? (
+                        <View className="flex-row items-center">
+                          <View
+                            className="w-14 h-14 rounded-xl items-center justify-center"
+                            style={{
+                              backgroundColor: colors.cardBg3,
+                              borderWidth: 1,
+                              borderColor: isDark ? "rgba(240, 94, 35, 0.4)" : "rgba(251, 146, 60, 0.45)",
+                              marginRight: 10,
+                            }}
+                          >
+                            <Icon source="seat" size={24} color={isDark ? "#94a3b8" : "#64748b"} />
+                          </View>
+                          <View className="flex-1">
+                            <Text
+                              style={{
+                                fontFamily: "CenturyGothic-Bold",
+                                fontSize: 15,
+                                color: colors.sectionHeaderText,
+                              }}
+                              numberOfLines={1}
+                              ellipsizeMode="tail"
+                            >
+                              {item.chairName || t("appointment.labels.chair")}
+                            </Text>
+                          </View>
+                        </View>
+                      ) : null}
                     </View>
-                    <RatingDisplay
-                      myRating={item.myRatingForFreeBarber}
-                      myComment={item.myCommentForFreeBarber}
-                      averageRating={item.freeBarberAverageRating}
-                      canRateNow={canRateTarget(item, "freeBarber")}
-                      onRatePress={() =>
-                        item.freeBarberId &&
-                        openRatingSheet(
-                          item.id,
-                          item.freeBarberId,
-                          item.freeBarberName ||
-                          t("labels.freeBarberDefaultName"),
-                          "freeBarber",
-                          item.freeBarberImage,
-                        )
-                      }
-                    />
                   </View>
-                ) : item.manuelBarberId ? (
-                  <View>
-                    <View className="flex-row items-start mb-1">
-                      <OwnerAvatar
-                        wrapperStyle={avatarRingWrap}
-                        ownerId={item.manuelBarberId}
-                        ownerType={ImageOwnerType.ManuelBarber}
-                        fallbackUrl={item.manuelBarberImage}
-                        imageClassName="w-14 h-14 rounded-xl"
-                        iconSource="account"
-                        iconSize={24}
-                        iconColor="#6b7280"
-                      />
-                      <View className="flex-1">
-                        <Text style={sectionLabelStyle}>
-                          {t("appointment.labels.storeBarber")}
-                        </Text>
-                        <Text
-                          className="mb-1"
-                          style={{
-                            color: colors.sectionHeaderText,
-                            fontFamily: "CenturyGothic-Bold",
-                            fontSize: 15,
-                          }}
-                          numberOfLines={1}
-                          ellipsizeMode="tail"
-                        >
-                          {item.manuelBarberName}
-                        </Text>
-                      </View>
-                    </View>
-                    {/* Manuel barber için rating yapılabilir (sadece Customer) */}
-                    <RatingDisplay
-                      myRating={item.myRatingForManuelBarber}
-                      myComment={item.myCommentForManuelBarber}
-                      averageRating={item.manuelBarberAverageRating}
-                      canRateNow={canRateTarget(item, "manuelBarber")}
-                      onRatePress={() =>
-                        item.manuelBarberId &&
-                        openRatingSheet(
-                          item.id,
-                          item.manuelBarberId,
-                          item.manuelBarberName || t("favorites.manuelBarber"),
-                          "manuelBarber",
-                          item.manuelBarberImage,
-                        )
-                      }
-                    />
-                  </View>
-                ) : (item.chairId || item.chairName) ? (
-                  <View className="flex-row items-center">
-                    <View
-                      className="w-14 h-14 rounded-xl items-center justify-center"
-                      style={{
-                        backgroundColor: colors.cardBg3,
-                        borderWidth: 1,
-                        borderColor: isDark ? "rgba(240, 94, 35, 0.4)" : "rgba(251, 146, 60, 0.45)",
-                        marginRight: 10,
-                      }}
-                    >
-                      <Icon source="seat" size={24} color={isDark ? "#94a3b8" : "#64748b"} />
-                    </View>
-                    <View className="flex-1">
-                      <Text
-                        style={{
-                          fontFamily: "CenturyGothic-Bold",
-                          fontSize: 15,
-                          color: colors.sectionHeaderText,
-                        }}
-                        numberOfLines={1}
-                        ellipsizeMode="tail"
-                      >
-                        {item.chairName || t("appointment.labels.chair")}
-                      </Text>
-                    </View>
-                  </View>
-                ) : null}
-              </View>
-            </View>
-          )}
+                )}
 
-          {userType === UserType.FreeBarber && (
-            <View className="gap-3">
-              {item.barberStoreId && (
-                <View style={participantCardStyle}>
-                  <View className="flex-row items-start mb-1">
-                    <OwnerAvatar
-                      wrapperStyle={avatarRingWrap}
-                      ownerId={item.barberStoreId}
-                      ownerType={ImageOwnerType.Store}
-                      fallbackUrl={item.storeImage}
-                      imageClassName="w-14 h-14 rounded-xl"
-                      iconSource="store"
-                      iconSize={24}
-                      iconColor="#6b7280"
-                    />
-                    <View className="flex-1">
-                      <Text style={sectionLabelStyle}>
-                        {t("appointment.labels.storeName")}
-                      </Text>
-                      <Text
-                        className="mb-1"
-                        style={{
-                          color: colors.sectionHeaderText,
-                          fontFamily: "CenturyGothic-Bold",
-                          fontSize: 15,
-                        }}
-                        numberOfLines={1}
-                        ellipsizeMode="tail"
-                      >
-                        {item.storeName}
-                      </Text>
-                      {item.storeType !== undefined && (
-                        <Text style={[metaLineStyle, { opacity: 0.85 }]}>
-                          {getBarberTypeName(item.storeType as BarberType)}
-                        </Text>
-                      )}
-                      {item.storeNo && (
-                        <Text style={metaLineStyle}>
-                          {'#'}{item.storeNo}
-                        </Text>
-                      )}
-                      {item.storeOwnerNumber && (
-                        <Text style={metaLineStyle}>
-                          {t("card.storeOwnerNumber")}: {item.storeOwnerNumber}
-                        </Text>
-                      )}
-                    </View>
-                    <View className="mb-1">
-                      <FavoriteHeartButton
-                        active={!!item.isStoreFavorite}
-                        onPress={() =>
-                          item.barberStoreId &&
-                          handleToggleFavorite(item.barberStoreId, item.id)
-                        }
-                        disabled={favoriteHeartDisabled(item, "store")}
-                        style={favoriteBtnWrap}
-                        size={20}
-                      />
-                    </View>
-                  </View>
-                  <RatingDisplay
-                    myRating={item.myRatingForStore}
-                    myComment={item.myCommentForStore}
-                    averageRating={item.storeAverageRating}
-                    canRateNow={canRateTarget(item, "store")}
-                    onRatePress={() =>
-                      item.barberStoreId &&
-                      openRatingSheet(
-                        item.id,
-                        item.barberStoreId,
-                        item.storeName || t("labels.storeDefaultName"),
-                        "store",
-                        item.storeImage,
-                      )
-                    }
-                  />
-                </View>
-              )}
-              {item.customerUserId && (
-                <View style={participantCardStyle}>
-                  <View className="flex-row items-start mb-1">
-                    <OwnerAvatar
-                      wrapperStyle={avatarRingWrap}
-                      ownerId={item.customerUserId}
-                      ownerType={ImageOwnerType.User}
-                      fallbackUrl={item.customerImage}
-                      imageClassName="w-14 h-14 rounded-xl"
-                      iconSource="account"
-                      iconSize={24}
-                      iconColor="#6b7280"
-                    />
-                    <View className="flex-1">
-                      <Text style={sectionLabelStyle}>
-                        {t("card.customerOf")}
-                      </Text>
-                      <Text
-                        className="mb-1"
-                        style={{
-                          color: colors.sectionHeaderText,
-                          fontFamily: "CenturyGothic-Bold",
-                          fontSize: 15,
-                        }}
-                        numberOfLines={1}
-                        ellipsizeMode="tail"
-                      >
-                        {item.customerName || t("labels.customerDefaultName")}
-                      </Text>
-                      {item.customerNumber && (
-                        <Text style={metaLineStyle}>
-                          {t("card.customerNumber")}: {item.customerNumber}
-                        </Text>
-                      )}
-                    </View>
-                    <View className="mb-1">
-                      <FavoriteHeartButton
-                        active={!!item.isCustomerFavorite}
-                        onPress={() =>
-                          item.customerUserId &&
-                          handleToggleFavorite(item.customerUserId, item.id)
-                        }
-                        disabled={favoriteHeartDisabled(item, "customer")}
-                        style={favoriteBtnWrap}
-                        size={20}
-                      />
-                    </View>
-                  </View>
-                  <RatingDisplay
-                    myRating={item.myRatingForCustomer}
-                    myComment={item.myCommentForCustomer}
-                    averageRating={item.customerAverageRating}
-                    canRateNow={canRateTarget(item, "customer")}
-                    onRatePress={() =>
-                      item.customerUserId &&
-                      openRatingSheet(
-                        item.id,
-                        item.customerUserId,
-                        item.customerName || t("labels.customerDefaultName"),
-                        "customer",
-                        item.customerImage,
-                      )
-                    }
-                  />
-                </View>
-              )}
-            </View>
-          )}
-
-          {userType === UserType.Customer && (
-            <View className="gap-3">
-              {item.barberStoreId && (
-                <View style={participantCardStyle}>
-                  <View className="flex-row items-start mb-1">
-                    <OwnerAvatar
-                      wrapperStyle={avatarRingWrap}
-                      ownerId={item.barberStoreId}
-                      ownerType={ImageOwnerType.Store}
-                      fallbackUrl={item.storeImage}
-                      imageClassName="w-14 h-14 rounded-xl"
-                      iconSource="store"
-                      iconSize={24}
-                      iconColor="#6b7280"
-                    />
-                    <View className="flex-1">
-                      <Text style={sectionLabelStyle}>
-                        {t("appointment.labels.storeName")}
-                      </Text>
-                      <Text
-                        className="mb-1"
-                        style={{
-                          color: colors.sectionHeaderText,
-                          fontFamily: "CenturyGothic-Bold",
-                          fontSize: 15,
-                        }}
-                        numberOfLines={1}
-                        ellipsizeMode="tail"
-                      >
-                        {item.storeName}
-                      </Text>
-                      {item.storeType !== undefined && (
-                        <Text style={[metaLineStyle, { opacity: 0.85 }]}>
-                          {getBarberTypeName(item.storeType as BarberType)}
-                        </Text>
-                      )}
-                      {item.storeNo && (
-                        <Text style={metaLineStyle}>
-                          {'#'}{item.storeNo}
-                        </Text>
-                      )}
-                      {item.storeOwnerNumber && (
-                        <Text style={metaLineStyle}>
-                          {t("card.storeOwnerNumber")}: {item.storeOwnerNumber}
-                        </Text>
-                      )}
-                    </View>
-                    <View className="mb-1">
-                      <FavoriteHeartButton
-                        active={!!item.isStoreFavorite}
-                        onPress={() =>
-                          item.barberStoreId &&
-                          handleToggleFavorite(item.barberStoreId, item.id)
-                        }
-                        disabled={favoriteHeartDisabled(item, "store")}
-                        style={favoriteBtnWrap}
-                        size={20}
-                      />
-                    </View>
-                  </View>
-                  <RatingDisplay
-                    myRating={item.myRatingForStore}
-                    myComment={item.myCommentForStore}
-                    averageRating={item.storeAverageRating}
-                    canRateNow={canRateTarget(item, "store")}
-                    onRatePress={() =>
-                      item.barberStoreId &&
-                      openRatingSheet(
-                        item.id,
-                        item.barberStoreId,
-                        item.storeName || t("labels.storeDefaultName"),
-                        "store",
-                        item.storeImage,
-                      )
-                    }
-                  />
-                </View>
-              )}
-
-              <View style={participantCardStyle}>
-                {item.freeBarberId ? (
-                  <View>
-                    <View className="flex-row items-start mb-1">
-                      <OwnerAvatar
-                        wrapperStyle={avatarRingWrap}
-                        ownerId={item.freeBarberId}
-                        ownerType={ImageOwnerType.FreeBarber}
-                        fallbackUrl={item.freeBarberImage}
-                        imageClassName="w-14 h-14 rounded-xl"
-                        iconSource="account-supervisor"
-                        iconSize={24}
-                        iconColor="#6b7280"
-                      />
-                      <View className="flex-1">
-                        <Text style={sectionLabelStyle}>
-                          {t("appointment.labels.serviceProvider")}
-                        </Text>
-                        <Text
-                          className="mb-1"
-                          style={{
-                            color: colors.sectionHeaderText,
-                            fontFamily: "CenturyGothic-Bold",
-                            fontSize: 15,
-                          }}
-                          numberOfLines={1}
-                          ellipsizeMode="tail"
-                        >
-                          {item.freeBarberName ||
-                            t("labels.freeBarberDefaultName")}
-                        </Text>
-                        <Text style={[metaLineStyle, { opacity: 0.85 }]}>
-                          {t("labels.freeBarberDefaultName")}
-                        </Text>
-                        {item.freeBarberNumber && (
-                          <Text style={metaLineStyle}>
-                            {t("card.freeBarberNumber")}: {item.freeBarberNumber}
-                          </Text>
-                        )}
-                      </View>
-                      <View className="mb-1">
-                        <FavoriteHeartButton
-                          active={!!item.isFreeBarberFavorite}
-                          onPress={() =>
-                            item.freeBarberId &&
-                            handleToggleFavorite(item.freeBarberId, item.id)
+                {userType === UserType.FreeBarber && (
+                  <View className="gap-3">
+                    {item.barberStoreId && (
+                      <View style={participantCardStyle}>
+                        <View className="flex-row items-start mb-1">
+                          <OwnerAvatar
+                            wrapperStyle={avatarRingWrap}
+                            ownerId={item.barberStoreId}
+                            ownerType={ImageOwnerType.Store}
+                            fallbackUrl={item.storeImage}
+                            imageClassName="w-14 h-14 rounded-xl"
+                            iconSource="store"
+                            iconSize={24}
+                            iconColor="#6b7280"
+                          />
+                          <View className="flex-1">
+                            <Text style={sectionLabelStyle}>
+                              {t("appointment.labels.storeName")}
+                            </Text>
+                            <Text
+                              className="mb-1"
+                              style={{
+                                color: colors.sectionHeaderText,
+                                fontFamily: "CenturyGothic-Bold",
+                                fontSize: 15,
+                              }}
+                              numberOfLines={1}
+                              ellipsizeMode="tail"
+                            >
+                              {item.storeName}
+                            </Text>
+                            {item.storeType !== undefined && (
+                              <Text style={[metaLineStyle, { opacity: 0.85 }]}>
+                                {getBarberTypeName(item.storeType as BarberType)}
+                              </Text>
+                            )}
+                            {item.storeNo && (
+                              <Text style={metaLineStyle}>
+                                {'#'}{item.storeNo}
+                              </Text>
+                            )}
+                            {item.storeOwnerNumber && (
+                              <Text style={metaLineStyle}>
+                                {t("card.storeOwnerNumber")}: {item.storeOwnerNumber}
+                              </Text>
+                            )}
+                          </View>
+                          <View className="mb-1">
+                            <FavoriteHeartButton
+                              active={!!item.isStoreFavorite}
+                              onPress={() =>
+                                item.barberStoreId &&
+                                handleToggleFavorite(item.barberStoreId, item.id)
+                              }
+                              disabled={favoriteHeartDisabled(item, "store")}
+                              style={favoriteBtnWrap}
+                              size={20}
+                            />
+                          </View>
+                        </View>
+                        <RatingDisplay
+                          myRating={item.myRatingForStore}
+                          myComment={item.myCommentForStore}
+                          averageRating={item.storeAverageRating}
+                          canRateNow={canRateTarget(item, "store")}
+                          onRatePress={() =>
+                            item.barberStoreId &&
+                            openRatingSheet(
+                              item.id,
+                              item.barberStoreId,
+                              item.storeName || t("labels.storeDefaultName"),
+                              "store",
+                              item.storeImage,
+                            )
                           }
-                          disabled={favoriteHeartDisabled(item, "freeBarber")}
-                          style={favoriteBtnWrap}
-                          size={20}
                         />
                       </View>
-                    </View>
-                    <RatingDisplay
-                      myRating={item.myRatingForFreeBarber}
-                      myComment={item.myCommentForFreeBarber}
-                      averageRating={item.freeBarberAverageRating}
-                      canRateNow={canRateTarget(item, "freeBarber")}
-                      onRatePress={() =>
-                        item.freeBarberId &&
-                        openRatingSheet(
-                          item.id,
-                          item.freeBarberId,
-                          item.freeBarberName ||
-                          t("labels.freeBarberDefaultName"),
-                          "freeBarber",
-                          item.freeBarberImage,
-                        )
-                      }
-                    />
-                  </View>
-                ) : item.manuelBarberId ? (
-                  <View>
-                    <View className="flex-row items-start mb-1">
-                      <OwnerAvatar
-                        wrapperStyle={avatarRingWrap}
-                        ownerId={item.manuelBarberId}
-                        ownerType={ImageOwnerType.ManuelBarber}
-                        fallbackUrl={item.manuelBarberImage}
-                        imageClassName="w-14 h-14 rounded-xl"
-                        iconSource="account"
-                        iconSize={24}
-                        iconColor="#6b7280"
-                      />
-                      <View className="flex-1">
-                        <Text style={sectionLabelStyle}>
-                          {t("appointment.labels.serviceProvider")}
-                        </Text>
-                        <Text
-                          className="mb-1"
-                          style={{
-                            color: colors.sectionHeaderText,
-                            fontFamily: "CenturyGothic-Bold",
-                            fontSize: 15,
-                          }}
-                          numberOfLines={1}
-                          ellipsizeMode="tail"
-                        >
-                          {item.manuelBarberName}
-                        </Text>
-                        <Text style={[metaLineStyle, { opacity: 0.85 }]}>
-                          {t("appointment.labels.storeEmployee")}
-                        </Text>
+                    )}
+                    {item.customerUserId && (
+                      <View style={participantCardStyle}>
+                        <View className="flex-row items-start mb-1">
+                          <OwnerAvatar
+                            wrapperStyle={avatarRingWrap}
+                            ownerId={item.customerUserId}
+                            ownerType={ImageOwnerType.User}
+                            fallbackUrl={item.customerImage}
+                            imageClassName="w-14 h-14 rounded-xl"
+                            iconSource="account"
+                            iconSize={24}
+                            iconColor="#6b7280"
+                          />
+                          <View className="flex-1">
+                            <Text style={sectionLabelStyle}>
+                              {t("card.customerOf")}
+                            </Text>
+                            <Text
+                              className="mb-1"
+                              style={{
+                                color: colors.sectionHeaderText,
+                                fontFamily: "CenturyGothic-Bold",
+                                fontSize: 15,
+                              }}
+                              numberOfLines={1}
+                              ellipsizeMode="tail"
+                            >
+                              {item.customerName || t("labels.customerDefaultName")}
+                            </Text>
+                            {item.customerNumber && (
+                              <Text style={metaLineStyle}>
+                                {t("card.customerNumber")}: {item.customerNumber}
+                              </Text>
+                            )}
+                          </View>
+                          <View className="mb-1">
+                            <FavoriteHeartButton
+                              active={!!item.isCustomerFavorite}
+                              onPress={() =>
+                                item.customerUserId &&
+                                handleToggleFavorite(item.customerUserId, item.id)
+                              }
+                              disabled={favoriteHeartDisabled(item, "customer")}
+                              style={favoriteBtnWrap}
+                              size={20}
+                            />
+                          </View>
+                        </View>
+                        <RatingDisplay
+                          myRating={item.myRatingForCustomer}
+                          myComment={item.myCommentForCustomer}
+                          averageRating={item.customerAverageRating}
+                          canRateNow={canRateTarget(item, "customer")}
+                          onRatePress={() =>
+                            item.customerUserId &&
+                            openRatingSheet(
+                              item.id,
+                              item.customerUserId,
+                              item.customerName || t("labels.customerDefaultName"),
+                              "customer",
+                              item.customerImage,
+                            )
+                          }
+                        />
                       </View>
-                    </View>
-                    {/* Manuel barber için rating yapılabilir (sadece Customer) */}
-                    <RatingDisplay
-                      myRating={item.myRatingForManuelBarber}
-                      myComment={item.myCommentForManuelBarber}
-                      averageRating={item.manuelBarberAverageRating}
-                      canRateNow={canRateTarget(item, "manuelBarber")}
-                      onRatePress={() =>
-                        item.manuelBarberId &&
-                        openRatingSheet(
-                          item.id,
-                          item.manuelBarberId,
-                          item.manuelBarberName || t("favorites.manuelBarber"),
-                          "manuelBarber",
-                          item.manuelBarberImage,
-                        )
-                      }
-                    />
+                    )}
                   </View>
-                ) : (item.chairId || item.chairName) ? (
-                  <View className="flex-row items-center">
-                    <View
-                      className="w-14 h-14 rounded-xl items-center justify-center"
-                      style={{
-                        backgroundColor: colors.cardBg3,
-                        borderWidth: 1,
-                        borderColor: isDark ? "rgba(240, 94, 35, 0.4)" : "rgba(251, 146, 60, 0.45)",
-                        marginRight: 10,
-                      }}
-                    >
-                      <Icon source="seat" size={24} color={isDark ? "#94a3b8" : "#64748b"} />
-                    </View>
-                    <View className="flex-1">
-                      <Text
-                        style={{
-                          fontFamily: "CenturyGothic-Bold",
-                          fontSize: 15,
-                          color: colors.sectionHeaderText,
-                        }}
-                        numberOfLines={1}
-                        ellipsizeMode="tail"
-                      >
-                        {item.chairName || t("appointment.labels.chair")}
-                      </Text>
+                )}
+
+                {userType === UserType.Customer && (
+                  <View className="gap-3">
+                    {item.barberStoreId && (
+                      <View style={participantCardStyle}>
+                        <View className="flex-row items-start mb-1">
+                          <OwnerAvatar
+                            wrapperStyle={avatarRingWrap}
+                            ownerId={item.barberStoreId}
+                            ownerType={ImageOwnerType.Store}
+                            fallbackUrl={item.storeImage}
+                            imageClassName="w-14 h-14 rounded-xl"
+                            iconSource="store"
+                            iconSize={24}
+                            iconColor="#6b7280"
+                          />
+                          <View className="flex-1">
+                            <Text style={sectionLabelStyle}>
+                              {t("appointment.labels.storeName")}
+                            </Text>
+                            <Text
+                              className="mb-1"
+                              style={{
+                                color: colors.sectionHeaderText,
+                                fontFamily: "CenturyGothic-Bold",
+                                fontSize: 15,
+                              }}
+                              numberOfLines={1}
+                              ellipsizeMode="tail"
+                            >
+                              {item.storeName}
+                            </Text>
+                            {item.storeType !== undefined && (
+                              <Text style={[metaLineStyle, { opacity: 0.85 }]}>
+                                {getBarberTypeName(item.storeType as BarberType)}
+                              </Text>
+                            )}
+                            {item.storeNo && (
+                              <Text style={metaLineStyle}>
+                                {'#'}{item.storeNo}
+                              </Text>
+                            )}
+                            {item.storeOwnerNumber && (
+                              <Text style={metaLineStyle}>
+                                {t("card.storeOwnerNumber")}: {item.storeOwnerNumber}
+                              </Text>
+                            )}
+                          </View>
+                          <View className="mb-1">
+                            <FavoriteHeartButton
+                              active={!!item.isStoreFavorite}
+                              onPress={() =>
+                                item.barberStoreId &&
+                                handleToggleFavorite(item.barberStoreId, item.id)
+                              }
+                              disabled={favoriteHeartDisabled(item, "store")}
+                              style={favoriteBtnWrap}
+                              size={20}
+                            />
+                          </View>
+                        </View>
+                        <RatingDisplay
+                          myRating={item.myRatingForStore}
+                          myComment={item.myCommentForStore}
+                          averageRating={item.storeAverageRating}
+                          canRateNow={canRateTarget(item, "store")}
+                          onRatePress={() =>
+                            item.barberStoreId &&
+                            openRatingSheet(
+                              item.id,
+                              item.barberStoreId,
+                              item.storeName || t("labels.storeDefaultName"),
+                              "store",
+                              item.storeImage,
+                            )
+                          }
+                        />
+                      </View>
+                    )}
+
+                    <View style={participantCardStyle}>
+                      {item.freeBarberId ? (
+                        <View>
+                          <View className="flex-row items-start mb-1">
+                            <OwnerAvatar
+                              wrapperStyle={avatarRingWrap}
+                              ownerId={item.freeBarberId}
+                              ownerType={ImageOwnerType.FreeBarber}
+                              fallbackUrl={item.freeBarberImage}
+                              imageClassName="w-14 h-14 rounded-xl"
+                              iconSource="account-supervisor"
+                              iconSize={24}
+                              iconColor="#6b7280"
+                            />
+                            <View className="flex-1">
+                              <Text style={sectionLabelStyle}>
+                                {t("appointment.labels.serviceProvider")}
+                              </Text>
+                              <Text
+                                className="mb-1"
+                                style={{
+                                  color: colors.sectionHeaderText,
+                                  fontFamily: "CenturyGothic-Bold",
+                                  fontSize: 15,
+                                }}
+                                numberOfLines={1}
+                                ellipsizeMode="tail"
+                              >
+                                {item.freeBarberName ||
+                                  t("labels.freeBarberDefaultName")}
+                              </Text>
+                              <Text style={[metaLineStyle, { opacity: 0.85 }]}>
+                                {t("labels.freeBarberDefaultName")}
+                              </Text>
+                              {item.freeBarberNumber && (
+                                <Text style={metaLineStyle}>
+                                  {t("card.freeBarberNumber")}: {item.freeBarberNumber}
+                                </Text>
+                              )}
+                            </View>
+                            <View className="mb-1">
+                              <FavoriteHeartButton
+                                active={!!item.isFreeBarberFavorite}
+                                onPress={() =>
+                                  item.freeBarberId &&
+                                  handleToggleFavorite(item.freeBarberId, item.id)
+                                }
+                                disabled={favoriteHeartDisabled(item, "freeBarber")}
+                                style={favoriteBtnWrap}
+                                size={20}
+                              />
+                            </View>
+                          </View>
+                          <RatingDisplay
+                            myRating={item.myRatingForFreeBarber}
+                            myComment={item.myCommentForFreeBarber}
+                            averageRating={item.freeBarberAverageRating}
+                            canRateNow={canRateTarget(item, "freeBarber")}
+                            onRatePress={() =>
+                              item.freeBarberId &&
+                              openRatingSheet(
+                                item.id,
+                                item.freeBarberId,
+                                item.freeBarberName ||
+                                t("labels.freeBarberDefaultName"),
+                                "freeBarber",
+                                item.freeBarberImage,
+                              )
+                            }
+                          />
+                        </View>
+                      ) : item.manuelBarberId ? (
+                        <View>
+                          <View className="flex-row items-start mb-1">
+                            <OwnerAvatar
+                              wrapperStyle={avatarRingWrap}
+                              ownerId={item.manuelBarberId}
+                              ownerType={ImageOwnerType.ManuelBarber}
+                              fallbackUrl={item.manuelBarberImage}
+                              imageClassName="w-14 h-14 rounded-xl"
+                              iconSource="account"
+                              iconSize={24}
+                              iconColor="#6b7280"
+                            />
+                            <View className="flex-1">
+                              <Text style={sectionLabelStyle}>
+                                {t("appointment.labels.serviceProvider")}
+                              </Text>
+                              <Text
+                                className="mb-1"
+                                style={{
+                                  color: colors.sectionHeaderText,
+                                  fontFamily: "CenturyGothic-Bold",
+                                  fontSize: 15,
+                                }}
+                                numberOfLines={1}
+                                ellipsizeMode="tail"
+                              >
+                                {item.manuelBarberName}
+                              </Text>
+                              <Text style={[metaLineStyle, { opacity: 0.85 }]}>
+                                {t("appointment.labels.storeEmployee")}
+                              </Text>
+                            </View>
+                          </View>
+                          {/* Manuel barber için rating yapılabilir (sadece Customer) */}
+                          <RatingDisplay
+                            myRating={item.myRatingForManuelBarber}
+                            myComment={item.myCommentForManuelBarber}
+                            averageRating={item.manuelBarberAverageRating}
+                            canRateNow={canRateTarget(item, "manuelBarber")}
+                            onRatePress={() =>
+                              item.manuelBarberId &&
+                              openRatingSheet(
+                                item.id,
+                                item.manuelBarberId,
+                                item.manuelBarberName || t("favorites.manuelBarber"),
+                                "manuelBarber",
+                                item.manuelBarberImage,
+                              )
+                            }
+                          />
+                        </View>
+                      ) : (item.chairId || item.chairName) ? (
+                        <View className="flex-row items-center">
+                          <View
+                            className="w-14 h-14 rounded-xl items-center justify-center"
+                            style={{
+                              backgroundColor: colors.cardBg3,
+                              borderWidth: 1,
+                              borderColor: isDark ? "rgba(240, 94, 35, 0.4)" : "rgba(251, 146, 60, 0.45)",
+                              marginRight: 10,
+                            }}
+                          >
+                            <Icon source="seat" size={24} color={isDark ? "#94a3b8" : "#64748b"} />
+                          </View>
+                          <View className="flex-1">
+                            <Text
+                              style={{
+                                fontFamily: "CenturyGothic-Bold",
+                                fontSize: 15,
+                                color: colors.sectionHeaderText,
+                              }}
+                              numberOfLines={1}
+                              ellipsizeMode="tail"
+                            >
+                              {item.chairName || t("appointment.labels.chair")}
+                            </Text>
+                          </View>
+                        </View>
+                      ) : null}
                     </View>
                   </View>
-                ) : null}
+                )}
               </View>
-            </View>
-          )}
-        </View>
 
-        {/* Fiyatlandırma Bilgisi - Sadece FreeBarber ve Dükkan varsa göster */}
-        {item.freeBarberId &&
-          item.barberStoreId &&
-          formatPricingPolicy(item.pricingType, item.pricingValue) && (
-            <View
-              className="rounded-xl p-2.5 mt-2 mb-2"
-              style={{
-                backgroundColor: colors.cardBg2,
-                borderColor: colors.borderColor,
-                borderWidth: 1,
-                shadowOpacity: 0,
-                elevation: 0,
-              }}
-            >
-              <View className="flex-row items-center mb-1">
-                <Icon source="cash" size={15} color="#f05e23" />
-                <Text
-                  style={{
-                    color: isDark ? "#fb923c" : "#c2410c",
-                    fontFamily: "CenturyGothic-Bold",
-                    fontSize: 11,
-                    marginLeft: 6,
-                    letterSpacing: 0.2,
-                  }}
-                >
-                  {t("card.pricing")}
-                </Text>
-              </View>
-              <Text
-                style={{
-                  color: colors.sectionHeaderText,
-                  fontFamily: "CenturyGothic",
-                  fontSize: 13,
-                  lineHeight: 18,
-                  marginLeft: 2,
-                }}
-              >
-                {formatPricingPolicy(item.pricingType, item.pricingValue)}
-              </Text>
-            </View>
-          )}
-
-        {item.storeAddressDescription && (
-          <View
-            className="mt-2 mb-2 overflow-hidden"
-            style={{
-              borderRadius: 12,
-              borderWidth: 1,
-              borderColor: colors.borderColor,
-              backgroundColor: colors.cardBg2,
-              flexDirection: "row",
-              shadowOpacity: 0,
-              elevation: 0,
-            }}
-          >
-            <View
-              style={{
-                width: 40,
-                backgroundColor: isDark ? "rgba(240, 94, 35, 0.1)" : "#fff7ed",
-                alignItems: "center",
-                justifyContent: "center",
-                borderRightWidth: 1,
-                borderRightColor: colors.borderColor,
-              }}
-            >
-              <Icon source="map-marker-radius" size={22} color="#f05e23" />
-            </View>
-            <View className="flex-1 py-2 pr-2.5 pl-2.5">
-              <Text
-                style={{
-                  color: isDark ? "#fb923c" : "#c2410c",
-                  fontFamily: "CenturyGothic-Bold",
-                  fontSize: 10,
-                  marginBottom: 3,
-                  letterSpacing: 0.2,
-                }}
-              >
-                {t("appointment.labels.address")}
-              </Text>
-              <Text
-                style={{
-                  color: colors.sectionHeaderText,
-                  fontFamily: "CenturyGothic",
-                  fontSize: 13,
-                  lineHeight: 19,
-                }}
-              >
-                {item.storeAddressDescription}
-              </Text>
-            </View>
-          </View>
-        )}
-
-        {/* Hizmetler */}
-        {item.services.length > 0 && (
-          <View className="mt-2 mb-1.5">
-            <View className="flex-row items-center mb-2">
-              <Icon source="scissors-cutting" size={14} color="#f05e23" />
-              <Text
-                style={{
-                  color: isDark ? "#fb923c" : "#c2410c",
-                  fontFamily: "CenturyGothic-Bold",
-                  fontSize: 11,
-                  marginLeft: 6,
-                  letterSpacing: 0.15,
-                }}
-              >
-                {userType === UserType.Customer
-                  ? t("appointment.labels.myServices")
-                  : t("appointment.labels.services")}
-              </Text>
-            </View>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-              <View className="flex-row gap-2">
-                {item.services.map((service) => (
+              {/* Fiyatlandırma Bilgisi - Sadece FreeBarber ve Dükkan varsa göster */}
+              {item.freeBarberId &&
+                item.barberStoreId &&
+                formatPricingPolicy(item.pricingType, item.pricingValue) && (
                   <View
-                    key={service.serviceId}
-                    className="rounded-lg px-3 py-1.5 flex-row items-center gap-1.5"
+                    className="rounded-xl p-2.5 mt-2 mb-2"
                     style={{
-                      backgroundColor: colors.cardBg3,
-                      borderWidth: 1,
+                      backgroundColor: colors.cardBg2,
                       borderColor: colors.borderColor,
+                      borderWidth: 1,
+                      shadowOpacity: 0,
+                      elevation: 0,
                     }}
                   >
+                    <View className="flex-row items-center mb-1">
+                      <Icon source="cash" size={15} color="#f05e23" />
+                      <Text
+                        style={{
+                          color: isDark ? "#fb923c" : "#c2410c",
+                          fontFamily: "CenturyGothic-Bold",
+                          fontSize: 11,
+                          marginLeft: 6,
+                          letterSpacing: 0.2,
+                        }}
+                      >
+                        {t("card.pricing")}
+                      </Text>
+                    </View>
                     <Text
                       style={{
                         color: colors.sectionHeaderText,
-                        fontFamily: "CenturyGothic-Bold",
-                        fontSize: 12,
-                        maxWidth: 140,
+                        fontFamily: "CenturyGothic",
+                        fontSize: 13,
+                        lineHeight: 18,
+                        marginLeft: 2,
                       }}
-                      numberOfLines={1}
-                      ellipsizeMode="tail"
                     >
-                      {service.serviceName}
+                      {formatPricingPolicy(item.pricingType, item.pricingValue)}
+                    </Text>
+                  </View>
+                )}
+
+              {item.storeAddressDescription && (
+                <View
+                  className="mt-2 mb-2 overflow-hidden"
+                  style={{
+                    borderRadius: 12,
+                    borderWidth: 1,
+                    borderColor: colors.borderColor,
+                    backgroundColor: colors.cardBg2,
+                    flexDirection: "row",
+                    shadowOpacity: 0,
+                    elevation: 0,
+                  }}
+                >
+                  <View
+                    style={{
+                      width: 40,
+                      backgroundColor: isDark ? "rgba(240, 94, 35, 0.1)" : "#fff7ed",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      borderRightWidth: 1,
+                      borderRightColor: colors.borderColor,
+                    }}
+                  >
+                    <Icon source="map-marker-radius" size={22} color="#f05e23" />
+                  </View>
+                  <View className="flex-1 py-2 pr-2.5 pl-2.5">
+                    <Text
+                      style={{
+                        color: isDark ? "#fb923c" : "#c2410c",
+                        fontFamily: "CenturyGothic-Bold",
+                        fontSize: 10,
+                        marginBottom: 3,
+                        letterSpacing: 0.2,
+                      }}
+                    >
+                      {t("appointment.labels.address")}
                     </Text>
                     <Text
                       style={{
-                        color: "#22c55e",
-                        fontFamily: "CenturyGothic-Bold",
-                        fontSize: 12,
+                        color: colors.sectionHeaderText,
+                        fontFamily: "CenturyGothic",
+                        fontSize: 13,
+                        lineHeight: 19,
                       }}
                     >
-                      {Number(service.price).toFixed(0)} {t("card.currencySymbol")}
+                      {item.storeAddressDescription}
                     </Text>
                   </View>
-                ))}
-              </View>
-            </ScrollView>
+                </View>
+              )}
+
+              {/* Hizmetler */}
+              {item.services.length > 0 && (
+                <View className="mt-2 mb-1.5">
+                  <View className="flex-row items-center mb-2">
+                    <Icon source="scissors-cutting" size={14} color="#f05e23" />
+                    <Text
+                      style={{
+                        color: isDark ? "#fb923c" : "#c2410c",
+                        fontFamily: "CenturyGothic-Bold",
+                        fontSize: 11,
+                        marginLeft: 6,
+                        letterSpacing: 0.15,
+                      }}
+                    >
+                      {userType === UserType.Customer
+                        ? t("appointment.labels.myServices")
+                        : t("appointment.labels.services")}
+                    </Text>
+                  </View>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                    <View className="flex-row gap-2">
+                      {item.services.map((service) => (
+                        <View
+                          key={service.serviceId}
+                          className="rounded-lg px-3 py-1.5 flex-row items-center gap-1.5"
+                          style={{
+                            backgroundColor: colors.cardBg3,
+                            borderWidth: 1,
+                            borderColor: colors.borderColor,
+                          }}
+                        >
+                          <Text
+                            style={{
+                              color: colors.sectionHeaderText,
+                              fontFamily: "CenturyGothic-Bold",
+                              fontSize: 12,
+                              maxWidth: 140,
+                            }}
+                            numberOfLines={1}
+                            ellipsizeMode="tail"
+                          >
+                            {service.serviceName}
+                          </Text>
+                          <Text
+                            style={{
+                              color: "#22c55e",
+                              fontFamily: "CenturyGothic-Bold",
+                              fontSize: 12,
+                            }}
+                          >
+                            {Number(service.price).toFixed(0)} {t("card.currencySymbol")}
+                          </Text>
+                        </View>
+                      ))}
+                    </View>
+                  </ScrollView>
+                </View>
+              )}
+            </View>
           </View>
-        )}
-        </View>
-      </View>
-      </View>
-    </PerplexityListItem>
     );
   };
 
@@ -1959,21 +1918,20 @@ export default function SharedAppointmentScreen() {
       collapsable={false}
       style={{ flex: 1, backgroundColor: colors.screenBg }}
     >
-      <Animated.View
-        style={[
-          {
-            paddingTop: 8,
-            paddingBottom: 8,
-            backgroundColor: colors.screenBg,
-            borderBottomColor: colors.borderColor,
-            shadowColor: "#000",
-            shadowOffset: { width: 0, height: 3 },
-            shadowRadius: 6,
-            elevation: 0,
-            zIndex: 10,
-          },
-          filterBarAnimStyle,
-        ]}
+      <View
+        style={{
+          paddingTop: 8,
+          paddingBottom: 8,
+          backgroundColor: colors.screenBg,
+          borderBottomColor: colors.borderColor,
+          borderBottomWidth: 0,
+          shadowColor: "#000",
+          shadowOffset: { width: 0, height: 3 },
+          shadowRadius: 6,
+          shadowOpacity: 0,
+          elevation: 0,
+          zIndex: 10,
+        }}
       >
         <ScrollView
           horizontal
@@ -2017,7 +1975,7 @@ export default function SharedAppointmentScreen() {
             {t("appointment.filters.cancelled")}
           </FilterChip>
         </ScrollView>
-      </Animated.View>
+      </View>
 
       {isLoading ? (
         <View className="flex-1 pt-4 px-4">
@@ -2054,29 +2012,132 @@ export default function SharedAppointmentScreen() {
           </UnifiedStateWrapper>
         </ScrollView>
       ) : (
-        <LegendList
-          data={filteredAppointments}
-          keyExtractor={((item: AppointmentGetDto) => item.id) as any}
-          renderItem={renderItem as any}
-          extraData={openCardMenuId}
-          estimatedItemSize={292}
-          scrollEventThrottle={16}
-          onScroll={onListScroll}
-          contentContainerStyle={{
-            paddingHorizontal: 16,
-            paddingBottom: 100,
-            paddingTop: 10,
-          }}
-          refreshControl={
-            <RefreshControl
-              refreshing={isFetching && !isLoading}
-              onRefresh={refetch}
-              tintColor="#f05e23"
-              progressViewOffset={0}
-            />
-          }
-        />
+        <View style={{ flex: 1 }}>
+          <LegendList
+            style={{ flex: 1 }}
+            data={filteredAppointments}
+            keyExtractor={((item: AppointmentGetDto) => item.id) as any}
+            renderItem={renderItem as any}
+            extraData={openCardMenuId}
+            estimatedItemSize={292}
+            scrollEventThrottle={16}
+            contentContainerStyle={{
+              paddingHorizontal: 16,
+              paddingBottom: 100,
+              paddingTop: 10,
+            }}
+            refreshControl={
+              <RefreshControl
+                refreshing={isFetching && !isLoading}
+                onRefresh={refetch}
+                tintColor="#f05e23"
+                progressViewOffset={0}
+              />
+            }
+          />
+        </View>
       )}
+
+      <Modal
+        visible={cancelModalAppointmentId !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={closeCancelModal}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+          style={{ flex: 1 }}
+        >
+          <View style={{ flex: 1, justifyContent: "center" }}>
+            <Pressable
+              style={[StyleSheet.absoluteFillObject, { backgroundColor: "rgba(0,0,0,0.45)" }]}
+              onPress={closeCancelModal}
+            />
+            <View
+              style={{
+                marginHorizontal: 20,
+                borderRadius: 16,
+                padding: 18,
+                backgroundColor: colors.cardBg,
+                borderWidth: 1,
+                borderColor: colors.borderColor,
+              }}
+            >
+            <Text
+              style={{
+                fontFamily: "CenturyGothic-Bold",
+                fontSize: 17,
+                color: colors.sectionHeaderText,
+                marginBottom: 8,
+              }}
+            >
+              {t("appointment.alerts.cancellationTitle")}
+            </Text>
+            <Text style={{ fontSize: 14, color: colors.textSecondary, marginBottom: 12 }}>
+              {t("appointment.alerts.confirmCancellation")}
+            </Text>
+            <Text style={{ fontSize: 11, color: colors.textSecondary, marginBottom: 6 }}>
+              {t("appointment.alerts.cancellationReasonOptional")}
+            </Text>
+            <TextInput
+              value={cancelReasonDraft}
+              onChangeText={setCancelReasonDraft}
+              placeholder={t("appointment.alerts.cancellationReasonPlaceholder")}
+              placeholderTextColor={colors.textSecondary}
+              multiline
+              maxLength={500}
+              editable={!isCancelling}
+              style={{
+                minHeight: 88,
+                maxHeight: 140,
+                textAlignVertical: "top",
+                padding: 12,
+                borderRadius: 12,
+                borderWidth: 1,
+                borderColor: colors.borderColor,
+                backgroundColor: colors.cardBg2,
+                color: colors.sectionHeaderText,
+                fontFamily: "CenturyGothic",
+                fontSize: 14,
+              }}
+            />
+            <View className="flex-row gap-2 mt-4">
+              <TouchableOpacity
+                onPress={closeCancelModal}
+                disabled={isCancelling}
+                className="flex-1 rounded-xl py-3 items-center"
+                style={{
+                  borderWidth: 1,
+                  borderColor: colors.borderColor,
+                  opacity: isCancelling ? 0.6 : 1,
+                }}
+              >
+                <Text style={{ color: colors.textSecondary, fontFamily: "CenturyGothic-Bold" }}>
+                  {t("appointment.alerts.cancel")}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={submitCancel}
+                disabled={isCancelling}
+                className="flex-1 rounded-xl py-3 items-center"
+                style={{
+                  backgroundColor: "#f05e23",
+                  opacity: isCancelling ? 0.7 : 1,
+                }}
+              >
+                {isCancelling ? (
+                  <ActivityIndicator color="#fff" size="small" />
+                ) : (
+                  <Text style={{ color: "#fff", fontFamily: "CenturyGothic-Bold" }}>
+                    {t("appointment.actions.cancel")}
+                  </Text>
+                )}
+              </TouchableOpacity>
+            </View>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
 
       {/* Rating Bottom Sheet */}
       <BottomSheetModal
@@ -2223,102 +2284,102 @@ export default function SharedAppointmentScreen() {
               top: cardMenuLayout.top,
               left: cardMenuLayout.left,
               width: cardMenuLayout.width,
-              borderRadius: 14,
+              borderRadius: 10,
               overflow: "hidden",
               backgroundColor: isDark
                 ? "rgba(255, 255, 255, 0.94)"
                 : "rgba(255, 255, 255, 0.98)",
               borderWidth: 1,
               borderColor: isDark ? "rgba(255, 185, 0, 0.35)" : "rgba(255, 185, 0, 0.42)",
-              elevation: 12,
+              elevation: 8,
               shadowColor: "#000",
-              shadowOffset: { width: 0, height: 6 },
-              shadowOpacity: isDark ? 0.22 : 0.14,
-              shadowRadius: 12,
+              shadowOffset: { width: 0, height: 3 },
+              shadowOpacity: isDark ? 0.16 : 0.1,
+              shadowRadius: 8,
             }}
           >
-              {cardMenuFlags.showComplaintBlock && (
-                <>
-                  <TouchableOpacity
-                    onPress={() => {
-                      closeCardMenu();
-                      handleComplaintOrBlockAction(openCardMenuAppointment, "complaint");
-                    }}
-                    style={{
-                      flexDirection: "row",
-                      alignItems: "center",
-                      paddingHorizontal: 14,
-                      paddingVertical: 10,
-                      borderBottomWidth: 1,
-                      borderBottomColor: isDark ? colors.borderColor : "rgba(255, 185, 0, 0.22)",
-                    }}
-                    activeOpacity={0.7}
-                  >
-                    <View style={{ width: 30, height: 30, borderRadius: 9, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(245, 158, 11, 0.14)", marginRight: 10, flexShrink: 0 }}>
-                      <Icon source="alert-circle-outline" size={18} color="#d97706" />
-                    </View>
-                    <Text style={{ flex: 1, fontSize: 12.5, fontFamily: "CenturyGothic-Bold", color: "#b45309" }} numberOfLines={2}>
-                      {t("complaint.title")}
-                    </Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    onPress={() => {
-                      closeCardMenu();
-                      handleComplaintOrBlockAction(openCardMenuAppointment, "block");
-                    }}
-                    disabled={isBlockingUser}
-                    style={{
-                      flexDirection: "row",
-                      alignItems: "center",
-                      paddingHorizontal: 14,
-                      paddingVertical: 10,
-                      opacity: isBlockingUser ? 0.6 : 1,
-                      borderBottomWidth: cardMenuFlags.showDelete ? 1 : 0,
-                      borderBottomColor: isDark ? colors.borderColor : "rgba(255, 185, 0, 0.22)",
-                    }}
-                    activeOpacity={0.7}
-                  >
-                    <View style={{ width: 30, height: 30, borderRadius: 9, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(156, 163, 175, 0.14)", marginRight: 10, flexShrink: 0 }}>
-                      {isBlockingUser ? (
-                        <ActivityIndicator size="small" color="#9ca3af" />
-                      ) : (
-                        <Icon source="block-helper" size={18} color="#9ca3af" />
-                      )}
-                    </View>
-                    <Text style={{ flex: 1, fontSize: 12.5, fontFamily: "CenturyGothic-Bold", color: "#b45309" }} numberOfLines={2}>
-                      {t("block.submit")}
-                    </Text>
-                  </TouchableOpacity>
-                </>
-              )}
-              {cardMenuFlags.showDelete && (
+            {cardMenuFlags.showComplaintBlock && (
+              <>
                 <TouchableOpacity
                   onPress={() => {
                     closeCardMenu();
-                    handleDelete(openCardMenuAppointment.id);
+                    handleComplaintOrBlockAction(openCardMenuAppointment, "complaint");
                   }}
-                  disabled={isDeletingAppointment}
                   style={{
                     flexDirection: "row",
                     alignItems: "center",
-                    paddingHorizontal: 14,
-                    paddingVertical: 10,
-                    opacity: isDeletingAppointment ? 0.6 : 1,
+                    paddingHorizontal: 11,
+                    paddingVertical: 7,
+                    borderBottomWidth: 1,
+                    borderBottomColor: isDark ? colors.borderColor : "rgba(255, 185, 0, 0.22)",
                   }}
                   activeOpacity={0.7}
                 >
-                  <View style={{ width: 30, height: 30, borderRadius: 9, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(239, 68, 68, 0.12)", marginRight: 10, flexShrink: 0 }}>
-                    {isDeletingAppointment ? (
-                      <ActivityIndicator size="small" color="#ef4444" />
-                    ) : (
-                      <Icon source="delete-outline" size={18} color="#ef4444" />
-                    )}
+                  <View style={{ width: 24, height: 24, borderRadius: 7, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(245, 158, 11, 0.14)", marginRight: 8, flexShrink: 0 }}>
+                    <Icon source="alert-circle-outline" size={15} color="#d97706" />
                   </View>
-                  <Text style={{ flex: 1, fontSize: 12.5, fontFamily: "CenturyGothic-Bold", color: "#ef4444" }} numberOfLines={2}>
-                    {t("appointment.actions.delete")}
+                  <Text style={{ flex: 1, fontSize: 12, fontFamily: "CenturyGothic-Bold", color: "#b45309" }} numberOfLines={1}>
+                    {t("complaint.title")}
                   </Text>
                 </TouchableOpacity>
-              )}
+                <TouchableOpacity
+                  onPress={() => {
+                    closeCardMenu();
+                    handleComplaintOrBlockAction(openCardMenuAppointment, "block");
+                  }}
+                  disabled={isBlockingUser}
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    paddingHorizontal: 11,
+                    paddingVertical: 7,
+                    opacity: isBlockingUser ? 0.6 : 1,
+                    borderBottomWidth: cardMenuFlags.showDelete ? 1 : 0,
+                    borderBottomColor: isDark ? colors.borderColor : "rgba(255, 185, 0, 0.22)",
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <View style={{ width: 24, height: 24, borderRadius: 7, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(156, 163, 175, 0.14)", marginRight: 8, flexShrink: 0 }}>
+                    {isBlockingUser ? (
+                      <ActivityIndicator size="small" color="#9ca3af" />
+                    ) : (
+                      <Icon source="block-helper" size={15} color="#9ca3af" />
+                    )}
+                  </View>
+                  <Text style={{ flex: 1, fontSize: 12, fontFamily: "CenturyGothic-Bold", color: "#b45309" }} numberOfLines={1}>
+                    {t("block.submit")}
+                  </Text>
+                </TouchableOpacity>
+              </>
+            )}
+            {cardMenuFlags.showDelete && (
+              <TouchableOpacity
+                onPress={() => {
+                  closeCardMenu();
+                  handleDelete(openCardMenuAppointment.id);
+                }}
+                disabled={isDeletingAppointment}
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  paddingHorizontal: 11,
+                  paddingVertical: 7,
+                  opacity: isDeletingAppointment ? 0.6 : 1,
+                }}
+                activeOpacity={0.7}
+              >
+                <View style={{ width: 24, height: 24, borderRadius: 7, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(239, 68, 68, 0.12)", marginRight: 8, flexShrink: 0 }}>
+                  {isDeletingAppointment ? (
+                    <ActivityIndicator size="small" color="#ef4444" />
+                  ) : (
+                    <Icon source="delete-outline" size={15} color="#ef4444" />
+                  )}
+                </View>
+                <Text style={{ flex: 1, fontSize: 12, fontFamily: "CenturyGothic-Bold", color: "#ef4444" }} numberOfLines={1}>
+                  {t("appointment.actions.delete")}
+                </Text>
+              </TouchableOpacity>
+            )}
           </MotiView>
         </View>
       ) : null}

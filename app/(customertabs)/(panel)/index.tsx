@@ -1,14 +1,11 @@
 import React, { useCallback, useMemo, useRef, useState } from "react";
 import {
   Dimensions,
+  FlatList,
   RefreshControl,
   TouchableOpacity,
   View,
 } from "react-native";
-import Animated, {
-  useAnimatedScrollHandler,
-  useSharedValue,
-} from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Text } from "../../components/common/Text";
 import MapView from "react-native-maps";
@@ -229,14 +226,6 @@ const Index = () => {
     }
   }, [manualFetchStores, manualFetchFreeBarbers, hasError, locationStatus]);
 
-  const ITEM_ANIM_STRIDE = 280;
-  const scrollY = useSharedValue(0);
-  const onVerticalScroll = useAnimatedScrollHandler({
-    onScroll: (e) => {
-      scrollY.value = e.contentOffset.y / 280;
-    },
-  });
-
   // Rating handler
   const handlePressRatings = useCallback(
     (targetId: string, targetName: string) => {
@@ -325,11 +314,11 @@ const Index = () => {
 
   // Card dimensions
   const cardWidthStore = useMemo(
-    () => (expandedStores ? screenWidth * 0.92 : screenWidth * 0.94),
+    () => (expandedStores ? screenWidth * 0.935 : screenWidth * 0.955),
     [expandedStores],
   );
   const cardWidthFreeBarber = useMemo(
-    () => (expandedFreeBarbers ? screenWidth * 0.92 : screenWidth * 0.94),
+    () => (expandedFreeBarbers ? screenWidth * 0.935 : screenWidth * 0.955),
     [expandedFreeBarbers],
   );
 
@@ -409,9 +398,9 @@ const Index = () => {
         panelCompare={
           isOtherUsersStore(item, currentUserId)
             ? {
-                selected: compareStoreIds.includes(item.id),
-                onPress: () => toggleCompareStore(item.id),
-              }
+              selected: compareStoreIds.includes(item.id),
+              onPress: () => toggleCompareStore(item.id),
+            }
             : undefined
         }
       />
@@ -444,9 +433,9 @@ const Index = () => {
         panelCompare={
           isOtherUsersFreeBarber(item, currentUserId)
             ? {
-                selected: compareFbIds.includes(item.id),
-                onPress: () => toggleCompareFb(item.id),
-              }
+              selected: compareFbIds.includes(item.id),
+              onPress: () => toggleCompareFb(item.id),
+            }
             : undefined
         }
       />
@@ -482,81 +471,88 @@ const Index = () => {
 
     type Row =
       | {
-          id: string;
-          type: "stores-header";
-          _scrollStart: number;
-          _scrollLen: number;
-        }
+        id: string;
+        type: "stores-header";
+        _scrollStart: number;
+        _scrollLen: number;
+      }
       | {
-          id: string;
-          type: "stores-loading";
-          _scrollStart: number;
-          _scrollLen: number;
-        }
+        id: string;
+        type: "stores-loading";
+        _scrollStart: number;
+        _scrollLen: number;
+      }
       | {
-          id: string;
-          type: "stores-error";
-          _scrollStart: number;
-          _scrollLen: number;
-        }
+        id: string;
+        type: "stores-error";
+        _scrollStart: number;
+        _scrollLen: number;
+      }
       | {
-          id: string;
-          type: "stores-empty";
-          _scrollStart: number;
-          _scrollLen: number;
-        }
+        id: string;
+        type: "stores-empty";
+        _scrollStart: number;
+        _scrollLen: number;
+      }
       | {
-          id: string;
-          type: "store-row";
-          data: BarberStoreGetDto;
-          _scrollStart: number;
-          _scrollLen: number;
-        }
+        id: string;
+        type: "store-row";
+        data: BarberStoreGetDto;
+        _scrollStart: number;
+        _scrollLen: number;
+      }
       | {
-          id: string;
-          type: "stores-content-horizontal";
-          data: BarberStoreGetDto[];
-          _scrollStart: number;
-          _scrollLen: number;
-        }
+        id: string;
+        type: "stores-vertical-carousel";
+        data: BarberStoreGetDto[];
+        _scrollStart: number;
+        _scrollLen: number;
+      }
       | {
-          id: string;
-          type: "freebarbers-header";
-          _scrollStart: number;
-          _scrollLen: number;
-        }
+        id: string;
+        type: "stores-content-horizontal";
+        data: BarberStoreGetDto[];
+        _scrollStart: number;
+        _scrollLen: number;
+      }
       | {
-          id: string;
-          type: "freebarbers-loading";
-          _scrollStart: number;
-          _scrollLen: number;
-        }
+        id: string;
+        type: "freebarbers-header";
+        _scrollStart: number;
+        _scrollLen: number;
+      }
       | {
-          id: string;
-          type: "freebarbers-error";
-          _scrollStart: number;
-          _scrollLen: number;
-        }
+        id: string;
+        type: "freebarbers-loading";
+        _scrollStart: number;
+        _scrollLen: number;
+      }
       | {
-          id: string;
-          type: "freebarbers-empty";
-          _scrollStart: number;
-          _scrollLen: number;
-        }
+        id: string;
+        type: "freebarbers-error";
+        _scrollStart: number;
+        _scrollLen: number;
+      }
       | {
-          id: string;
-          type: "freebarber-row";
-          data: FreeBarGetDto;
-          _scrollStart: number;
-          _scrollLen: number;
-        }
+        id: string;
+        type: "freebarbers-empty";
+        _scrollStart: number;
+        _scrollLen: number;
+      }
       | {
-          id: string;
-          type: "freebarbers-content-horizontal";
-          data: FreeBarGetDto[];
-          _scrollStart: number;
-          _scrollLen: number;
-        };
+        id: string;
+        type: "freebarber-row";
+        data: FreeBarGetDto;
+        _scrollStart: number;
+        _scrollLen: number;
+      }
+      | {
+        id: string;
+        type: "freebarbers-content-horizontal";
+        data: FreeBarGetDto[];
+        _scrollStart: number;
+        _scrollLen: number;
+      };
 
     const rows: Row[] = [];
     let y = 0;
@@ -676,11 +672,6 @@ const Index = () => {
     isList,
   ]);
 
-  const verticalSnapOffsets = useMemo(
-    () => listData.map((r) => r._scrollStart),
-    [listData],
-  );
-
   return (
     <View className="flex flex-1 pl-4 pr-2" style={{ backgroundColor: colors.screenBg }}>
       <View
@@ -729,16 +720,11 @@ const Index = () => {
         </View>
       )}
       <View style={{ flex: 1 }} pointerEvents={isMapMode ? 'none' : 'auto'}>
-        <Animated.FlatList
+        <FlatList
           data={listData}
           keyExtractor={(item) => item.id}
-          onScroll={onVerticalScroll}
           scrollEventThrottle={16}
-          decelerationRate="fast"
-          snapToOffsets={
-            verticalSnapOffsets.length > 0 ? verticalSnapOffsets : undefined
-          }
-          contentContainerStyle={{ paddingBottom: 100 }}
+          contentContainerStyle={{ paddingBottom: 80 + insets.bottom }}
           showsVerticalScrollIndicator={false}
           removeClippedSubviews={false}
           refreshControl={
@@ -818,10 +804,7 @@ const Index = () => {
             }
             if (item.type === "store-row") {
               return (
-                <PerplexityListItem
-                  scrollPos={scrollY}
-                  index={item._scrollStart / ITEM_ANIM_STRIDE}
-                >
+                <PerplexityListItem>
                   {renderStoreItem({ item: item.data })}
                 </PerplexityListItem>
               );
@@ -833,9 +816,9 @@ const Index = () => {
                   <PerplexityHorizontalList
                     data={item.data}
                     keyExtractor={(store: BarberStoreGetDto) => store.id}
-                    snapInterval={cardWidthStore + 12}
                     minHeight={isList ? 260 : 280}
-                    contentContainerStyle={{ paddingTop: 8, paddingBottom: 4, paddingHorizontal: 10 }}
+                    nestedScrollEnabled
+                    contentContainerStyle={{ paddingTop: 8, paddingBottom: 16, paddingHorizontal: 10 }}
                     renderItem={({ item: store }) => renderStoreItem({ item: store })}
                   />
                 </View>
@@ -914,10 +897,7 @@ const Index = () => {
 
             if (item.type === "freebarber-row") {
               return (
-                <PerplexityListItem
-                  scrollPos={scrollY}
-                  index={item._scrollStart / ITEM_ANIM_STRIDE}
-                >
+                <PerplexityListItem>
                   {renderFreeBarberItem({ item: item.data })}
                 </PerplexityListItem>
               );
@@ -929,9 +909,9 @@ const Index = () => {
                   <PerplexityHorizontalList
                     data={item.data}
                     keyExtractor={(fb: FreeBarGetDto) => (fb as any).id}
-                    snapInterval={cardWidthFreeBarber + 12}
                     minHeight={isList ? 260 : 280}
-                    contentContainerStyle={{ paddingTop: 8, paddingBottom: 4, paddingHorizontal: 10 }}
+                    nestedScrollEnabled
+                    contentContainerStyle={{ paddingTop: 8, paddingBottom: 16, paddingHorizontal: 10 }}
                     renderItem={({ item: fb }) => renderFreeBarberItem({ item: fb })}
                   />
                 </View>

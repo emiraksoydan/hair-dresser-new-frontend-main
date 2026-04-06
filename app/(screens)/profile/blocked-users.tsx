@@ -85,65 +85,65 @@ export default function BlockedUsersPage() {
 
         return (
             <ScrollStackItem index={index} scroll={scrollY} vanish>
-            <View
-                className="mb-3 flex-row items-center overflow-hidden rounded-xl p-4"
-                style={{
-                    backgroundColor: colors.cardBg2,
-                    borderWidth: 1,
-                    borderColor: colors.borderColor,
-                    borderLeftWidth: 3,
-                    borderLeftColor: ACCENT,
-                }}
-            >
-                <View className="mr-3">
-                    <Image
-                        source={imageUrl ? { uri: imageUrl } : DEFAULT_AVATAR}
-                        style={{ width: AVATAR, height: AVATAR, borderRadius: AVATAR_RADIUS }}
-                        resizeMode="cover"
-                    />
-                </View>
-                <View className="min-w-0 flex-1 pr-2">
-                    <Text
-                        style={{
-                            color: colors.sectionHeaderText,
-                            fontFamily: "CenturyGothic-Bold",
-                            fontSize: 16,
-                        }}
-                        numberOfLines={1}
-                    >
-                        {displayName}
-                    </Text>
-                    {userTypeName ? (
+                <View
+                    className="mb-3 flex-row items-center overflow-hidden rounded-xl p-4"
+                    style={{
+                        backgroundColor: colors.cardBg2,
+                        borderWidth: 1,
+                        borderColor: colors.borderColor,
+                        borderLeftWidth: 3,
+                        borderLeftColor: ACCENT,
+                    }}
+                >
+                    <View className="mr-3">
+                        <Image
+                            source={imageUrl ? { uri: imageUrl } : DEFAULT_AVATAR}
+                            style={{ width: AVATAR, height: AVATAR, borderRadius: AVATAR_RADIUS }}
+                            resizeMode="cover"
+                        />
+                    </View>
+                    <View className="min-w-0 flex-1 pr-2">
                         <Text
                             style={{
-                                marginTop: 4,
-                                color: colors.textSecondary,
-                                fontFamily: "CenturyGothic",
-                                fontSize: 14,
+                                color: colors.sectionHeaderText,
+                                fontFamily: "CenturyGothic-Bold",
+                                fontSize: 16,
                             }}
                             numberOfLines={1}
                         >
-                            {userTypeName}
+                            {displayName}
                         </Text>
-                    ) : null}
-                    <Text
-                        style={{
-                            marginTop: 6,
-                            color: colors.textSecondary,
-                            fontFamily: "CenturyGothic",
-                            fontSize: 13,
-                        }}
-                    >
-                        {formatDateTime(item.createdAt)}
-                    </Text>
+                        {userTypeName ? (
+                            <Text
+                                style={{
+                                    marginTop: 4,
+                                    color: colors.textSecondary,
+                                    fontFamily: "CenturyGothic",
+                                    fontSize: 14,
+                                }}
+                                numberOfLines={1}
+                            >
+                                {userTypeName}
+                            </Text>
+                        ) : null}
+                        <Text
+                            style={{
+                                marginTop: 6,
+                                color: colors.textSecondary,
+                                fontFamily: "CenturyGothic",
+                                fontSize: 13,
+                            }}
+                        >
+                            {formatDateTime(item.createdAt)}
+                        </Text>
+                    </View>
+                    <Switch
+                        value={true}
+                        onValueChange={() => handleUnblock(item.blockedToUserId)}
+                        disabled={isUnblocking}
+                        {...getProfileNativeSwitchProps(isDark, true)}
+                    />
                 </View>
-                <Switch
-                    value={true}
-                    onValueChange={() => handleUnblock(item.blockedToUserId)}
-                    disabled={isUnblocking}
-                    {...getProfileNativeSwitchProps(isDark, true)}
-                />
-            </View>
             </ScrollStackItem>
         );
     };

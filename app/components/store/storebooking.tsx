@@ -252,7 +252,7 @@ const StoreBookingContent = ({
       showsVerticalScrollIndicator={false}
       stickyHeaderIndices={isBottomSheet ? undefined : [0]}
     >
-      {/* Yapışkan: görsel + işletme bilgisi + Randevu Al + gün şeridi (tam ekran tek blok) */}
+      {/* [0] Yapışkan: sadece üst foto / carousel */}
       <View style={{ backgroundColor: colors.sheetBg }}>
         <View style={{ overflow: "hidden", backgroundColor: colors.sheetBg }}>
           <View className="relative">
@@ -320,7 +320,10 @@ const StoreBookingContent = ({
             )}
           </View>
         </View>
+      </View>
 
+      {/* Randevu Al + gün şeridi — scroll ile birlikte kayar */}
+      <View style={{ backgroundColor: colors.sheetBg }}>
         <View
           style={{
             backgroundColor: colors.sheetBg,

@@ -5,6 +5,7 @@ import { saveTokens, clearStoredTokens, loadTokens } from '../lib/tokenStorage';
 import { jwtDecode } from 'jwt-decode';
 import { API_CONFIG } from '../constants/api';
 import { triggerSubscriptionExpired } from './subscriptionSlice';
+import { persistHelpGuideOnboardingFromAuthPayload } from '../lib/helpGuideOnboarding';
 
 export const API = API_CONFIG.BASE_URL;
 
@@ -14,6 +15,7 @@ type Decoded = { exp?: number };
 function extractTokens(body: any) {
   const wrapped = body && typeof body.success === 'boolean' && 'data' in body;
   const payload = wrapped ? body.data : body;
+  void persistHelpGuideOnboardingFromAuthPayload(payload);
   const accessToken = payload?.accessToken ?? payload?.token;
   const refreshToken = payload?.refreshToken;
   if (!accessToken || !refreshToken) {

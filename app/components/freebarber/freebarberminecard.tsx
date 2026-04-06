@@ -114,19 +114,40 @@ const FreeBarberMineCard: React.FC<Props> = ({
         }`}
     >
       {!isList && (
-        <View className="flex-row justify-end items-center gap-1 px-2 pb-1">
+        <View className="flex-row justify-end items-center gap-1 px-2">
           {hasBeautySalonCertificate && (
-            <View className="bg-purple-600/90 px-2 py-0.5 rounded-full">
-              <Text className="text-white text-xs font-century-gothic-sans-semibold">
+            <View className="bg-purple-600/90 px-2 py-0.5 rounded-xl flex-row items-center justify-center">
+              <Text className="text-white text-sm font-century-gothic-sans-medium">
                 {t("card.beautyExpert")}
               </Text>
             </View>
           )}
-          <StatusBadge
-            type={freeBarber.isAvailable ? "available" : "busy"}
-            isList={false}
-            dense={profileCompact}
-          />
+          <TouchableOpacity
+            onPress={handleToggleAvailability}
+            disabled={isUpdatingAvailability}
+            style={{ opacity: isUpdatingAvailability ? 0.7 : 1 }}
+          >
+            {isUpdatingAvailability ? (
+              <View
+                style={{
+                  width: 64,
+                  height: 22,
+                  backgroundColor: colors.cardBg,
+                  borderRadius: 12,
+                  justifyContent: "center",
+                  alignItems: "center",
+                }}
+              >
+                <ActivityIndicator size="small" color="#f05e23" />
+              </View>
+            ) : (
+              <StatusBadge
+                type={freeBarber.isAvailable ? "available" : "busy"}
+                isList={false}
+                dense={profileCompact}
+              />
+            )}
+          </TouchableOpacity>
         </View>
       )}
       <View className={`${!isList ? "flex flex-row " : ""}`}>
@@ -143,18 +164,18 @@ const FreeBarberMineCard: React.FC<Props> = ({
           {isList && (
             <View className="absolute top-3 right-3 flex-row gap-2 z-10">
               {hasBeautySalonCertificate && (
-                <View className="bg-purple-600/90 px-2 py-0.5 rounded-full">
-                  <Text className={`text-white font-century-gothic-sans-semibold ${profileCompact ? "text-xs" : "text-sm"}`}>
+                <View className="bg-purple-600/90 px-2.5 py-1 rounded-xl flex-row items-center justify-center">
+                  <Text className="text-white font-century-gothic-sans-medium text-sm">
                     {t("card.beautyExpert")}
                   </Text>
                 </View>
               )}
-          <StatusBadge
-            type="barber-type"
-            barberType={freeBarber.type}
-            isList={isList}
-            dense={profileCompact}
-          />
+              <StatusBadge
+                type="barber-type"
+                barberType={freeBarber.type}
+                isList={isList}
+                dense={profileCompact}
+              />
               <TouchableOpacity
                 onPress={handleToggleAvailability}
                 disabled={isUpdatingAvailability}
@@ -184,7 +205,7 @@ const FreeBarberMineCard: React.FC<Props> = ({
             </View>
           )}
         </View>
-        <View className="flex-1 flex-col gap-2">
+        <View className={`flex-1 flex-col ${!isList ? "gap-2 mt-1" : "gap-2"}`}>
           <View
             className={`flex-row justify-between ${!isList ? "items-start" : "items-center"}`}
           >
@@ -208,8 +229,8 @@ const FreeBarberMineCard: React.FC<Props> = ({
             )}
           </View>
           {!isList && (
-            <View className="flex-row pr-2 justify-between">
-              <Text style={{ color: colors.textSecondary }} className={profileCompact ? "text-base" : "text-lg"}>
+            <View className="flex-row pr-2 justify-between items-center" style={{ marginTop: -18 }}>
+              <Text style={{ color: colors.textSecondary }} className="text-sm font-century-gothic-sans-medium">
                 {getShortBarberTypeLabel(freeBarber.type)}
               </Text>
               <FavoriteButton
@@ -219,14 +240,13 @@ const FreeBarberMineCard: React.FC<Props> = ({
                 favoriteDisabled={favoriteDisabled}
                 onPress={toggleFavorite}
                 variant="button"
-                className="pb-1"
                 compact={profileCompact}
               />
             </View>
           )}
           <View
             className="flex-row justify-between items-center"
-            style={{ marginTop: !isList ? -5 : -10 }}
+            style={{ marginTop: !isList ? -2 : profileCompact ? -4 : -10 }}
           >
             <RatingSection
               rating={freeBarber.rating}
@@ -238,13 +258,13 @@ const FreeBarberMineCard: React.FC<Props> = ({
           {freeBarber.customerNumber && (
             <View className="flex-row items-center mt-1">
               <Text style={{ color: colors.textSecondary, fontSize: profileCompact ? 12 : 13, fontFamily: 'CenturyGothic' }}>
-                {'#'}{freeBarber.customerNumber}
+                {t('card.freeBarberNumber')}{': #'}{freeBarber.customerNumber}
               </Text>
             </View>
           )}
         </View>
       </View>
-      <View className="rounded-xl pr-2 mt-4">
+      <View style={{ marginTop: profileCompact ? 8 : 16, paddingRight: 8 }}>
         {mainOfferings.length > 0 && (
           <ServiceOfferingsList
             offerings={mainOfferings}
@@ -279,7 +299,7 @@ export const FreeBarberMineCardComp = React.memo(
     prev.freeBarber.fullName === next.freeBarber.fullName &&
     prev.freeBarber.isAvailable === next.freeBarber.isAvailable &&
     (prev.freeBarber.imageList?.map((i) => i.id).join(",") ?? "") ===
-      (next.freeBarber.imageList?.map((i) => i.id).join(",") ?? "") &&
+    (next.freeBarber.imageList?.map((i) => i.id).join(",") ?? "") &&
     prev.isList === next.isList &&
     prev.expanded === next.expanded &&
     prev.cardWidthFreeBarber === next.cardWidthFreeBarber &&
