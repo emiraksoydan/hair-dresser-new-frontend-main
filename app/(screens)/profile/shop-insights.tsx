@@ -34,6 +34,8 @@ import { getEarningsChartSwitchProps } from "../../constants/colors";
 import { useLanguage } from "../../hook/useLanguage";
 import { useSafeNavigation } from "../../hook/useSafeNavigation";
 import { useBottomSheet } from "../../hook/useBottomSheet";
+import { useFabOverlayWhenSheetOpen } from "../../hook/usePanelMoreFab";
+import { useDeferredSheetPresent } from "../../hook/useDeferredSheetPresent";
 import {
   shareEarningsCsv,
   shareEarningsPdf,
@@ -55,7 +57,7 @@ const CURRENCY = "₺";
 
 /** Yan peek: dar kart + header/footer spacer + separator — paddingHorizontal yerine */
 const EARNINGS_CARD_HEIGHT = 182;
-const EARNINGS_CARD_WIDTH = Math.round(SCREEN_WIDTH * 0.62);
+const EARNINGS_CARD_WIDTH = Math.round(SCREEN_WIDTH * 0.68);
 const EARNINGS_CARD_GAP = 14;
 const EARNINGS_SNAP_INTERVAL = EARNINGS_CARD_WIDTH + EARNINGS_CARD_GAP;
 const EARNINGS_SIDE_PAD = (SCREEN_WIDTH - EARNINGS_CARD_WIDTH) / 2;
@@ -235,9 +237,6 @@ const EarningsCard = ({
         borderWidth: 1,
         borderColor: `${accentColor}40`,
         overflow: "hidden",
-        ...(Platform.OS === "ios"
-          ? { shadowColor: accentColor, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.28, shadowRadius: 14 }
-          : { elevation: 6 }),
       }}
     >
       {/* Top accent line */}
@@ -716,6 +715,12 @@ export default function ShopInsightsPage() {
     enablePanDownToClose: true,
   });
 
+  useFabOverlayWhenSheetOpen(datePickerSheet.isOpen);
+
+  const { present: presentDatePicker } = datePickerSheet;
+  const { schedulePresent: scheduleDatePickerPresent, cancelScheduledPresent: cancelDatePickerPresent } =
+    useDeferredSheetPresent(presentDatePicker);
+
   const pct = earnings?.changePercent ?? 0;
   const pctText = `${pct >= 0 ? "+" : ""}${pct.toFixed(1)}%`;
   const prevText = `${t("profile.previousPeriod")}: ${(earnings?.previousPeriodEarnings ?? 0).toLocaleString("tr-TR")} ${CURRENCY}`;
@@ -809,6 +814,7 @@ export default function ShopInsightsPage() {
   const onPickerChange = (event: any, d?: Date) => {
     if (Platform.OS === "android" && event?.type === "dismissed") {
       setPickerMode(null);
+      cancelDatePickerPresent();
       datePickerSheet.dismiss();
       return;
     }
@@ -816,6 +822,7 @@ export default function ShopInsightsPage() {
       if (pickerMode === "start") setCustomStart(d);
       if (pickerMode === "end") setCustomEnd(d);
       setPickerMode(null);
+      cancelDatePickerPresent();
       datePickerSheet.dismiss();
       return;
     }
@@ -829,7 +836,7 @@ export default function ShopInsightsPage() {
       style={{ flex: 1, backgroundColor: isDark ? "#0f0f1a" : "#f1f5f9" }}
       edges={["top"]}
     >
-      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={isDark ? "#0f0f1a" : "#ffffff"} />
+      <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
       <View
         style={{
           flexDirection: "row",
@@ -934,7 +941,7 @@ export default function ShopInsightsPage() {
               <TouchableOpacity
                 onPress={() => {
                   setPickerMode("start");
-                  setTimeout(() => datePickerSheet.present(), 60);
+                  scheduleDatePickerPresent(60);
                 }}
                 style={{
                   flex: 1,
@@ -953,7 +960,7 @@ export default function ShopInsightsPage() {
               <TouchableOpacity
                 onPress={() => {
                   setPickerMode("end");
-                  setTimeout(() => datePickerSheet.present(), 60);
+                  scheduleDatePickerPresent(60);
                 }}
                 style={{
                   flex: 1,
@@ -1055,18 +1062,17 @@ export default function ShopInsightsPage() {
           <ShopInsightsEarningsCarousel
             cards={[
               {
-                label: t("profile.dailyEarnings"),
-                value: earnings?.dailyEarnings ?? 0,
+                label: `${filterLabels[dateFilter]} ${t("profile.earningsSuffix")}`,
+                value: earnings?.totalEarnings ?? 0,
                 icon: "cash-multiple",
                 accentColor: "#5eead4",
                 lottieSource: LOTTIE_EARNINGS_COIN,
                 animateNumbers: showPriceAnimationSetting,
               },
               {
-                label: t("profile.totalEarnings"),
-                value: earnings?.totalEarnings ?? 0,
-                subText: prevText,
-                icon: "finance",
+                label: t("profile.previousPeriod"),
+                value: earnings?.previousPeriodEarnings ?? 0,
+                icon: "history",
                 accentColor: "#7dd3fc",
                 lottieSource: LOTTIE_EARNINGS_TREASURE,
                 animateNumbers: showPriceAnimationSetting,
@@ -1103,14 +1109,6 @@ export default function ShopInsightsPage() {
             marginTop: 14,
             borderWidth: StyleSheet.hairlineWidth,
             borderColor: colors.borderColor2,
-            ...(Platform.OS === "ios"
-              ? {
-                  shadowColor: "#000",
-                  shadowOffset: { width: 0, height: 3 },
-                  shadowOpacity: isDark ? 0.32 : 0.07,
-                  shadowRadius: 10,
-                }
-              : { elevation: 3 }),
           }}
         >
           <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
@@ -1459,6 +1457,10 @@ export default function ShopInsightsPage() {
         enablePanDownToClose={datePickerSheet.enablePanDownToClose}
         backdropComponent={datePickerSheet.makeBackdrop()}
         onChange={datePickerSheet.handleChange}
+        onDismiss={() => {
+          cancelDatePickerPresent();
+          datePickerSheet.handleDismiss();
+        }}
         backgroundStyle={{ backgroundColor: colors.sheetBg }}
         handleIndicatorStyle={{ backgroundColor: colors.sheetHandle }}
       >
@@ -1496,6 +1498,7 @@ export default function ShopInsightsPage() {
           )}
           <TouchableOpacity
             onPress={() => {
+              cancelDatePickerPresent();
               datePickerSheet.dismiss();
               setPickerMode(null);
             }}

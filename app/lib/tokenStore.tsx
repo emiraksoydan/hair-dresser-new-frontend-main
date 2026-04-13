@@ -1,6 +1,17 @@
 let accessToken: string | null = null;
 let refreshToken: string | null = null;
 let isRefreshing = false;
+/**
+ * Oturum kimliği: hesap geçişi / çıkış sonrası artar.
+ * Arka planda biten eski refresh sonuçları tokenStore'u ezmesin diye baseQuery bunu kullanır.
+ */
+let tokenEpoch = 0;
+/**
+ * Hesap geçişi devam ederken true.
+ * Bu flag açıkken baseQueryWithReauth başarısız refresh sonrası
+ * tokenStore.clear() çağırmamalı — o token artık farklı hesaba ait.
+ */
+let switchingAccount = false;
 
 // Listener for token changes (SignalR reconnection etc.)
 type TokenChangeListener = (hasToken: boolean, token?: string | null) => void;
@@ -10,9 +21,14 @@ const tokenChangeListeners: TokenChangeListener[] = [];
 type RefreshStateListener = (isRefreshing: boolean) => void;
 const refreshStateListeners: RefreshStateListener[] = [];
 
+export function bumpTokenEpoch() {
+  tokenEpoch += 1;
+}
+
 export const tokenStore = {
   get access() { return accessToken; },
   get refresh() { return refreshToken; },
+  get tokenEpoch() { return tokenEpoch; },
   set(tokens: { accessToken: string; refreshToken: string }) {
     const previousToken = accessToken;
     accessToken = tokens.accessToken;
@@ -23,6 +39,7 @@ export const tokenStore = {
     }
   },
   clear() {
+    tokenEpoch += 1;
     const hadToken = !!accessToken;
     accessToken = null;
     refreshToken = null;
@@ -52,5 +69,8 @@ export const tokenStore = {
       const index = refreshStateListeners.indexOf(listener);
       if (index >= 0) refreshStateListeners.splice(index, 1);
     };
-  }
+  },
+  // Hesap geçişi flag'i
+  get isSwitchingAccount() { return switchingAccount; },
+  setAccountSwitching(value: boolean) { switchingAccount = value; },
 };

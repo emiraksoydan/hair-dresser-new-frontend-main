@@ -44,8 +44,12 @@ export const normalizeLoaded = (raw: any) => {
 const raw = fetchBaseQuery({
   baseUrl: API,
   timeout: API_CONFIG.REQUEST_TIMEOUT_MS,
-  prepareHeaders: (h) => {
-    if (tokenStore.access) h.set('Authorization', `Bearer ${tokenStore.access}`);
+  prepareHeaders: (h, { endpoint }) => {
+    if (tokenStore.access) {
+      h.set('Authorization', `Bearer ${tokenStore.access}`);
+    } else {
+      console.warn('[baseQuery] TOKEN YOK - istek atsız gidecek, endpoint:', endpoint);
+    }
     return h;
   },
 });
@@ -55,6 +59,33 @@ const rawNoAuth = fetchBaseQuery({
 });
 
 let refreshing: Promise<any> | null = null;
+
+/** Hesap geçişinde mevcut refresh döngüsünü iptal et. */
+export function clearRefreshLock() {
+  refreshing = null;
+}
+
+/**
+ * Hesap geçişi öncesinde token yenileme deneyi.
+ * Sadece geçerli refresh token ile çağrılmalı.
+ * Başarılı: { accessToken, refreshToken } döner.
+ * Başarısız: null döner.
+ */
+export async function attemptTokenRefresh(
+  refreshToken: string
+): Promise<{ accessToken: string; refreshToken: string } | null> {
+  try {
+    const r = await rawNoAuth(
+      { url: 'Auth/refresh', method: 'POST', body: { refreshToken } },
+      { type: 'accountSwitch' } as any,
+      {} as any
+    );
+    if ((r as any).error) return null;
+    return extractTokens((r as any).data);
+  } catch {
+    return null;
+  }
+}
 
 export const baseQueryWithReauth: BaseQueryFn<any, unknown, FetchBaseQueryError> =
   async (args, api, extra) => {
@@ -150,20 +181,37 @@ export const baseQueryWithReauth: BaseQueryFn<any, unknown, FetchBaseQueryError>
       if ((res.error?.status === 401 || res.error?.status === 403 || res.error?.status === 419 || res.error?.status === 498) && tokenStore.refresh) {
         if (!refreshing) {
           refreshing = (async () => {
+            const epochAtStart = tokenStore.tokenEpoch;
+            const refreshPlain = tokenStore.refresh;
+            if (!refreshPlain) return false;
             tokenStore.setRefreshing(true); // SignalR'a bildir
             try {
               const r = await rawNoAuth(
-                { url: 'Auth/refresh', method: 'POST', body: { refreshToken: tokenStore.refresh } },
+                { url: 'Auth/refresh', method: 'POST', body: { refreshToken: refreshPlain } },
                 api, extra
               );
               if ((r as any).error) throw new Error('HTTP error');
-              const { accessToken, refreshToken } = extractTokens((r as any).data);
+              let accessToken: string;
+              let refreshToken: string;
+              try {
+                ({ accessToken, refreshToken } = extractTokens((r as any).data));
+              } catch {
+                throw new Error('Invalid refresh payload');
+              }
+              // Hesap geçişi / çıkış sonrası başlayan refresh geç biterse yeni oturumu ezmesin
+              if (tokenStore.tokenEpoch !== epochAtStart) return false;
               tokenStore.set({ accessToken, refreshToken });
               await saveTokens({ accessToken, refreshToken });
               return true;
             } catch (error) {
-              tokenStore.clear();
-              await clearStoredTokens();
+              // Oturum bu arada değiştiyse eski hatayı yeni hesaba uygulama
+              if (tokenStore.tokenEpoch !== epochAtStart) return false;
+              // Hesap geçişi sırasında refresh başarısız olursa token'ı silme —
+              // o token artık yeni hesaba ait, silmek her şeyi patlatır.
+              if (!tokenStore.isSwitchingAccount) {
+                tokenStore.clear();
+                await clearStoredTokens();
+              }
               return false;
             } finally {
               tokenStore.setRefreshing(false); // SignalR'a bildir
@@ -171,7 +219,13 @@ export const baseQueryWithReauth: BaseQueryFn<any, unknown, FetchBaseQueryError>
           })();
         }
         const ok = await refreshing.finally(() => (refreshing = null));
-        if (ok) res = await raw(args, api, extra);
+        if (ok) {
+          res = await raw(args, api, extra);
+        } else if (tokenStore.isSwitchingAccount) {
+          // Hesap geçişi sırasında refresh başarısız oldu ama token'ı silme.
+          // Bu 401 response'u olduğu gibi döndür; component error state gösterir.
+          return res;
+        }
       }
       return res;
     } catch (error: any) {

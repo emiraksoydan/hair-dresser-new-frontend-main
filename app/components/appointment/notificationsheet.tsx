@@ -61,6 +61,7 @@ export function NotificationsSheet({
     useDeleteNotificationMutation();
   const [deleteAllNotifications, { isLoading: isDeletingAllNotifications }] =
     useDeleteAllNotificationsMutation();
+  const [deletingNotificationId, setDeletingNotificationId] = React.useState<string | null>(null);
   const { userType } = useAuth();
   const { t } = useLanguage();
   const { isDark } = useTheme();
@@ -282,6 +283,7 @@ export function NotificationsSheet({
         t("notification.deleteNotification"),
         t("notification.deleteNotificationConfirm"),
         async () => {
+          setDeletingNotificationId(notification.id);
           const deleteResult = await deleteNotification(notification.id);
           if ("error" in deleteResult) {
             const errorMessage =
@@ -292,11 +294,13 @@ export function NotificationsSheet({
             } else {
               alertError(t("common.error"), errorMessage);
             }
+            setDeletingNotificationId(null);
             return;
           }
           if (onDeleteSuccess) {
             onDeleteSuccess(t("notification.notificationDeleted"));
           }
+          setDeletingNotificationId(null);
         },
         undefined,
         t("common.delete"),
@@ -386,12 +390,13 @@ export function NotificationsSheet({
           isProcessing={
             isStoreDeciding || isFreeBarberDeciding || isCustomerDeciding
           }
-          isDeleting={isDeletingNotification}
+          isDeleting={deletingNotificationId === item.id && isDeletingNotification}
           formatDate={formatDate}
           formatTime={formatTime}
           formatPricingPolicy={formatPricingPolicy}
           formatRating={formatRating}
           onAddStore={handleAddStore}
+          onCloseSheet={onClose}
         />
       );
     },

@@ -27,5 +27,14 @@
         "credentialsSource": "remote"
       }
     }
+  },
+  "submit": {
+    "production": {
+      "ios": {
+        "appleId": "yavuzanteknoloji@gmail.com",
+        "appleTeamId": "5WAG9T48YA",
+        "ascAppId": "6762051239"
+      }
+    }
   }
 }

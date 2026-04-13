@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { View } from "react-native";
 import MapView, { MapPressEvent, Marker } from "react-native-maps";
+import { OsmMapView } from "./OsmMapView";
 import { IST } from "../../constants";
 import { useLanguage } from "../../hook/useLanguage";
 
@@ -36,7 +37,7 @@ export const MapPicker = ({
 
     return (
         <View style={{ height: 220, borderRadius: 12, overflow: 'hidden', marginTop: 12 }}>
-            <MapView
+            <OsmMapView
                 ref={mapRef}
                 style={{ flex: 1 }}
                 initialRegion={{
@@ -59,7 +60,7 @@ export const MapPicker = ({
                     title={t('labels.storeDefaultName')}
                     description={address || t('location.dragLocation')}
                 />
-            </MapView>
+            </OsmMapView>
         </View>
     );
 }

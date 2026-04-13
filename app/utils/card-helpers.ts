@@ -30,19 +30,3 @@ export const getShortBarberTypeLabel = (type: BarberType): string => {
       return '';
   }
 };
-
-/**
- * Get barber type icon name
- */
-export const getBarberTypeIcon = (type: BarberType): string => {
-  switch (type) {
-    case BarberType.MaleHairdresser:
-      return 'face-man';
-    case BarberType.FemaleHairdresser:
-      return 'face-woman';
-    case BarberType.BeautySalon:
-      return 'store';
-    default:
-      return 'account';
-  }
-};

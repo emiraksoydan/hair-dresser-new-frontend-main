@@ -31,12 +31,19 @@ import {
   api,
 } from "../store/api";
 import { OtpInput } from "react-native-otp-entry";
-import { tokenStore } from "../lib/tokenStore";
+import { tokenStore, bumpTokenEpoch } from "../lib/tokenStore";
 import { loadTokens, saveTokens } from "../lib/tokenStorage";
-import { OtpPurpose, UserType } from "../types";
+import { OtpPurpose, UserType, JwtPayload } from "../types";
 import { pathByUserType } from "../utils/auth/redirect-by-user-type";
 import { useAppDispatch } from "../store/hook";
 import { getUserTypeFromToken } from "../utils/auth/auth";
+import { jwtDecode } from "jwt-decode";
+import {
+  upsertAccount,
+  loadAllAccounts,
+  findSavedAccountByPhoneAndUserType,
+} from "../lib/multiAccountStorage";
+import { useMultiAccount } from "../context/MultiAccountContext";
 import { useTheme } from "../hook/useTheme";
 import { useLanguage } from "../hook/useLanguage";
 import { LanguageSelector } from "../components/common/LanguageSelector";
@@ -44,8 +51,9 @@ import { LegalAgreementCheckbox } from "../components/auth/LegalAgreementCheckbo
 import { useSafeNavigation } from "../hook/useSafeNavigation";
 import { persistHelpGuideOnboardingFromAuthPayload } from "../lib/helpGuideOnboarding";
 import { useActionGuard } from "../hook/useActionGuard";
+import { useLocalSearchParams, useRouter } from "expo-router";
 
-/** NetGsmSmsManager OTP_VALIDITY_SECONDS ile aynı (60 sn). */
+/** NetGsm:OtpValiditySeconds ile aynı tutun (appsettings / API). */
 const OTP_COUNTDOWN_SECONDS = 60;
 
 /** #RRGGBB → yarı saydam OTP modal backdrop (ekran zeminiyle uyumlu). */
@@ -154,12 +162,30 @@ const createSchemas = (t: (key: string) => string) => {
 
 type FormData = z.infer<ReturnType<typeof createSchemas>>;
 
+function mapUserTypeToNumber(ut: FormData["userType"] | undefined): UserType {
+  switch (ut) {
+    case "customer":
+      return UserType.Customer;
+    case "freeBarber":
+      return UserType.FreeBarber;
+    case "barberStore":
+      return UserType.BarberStore;
+    default:
+      return UserType.Customer;
+  }
+}
+
 const Index = () => {
   const { colors, isDark } = useTheme();
   const { t, currentLanguage } = useLanguage();
   const schema = useMemo(() => createSchemas(t), [t, currentLanguage]);
   const resolver = useMemo(() => zodResolver(schema), [schema]);
   const dispatch = useAppDispatch();
+  const { addAccount } = useLocalSearchParams<{ addAccount?: string }>();
+  const isAddAccountMode = addAccount === 'true';
+  const nativeRouter = useRouter();
+  const { switchAccount } = useMultiAccount();
+
   const {
     control,
     handleSubmit,
@@ -185,6 +211,13 @@ const Index = () => {
       trigger();
     }
   }, [currentLanguage, trigger, errors]);
+
+  /** Hesap ekle akışında varsayılan olarak giriş modu (OTP atlama sadece giriş + kayıtlı hesap için). */
+  useEffect(() => {
+    if (isAddAccountMode) {
+      setValue("mode", "login");
+    }
+  }, [isAddAccountMode, setValue]);
 
   const route = useSafeNavigation();
   const [modalVisible, setModalVisible] = useState(false);
@@ -216,6 +249,51 @@ const Index = () => {
       }
       if (!normalizedPhone.startsWith("+90")) {
         normalizedPhone = `+90${normalizedPhone}`;
+      }
+
+      // Hesap ekle + giriş: Bu telefon ve kullanıcı türü cihazda kayıtlıysa OTP göstermeden geçiş
+      if (isAddAccountMode && !isRegister && data.userType) {
+        const ut = mapUserTypeToNumber(data.userType);
+        const saved = await loadAllAccounts();
+        const matched = findSavedAccountByPhoneAndUserType(
+          saved,
+          normalizedPhone,
+          ut
+        );
+        if (matched) {
+          const token = tokenStore.access;
+          let currentId: string | null = null;
+          if (token) {
+            try {
+              const decoded = jwtDecode<JwtPayload>(token);
+              currentId =
+                decoded.identifier ||
+                (decoded as any).sub ||
+                (decoded as any).userId ||
+                (decoded as any)[
+                  "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier"
+                ] ||
+                null;
+            } catch {
+              currentId = null;
+            }
+          }
+          if (
+            currentId &&
+            matched.id.toLowerCase() === currentId.toLowerCase()
+          ) {
+            dispatch(
+              showSnack({
+                message: t("accounts.alreadyActiveAccount"),
+                isError: false,
+              })
+            );
+            nativeRouter.back();
+            return;
+          }
+          await switchAccount(matched);
+          return;
+        }
       }
 
       const payloadForSendOtp: {
@@ -379,6 +457,7 @@ const Index = () => {
 
       const response = result.data;
       if (response?.success === true && response.data) {
+        bumpTokenEpoch();
         tokenStore.set({
           accessToken: response.data.token,
           refreshToken: response.data.refreshToken,
@@ -388,9 +467,37 @@ const Index = () => {
           refreshToken: response.data.refreshToken,
         });
 
+        // Save account to multi-account storage
+        try {
+          const decoded = jwtDecode<JwtPayload>(response.data.token);
+          const userId =
+            decoded.identifier ||
+            (decoded as any).sub ||
+            (decoded as any).userId ||
+            (decoded as any).nameid ||
+            (decoded as any)['http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier'];
+          const userTypeStr = (decoded.userType ?? '').toLowerCase();
+          let ut = UserType.Customer;
+          if (userTypeStr === 'freebarber') ut = UserType.FreeBarber;
+          else if (userTypeStr === 'barberstore') ut = UserType.BarberStore;
+          const displayName = [decoded.name, decoded.lastName].filter(Boolean).join(' ');
+          const normalizedPhone = phone.startsWith('+90') ? phone.substring(3) : phone;
+          if (userId) {
+            await upsertAccount({
+              id: userId,
+              userType: ut,
+              displayName: displayName || userId,
+              phone: normalizedPhone,
+              accessToken: response.data.token,
+              refreshToken: response.data.refreshToken,
+              savedAt: Date.now(),
+            });
+          }
+        } catch {}
+
         await persistHelpGuideOnboardingFromAuthPayload(response.data);
 
-        dispatch(api.util.invalidateTags(["Notification"]));
+        dispatch(api.util.resetApiState());
         dispatch(
           showSnack({
             message: response.message || t("auth.login"),
@@ -430,19 +537,6 @@ const Index = () => {
       setOtpResetSignal((s) => s + 1);
     }
   });
-
-  const mapUserTypeToNumber = (ut: FormData["userType"]) => {
-    switch (ut) {
-      case "customer":
-        return UserType.Customer;
-      case "freeBarber":
-        return UserType.FreeBarber;
-      case "barberStore":
-        return UserType.BarberStore;
-      default:
-        return 0;
-    }
-  };
 
   // Resend butonu sadece OTP kodunun geçerlilik süresi dolduktan sonra aktif olmalı
   // left > 0 ise kod hala geçerli, resend devre dışı
@@ -525,13 +619,30 @@ const Index = () => {
         style={{ backgroundColor: colors.background }}
       >
         <View className="flex-1 items-center justify-center p-4">
+          {/* Add Account Mode: Back button */}
+          {isAddAccountMode && (
+            <TouchableOpacity
+              onPress={() => nativeRouter.back()}
+              style={{
+                position: 'absolute',
+                top: 16,
+                left: 16,
+                zIndex: 10,
+                padding: 8,
+              }}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Icon source="arrow-left" size={26} color={isDark ? '#ffffff' : '#000000'} />
+            </TouchableOpacity>
+          )}
+
           {/* Header Section */}
           <View
             className="items-center justify-center mb-4"
             style={{ backgroundColor: colors.background }}
           >
             <Text
-              className="text-4xl font-bold mb-1"
+              className="text-4xl font-normal mb-1"
               style={{
                 color: isDark ? "#ffffff" : "#000000",
                 letterSpacing: 0.5,
@@ -758,7 +869,7 @@ const Index = () => {
 
             {/* User Type Selection */}
             <View style={{ marginBottom: 0 }}>
-              <Text className="text-base font-bold mb-1" style={{ color: colors.text }}>
+              <Text className="text-base font-normal mb-1" style={{ color: colors.text }}>
                 {t("auth.userType")}
               </Text>
               <Controller
@@ -793,7 +904,7 @@ const Index = () => {
                               color={isSelected ? colors.primaryText : colors.text}
                             />
                             <Text
-                              className="text-sm ml-2 font-bold"
+                              className="text-sm ml-2 font-normal"
                               style={{
                                 color: isSelected ? colors.primaryText : colors.text,
                               }}
@@ -894,7 +1005,7 @@ const Index = () => {
 
             {/* Login/Register Toggle */}
             <View className="flex-row items-center justify-center gap-2 mt-4">
-              <Text className="text-base font-century-gothic-bold" style={{ color: colors.textSecondary }}>
+              <Text className="text-base font-century-gothic" style={{ color: colors.textSecondary }}>
                 {isRegister
                   ? t("auth.alreadyHaveAccount")
                   : t("auth.noAccount")}
@@ -904,7 +1015,7 @@ const Index = () => {
                 className="flex-row items-center "
               >
                 <Text
-                  className="text-base underline font-bold"
+                  className="text-base underline font-normal"
                   style={{ color: colors.text }}
                 >
                   {isRegister ? t("auth.login") : t("auth.register")}

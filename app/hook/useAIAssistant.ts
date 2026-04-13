@@ -107,23 +107,35 @@ export function useAIAssistant(): AIAssistantState {
       const formData = new FormData();
       formData.append("file", { uri, name: "audio.m4a", type: "audio/mp4" } as any);
 
-      const whisperRes = await fetch(`${API_CONFIG.BASE_URL}AI/transcribe`, {
+      const langParam = encodeURIComponent(currentLanguage ?? "tr");
+      const whisperRes = await fetch(`${API_CONFIG.BASE_URL}AI/transcribe?language=${langParam}`, {
         method: "POST",
         headers: { Authorization: `Bearer ${token}` },
         body: formData,
       });
-      const whisperJson = await whisperRes.json().catch(() => ({}));
+      const whisperJson = (await whisperRes.json().catch(() => ({}))) as Record<string, unknown>;
       if (!whisperRes.ok) {
         const serverMsg = typeof whisperJson?.message === "string" ? whisperJson.message : "";
         setPhase("error");
         setErrorMessage(
-          /kotası|yoğun|quota|rate.?limit|limit|exceeded|dolmuş|ücretsiz/i.test(serverMsg) ? "whisper_rate_limit" : "whisper_failed",
+          /kotası|yoğun|quota|rate.?limit|limit|exceeded|dolmuş|ücretsiz/i.test(serverMsg)
+            ? "whisper_rate_limit"
+            : /algılanamadı|algilan|no.?speech|empty|boş/i.test(serverMsg)
+              ? "transcription_empty"
+              : "whisper_failed",
         );
         return;
       }
-      let text = (whisperJson.data as string) ?? "";
+      const rawData = whisperJson.data ?? (whisperJson as { Data?: unknown }).Data;
+      let text =
+        typeof rawData === "string"
+          ? rawData
+          : rawData && typeof rawData === "object" && "text" in rawData && typeof (rawData as { text?: string }).text === "string"
+            ? (rawData as { text: string }).text
+            : "";
+      text = text.trim();
 
-      if (!text.trim()) {
+      if (!text) {
         setPhase("error");
         setErrorMessage("transcription_empty");
         return;

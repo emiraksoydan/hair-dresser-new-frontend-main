@@ -260,25 +260,3 @@ export const useBackendFilters = (options: UseBackendFiltersOptions = {}) => {
     toFilterRequestDto,
   };
 };
-
-// Helper hook for stores specifically
-export const useStoreFilters = (options: UseBackendFiltersOptions = {}) => {
-  return useBackendFilters({
-    ...options,
-    defaultCriteria: {
-      userType: USER_TYPE_KEYS.STORE,
-      ...options.defaultCriteria,
-    },
-  });
-};
-
-// Helper hook for free barbers specifically
-export const useFreeBarberFilters = (options: UseBackendFiltersOptions = {}) => {
-  return useBackendFilters({
-    ...options,
-    defaultCriteria: {
-      userType: USER_TYPE_KEYS.FREE_BARBER,
-      ...options.defaultCriteria,
-    },
-  });
-};

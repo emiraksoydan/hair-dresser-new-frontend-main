@@ -1,6 +1,6 @@
 // app/components/StoreCard.tsx
-import React, { useCallback } from 'react';
-import { View } from 'react-native';
+import React, { useCallback, useState } from 'react';
+import { View, TouchableOpacity } from 'react-native';
 
 import { Text } from '../common/Text';
 import { BarberStoreGetDto, FavoriteTargetType } from '../../types';
@@ -16,6 +16,8 @@ import { getBarberTypeLabel } from '../../utils/card-helpers';
 import { useTheme } from '../../hook/useTheme';
 import { useLanguage } from '../../hook/useLanguage';
 import { PanelImageOverflowMenu } from '../panel/PanelImageOverflowMenu';
+import { useLazyGetServicePackagesByOwnerQuery } from '../../store/api';
+import { Icon } from 'react-native-paper';
 
 type Props = {
     store: BarberStoreGetDto;
@@ -35,8 +37,18 @@ type Props = {
 };
 
 const StoreCard: React.FC<Props> = ({ store, isList, expanded, cardWidthStore, isViewerFromFreeBr = false, typeLabel, typeLabelColor = 'bg-blue-500', onPressUpdate, onPressRatings, showImageAnimation = true, panelCompare, compactMeta = false }) => {
-    const { colors } = useTheme();
+    const { colors, isDark } = useTheme();
     const { t } = useLanguage();
+    const [activeTab, setActiveTab] = useState<'services' | 'packages'>('services');
+    const [triggerGetPackages, { data: packagesData, isFetching: packagesFetching }] = useLazyGetServicePackagesByOwnerQuery();
+    const packages = packagesData ?? [];
+
+    const handleTabPress = useCallback((tab: 'services' | 'packages') => {
+        setActiveTab(tab);
+        if (tab === 'packages' && !packagesData) {
+            triggerGetPackages(store.id);
+        }
+    }, [store.id, packagesData, triggerGetPackages]);
     const carouselWidth = Math.max(0, cardWidthStore - 20);
     const { isFavorite, favoriteCount, isLoading, favoriteDisabled, toggleFavorite } = useFavoriteToggle({
         targetId: store.id,
@@ -111,7 +123,10 @@ const StoreCard: React.FC<Props> = ({ store, isList, expanded, cardWidthStore, i
                             </View>
                         )}
                     </View>
-                    <View className={`flex-1 flex-col ${isList ? 'gap-2' : 'gap-1'}`} style={{ minWidth: 0, maxWidth: '100%' }}>
+                    <View
+                        className={`flex-1 flex-col ${isList ? 'gap-2' : 'gap-1'}`}
+                        style={{ minWidth: 0, maxWidth: '100%', marginTop: isList ? 8 : 0 }}
+                    >
                         <View
                             className={`flex-row justify-between ${!isList ? 'items-start' : 'items-center'}`}
                             style={{ minWidth: 0, maxWidth: '100%' }}
@@ -170,16 +185,86 @@ const StoreCard: React.FC<Props> = ({ store, isList, expanded, cardWidthStore, i
                         )}
                     </View>
                 </View>
-                <View className="rounded-xl pr-2  mt-4">
-                    <ServiceOfferingsList
-                        offerings={store.serviceOfferings || []}
-                        layout="vertical"
-                        previewCount={3}
-                        showExpandButton={true}
-                    />
+                <View className={`rounded-xl pr-2 ${compactMeta ? 'mt-2' : 'mt-4'}`}>
+                    {/* Hizmetler / Paketler Tab */}
+                    <View className="flex-row mb-2 rounded-lg overflow-hidden" style={{ backgroundColor: colors.cardBg2, borderWidth: 1, borderColor: colors.borderColor }}>
+                        <TouchableOpacity
+                            onPress={() => handleTabPress('services')}
+                            activeOpacity={0.7}
+                            className="flex-1 py-2 items-center flex-row justify-center gap-1"
+                            style={{ backgroundColor: activeTab === 'services' ? (isDark ? 'rgba(96,165,250,0.18)' : 'rgba(96,165,250,0.12)') : 'transparent' }}
+                        >
+                            <Icon source="scissors-cutting" size={14} color={activeTab === 'services' ? '#60a5fa' : colors.textSecondary} />
+                            <Text style={{ fontSize: 13, fontFamily: 'CenturyGothic-Bold', color: activeTab === 'services' ? '#60a5fa' : colors.textSecondary }}>
+                                {t('common.services')}
+                            </Text>
+                        </TouchableOpacity>
+                        <View style={{ width: 1, backgroundColor: colors.borderColor }} />
+                        <TouchableOpacity
+                            onPress={() => handleTabPress('packages')}
+                            activeOpacity={0.7}
+                            className="flex-1 py-2 items-center flex-row justify-center gap-1"
+                            style={{ backgroundColor: activeTab === 'packages' ? (isDark ? 'rgba(167,139,250,0.18)' : 'rgba(167,139,250,0.12)') : 'transparent' }}
+                        >
+                            <Icon source="tag-multiple-outline" size={14} color={activeTab === 'packages' ? '#a78bfa' : colors.textSecondary} />
+                            <Text style={{ fontSize: 13, fontFamily: 'CenturyGothic-Bold', color: activeTab === 'packages' ? '#a78bfa' : colors.textSecondary }}>
+                                {t('servicePackage.tabPackages')}
+                            </Text>
+                        </TouchableOpacity>
+                    </View>
+
+                    {activeTab === 'services' && (
+                        <ServiceOfferingsList
+                            offerings={store.serviceOfferings || []}
+                            layout="vertical"
+                            previewCount={3}
+                            showExpandButton={true}
+                        />
+                    )}
+                    {activeTab === 'packages' && (
+                        packagesFetching ? (
+                            <View className="py-4 items-center">
+                                <Icon source="loading" size={20} color={colors.textSecondary} />
+                            </View>
+                        ) : packages.length === 0 ? (
+                            <View className="py-3 items-center">
+                                <Text style={{ color: colors.textSecondary, fontSize: 13, fontFamily: 'CenturyGothic' }}>
+                                    {t('servicePackage.noPackagesYet')}
+                                </Text>
+                            </View>
+                        ) : (
+                            <View style={{ gap: 6 }}>
+                                {(packages as any[]).slice(0, 3).map((pkg: any) => (
+                                    <View key={pkg.id} className="px-3 py-2.5 rounded-xl" style={{ backgroundColor: colors.cardBg2, borderWidth: 1, borderColor: isDark ? 'rgba(167,139,250,0.25)' : 'rgba(167,139,250,0.2)' }}>
+                                        <View className="flex-row items-center justify-between">
+                                            <View className="flex-row items-center gap-1.5 flex-1 mr-2">
+                                                <Icon source="tag-multiple-outline" size={14} color="#a78bfa" />
+                                                <Text style={{ fontFamily: 'CenturyGothic-Bold', fontSize: 14, color: colors.sectionHeaderText, flex: 1 }} numberOfLines={1}>
+                                                    {pkg.packageName}
+                                                </Text>
+                                            </View>
+                                            <Text style={{ fontFamily: 'CenturyGothic-Bold', fontSize: 14, color: '#a78bfa' }}>
+                                                {pkg.totalPrice} {t('card.currencySymbol')}
+                                            </Text>
+                                        </View>
+                                        {(pkg.items ?? []).length > 0 && (
+                                            <Text style={{ fontFamily: 'CenturyGothic', fontSize: 12, color: colors.textSecondary, marginTop: 3, marginLeft: 20 }} numberOfLines={1}>
+                                                {(pkg.items as any[]).map((i: any) => i.serviceName).join(' · ')}
+                                            </Text>
+                                        )}
+                                    </View>
+                                ))}
+                                {(packages as any[]).length > 3 && (
+                                    <Text style={{ fontSize: 12, fontFamily: 'CenturyGothic', color: '#a78bfa', textAlign: 'center', paddingVertical: 4 }}>
+                                        {t('servicePackage.morePackages', { count: (packages as any[]).length - 3 })}
+                                    </Text>
+                                )}
+                            </View>
+                        )
+                    )}
+
                     {isViewerFromFreeBr && (
                         <PricingInfo
-
                             pricingType={store.pricingType}
                             pricingValue={store.pricingValue}
                         />

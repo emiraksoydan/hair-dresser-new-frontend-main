@@ -1,4 +1,3 @@
-import * as DocumentPicker from "expo-document-picker";
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { FileObject } from "../../types";
@@ -63,25 +62,6 @@ export const normalizeImageFile = (
   return { uri, name: rawName, type: resolvedType };
 };
 
-
-export const pickPdf = async () => {
-    const res = await DocumentPicker.getDocumentAsync({
-        type: ["application/pdf", "com.adobe.pdf"],
-        multiple: false,
-        copyToCacheDirectory: true,
-    });
-    if (res.canceled) return null;
-
-    const f = res.assets[0];
-    return {
-        uri: f.uri,
-        name: f.name ?? "document.pdf",
-        size: f.size ?? undefined,
-        mimeType: f.mimeType ?? undefined,
-    };
-};
-
-
 export async function pickImageAndSet<TFieldValues extends FieldValues>(
     setValue: UseFormSetValue<TFieldValues>,
     name: Path<TFieldValues>
@@ -98,7 +78,7 @@ export async function pickImageAndSet<TFieldValues extends FieldValues>(
 export const handlePickImage = async (): Promise<FileObject | null> => {
     const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true,
+        allowsEditing: false,
         quality: JPEG_UPLOAD_QUALITY,
     });
     if (!result.canceled) {
@@ -137,21 +117,4 @@ export const handlePickMultipleImages = async (maxImages: number = 3): Promise<F
         return Promise.all(normalized.map((f) => ensureJpegForUpload(f)));
     }
     return [];
-};
-
-/**
- * Take a photo using camera
- */
-export const handleTakePhoto = async (): Promise<FileObject | null> => {
-    const result = await ImagePicker.launchCameraAsync({
-        allowsEditing: true,
-        quality: JPEG_UPLOAD_QUALITY,
-    });
-
-    if (!result.canceled && result.assets && result.assets.length > 0) {
-        const file = result.assets[0];
-        const normalized = normalizeImageFile(file.uri, file.fileName, file.mimeType);
-        return ensureJpegForUpload(normalized);
-    }
-    return null;
 };

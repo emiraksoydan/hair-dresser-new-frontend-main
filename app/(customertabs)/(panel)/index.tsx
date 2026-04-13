@@ -8,7 +8,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Text } from "../../components/common/Text";
-import MapView from "react-native-maps";
+import { OsmMapView as MapView } from "../../components/common/OsmMapView";
 import { useSafeNavigation } from "../../hook/useSafeNavigation";
 import SearchBar from "../../components/common/searchbar";
 import { BottomSheetModal, BottomSheetView } from "@gorhom/bottom-sheet";
@@ -44,7 +44,7 @@ import { isOtherUsersFreeBarber, isOtherUsersStore } from "../../utils/compare-e
 import { PanelCollapsibleTop } from "../../components/panel/PanelCollapsibleTop";
 import { PerplexityHorizontalList } from "../../components/panel/PerplexityHorizontalList";
 import { PerplexityListItem } from "../../components/panel/PerplexityListItem";
-import { usePanelMoreFab } from "../../hook/usePanelMoreFab";
+import { useFabOverlayWhenSheetOpen, usePanelMoreFab } from "../../hook/usePanelMoreFab";
 import { getCompareStripBottom } from "../../components/layout/panelBottomOverlays";
 import {
   compareStripCtaStyle,
@@ -192,6 +192,8 @@ const Index = () => {
     snapPoints: ["60%", "90%"],
     enablePanDownToClose: true,
   });
+
+  useFabOverlayWhenSheetOpen(mapDetailSheet.isOpen || ratingsSheet.isOpen);
 
   // Section expansion states
   const [expandedStores, setExpandedStores] = useState(true);

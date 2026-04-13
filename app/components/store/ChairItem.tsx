@@ -1,11 +1,13 @@
 import React from "react";
-import { View, Pressable } from "react-native";
+import { View } from "react-native";
 import { Text } from "../common/Text";
-import { HelperText, Icon, IconButton, TextInput } from "react-native-paper";
+import { HelperText, Icon, IconButton } from "react-native-paper";
 import { Controller, Control, FieldErrors } from "react-hook-form";
-import { Dropdown } from "react-native-element-dropdown";
 import { useLanguage } from "../../hook/useLanguage";
 import { useTheme } from "../../hook/useTheme";
+import { PersonnelSelectList } from "./PersonnelSelectList";
+import { ChairNamePlateField } from "./ChairNamePlateField";
+import { ChairModeSegmentedControl } from "./ChairModeSegmentedControl";
 
 type ChairItemProps = {
   control: Control<any>;
@@ -31,29 +33,12 @@ export const ChairItem = React.memo<ChairItemProps>(
   }) => {
     const { t } = useLanguage();
     const { colors, isDark } = useTheme();
-    const dropdownItemActiveBg = isDark
-      ? "rgba(194, 165, 35, 0.22)"
-      : "rgba(139, 115, 85, 0.16)";
     const chairError = (errors as any)?.chairs?.[index];
     const nameError = (chairError as any)?.name?.message;
     const barberIdError = (chairError as any)?.barberId?.message;
     const accent = "#c2a523";
 
     const disabled = mode === "barber" && barberOptions.length === 0;
-
-    const pillBase = (active: boolean) => ({
-      flex: 1,
-      paddingVertical: 11,
-      paddingHorizontal: 10,
-      borderRadius: 12,
-      borderWidth: 1.5,
-      borderColor: active ? accent : colors.borderColor2,
-      backgroundColor: active
-        ? isDark
-          ? "rgba(194, 165, 35, 0.14)"
-          : "rgba(194, 165, 35, 0.1)"
-        : colors.cardBg,
-    });
 
     return (
       <View
@@ -101,57 +86,16 @@ export const ChairItem = React.memo<ChairItemProps>(
 
         <Text
           style={{
-            fontSize: 12,
-            fontFamily: "CenturyGothic",
-            color: colors.textSecondary,
-            marginBottom: 8,
+            fontSize: 13,
+            fontFamily: "CenturyGothic-Bold",
+            color: colors.sectionHeaderText,
+            marginBottom: 10,
           }}
         >
-          {t("form.chairAssignmentType")}
+          {t("form.chairSetupTitle")}
         </Text>
 
-        <View style={{ flexDirection: "row", gap: 10, marginBottom: 8 }}>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityState={{ selected: mode === "named" }}
-            onPress={() => onModeChange("named")}
-            style={({ pressed }) => ({
-              ...pillBase(mode === "named"),
-              opacity: pressed ? 0.88 : 1,
-            })}
-          >
-            <Text
-              style={{
-                textAlign: "center",
-                fontFamily: "CenturyGothic",
-                fontSize: 13,
-                color: colors.sectionHeaderText,
-              }}
-            >
-              {t("form.namedChair")}
-            </Text>
-          </Pressable>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityState={{ selected: mode === "barber" }}
-            onPress={() => onModeChange("barber")}
-            style={({ pressed }) => ({
-              ...pillBase(mode === "barber"),
-              opacity: pressed ? 0.88 : 1,
-            })}
-          >
-            <Text
-              style={{
-                textAlign: "center",
-                fontFamily: "CenturyGothic",
-                fontSize: 13,
-                color: colors.sectionHeaderText,
-              }}
-            >
-              {t("form.barberChair")}
-            </Text>
-          </Pressable>
-        </View>
+        <ChairModeSegmentedControl mode={mode} onModeChange={onModeChange} />
 
         <Text
           style={{
@@ -170,25 +114,13 @@ export const ChairItem = React.memo<ChairItemProps>(
             control={control}
             name={`chairs.${index}.name`}
             render={({ field: { value, onChange, onBlur } }) => (
-              <TextInput
-                label={t("form.chairNameFieldLabel")}
-                mode="outlined"
-                dense
+              <ChairNamePlateField
                 value={value ?? ""}
-                onChangeText={onChange}
+                onChange={onChange}
                 onBlur={onBlur}
                 error={!!nameError}
-                textColor={colors.sectionHeaderText}
-                outlineColor={nameError ? "#b00020" : colors.borderColor}
-                theme={{
-                  roundness: 10,
-                  colors: { onSurfaceVariant: colors.textSecondary, primary: colors.sectionHeaderText },
-                }}
-                style={{
-                  backgroundColor: colors.cardBg,
-                  borderWidth: 0,
-                  fontFamily: "CenturyGothic",
-                }}
+                caption={t("form.chairNameFieldLabel")}
+                placeholder={t("form.chairNamePlaceholder")}
               />
             )}
           />
@@ -197,47 +129,16 @@ export const ChairItem = React.memo<ChairItemProps>(
             control={control}
             name={`chairs.${index}.barberId`}
             render={({ field: { value, onChange } }) => (
-              <Dropdown
-                data={barberOptions}
-                labelField="label"
-                valueField="value"
-                value={value ?? null}
-                onChange={(item: any) => onChange(item.value)}
-                placeholder={
-                  disabled ? t("form.maxBarbers") : t("form.selectBarber")
+              <PersonnelSelectList
+                options={barberOptions}
+                value={value ?? undefined}
+                onChange={onChange}
+                disabled={disabled}
+                emptyHint={
+                  disabled ? t("form.addPersonnelForChairHint") : t("form.selectPersonnel")
                 }
-                disable={disabled}
-                style={{
-                  minHeight: 50,
-                  borderRadius: 10,
-                  paddingHorizontal: 12,
-                  backgroundColor: colors.cardBg,
-                  borderWidth: 1,
-                  borderColor: barberIdError ? "#b00020" : colors.borderColor2,
-                  justifyContent: "center",
-                }}
-                containerStyle={{
-                  backgroundColor: colors.cardBg,
-                  borderWidth: 0,
-                  borderRadius: 10,
-                  overflow: "hidden",
-                }}
-                placeholderStyle={{
-                  color: colors.textSecondary,
-                  fontFamily: "CenturyGothic",
-                }}
-                selectedTextStyle={{
-                  color: colors.sectionHeaderText,
-                  fontFamily: "CenturyGothic",
-                  fontSize: 14,
-                  flexShrink: 1,
-                }}
-                itemTextStyle={{
-                  color: colors.sectionHeaderText,
-                  fontFamily: "CenturyGothic",
-                  fontSize: 14,
-                }}
-                activeColor={dropdownItemActiveBg}
+                hasError={!!barberIdError}
+                hint={t("form.selectPersonnelListHint")}
               />
             )}
           />

@@ -1,6 +1,6 @@
 import React from 'react';
 import { View } from 'react-native';
-import { IconButton } from 'react-native-paper';
+import { Icon } from 'react-native-paper';
 import { Text } from './Text';
 import { BarberType } from '../../types';
 import { useTheme } from '../../hook/useTheme';
@@ -29,6 +29,7 @@ export const CardHeader: React.FC<CardHeaderProps> = ({
   const { colors } = useTheme();
   const titleSize = compact ? 19 : 23;
   const iconSize = compact ? 18 : 22;
+  const titleLineHeight = compact ? 24 : 28;
   const getIcon = () => {
     if (icon) return icon;
     if (barberType === BarberType.MaleHairdresser) return 'face-man';
@@ -41,23 +42,14 @@ export const CardHeader: React.FC<CardHeaderProps> = ({
       <Text
         numberOfLines={1}
         ellipsizeMode="tail"
-        style={{ fontSize: titleSize, color: colors.sectionHeaderText }}
+        style={{ fontSize: titleSize, lineHeight: titleLineHeight, color: colors.sectionHeaderText }}
         className="font-century-gothic-sans-semibold flex-shrink"
       >
         {title}
       </Text>
-      <IconButton
-        iconColor={colors.textSecondary}
-        size={iconSize}
-        style={{
-          marginTop: 0,
-          paddingRight: 5,
-          paddingTop: isList ? 5 : 0,
-          paddingBottom: !isList ? 10 : 0,
-          flexShrink: 1,
-        }}
-        icon={getIcon()}
-      />
+      <View style={{ marginLeft: 4, paddingTop: compact ? 2 : 3 }}>
+        <Icon source={getIcon()} size={iconSize} color={colors.textSecondary} />
+      </View>
     </View>
   );
 };

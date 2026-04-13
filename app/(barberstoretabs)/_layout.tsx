@@ -57,6 +57,7 @@ const BarberStoreLayout = () => {
       handleIndicatorStyle={{ backgroundColor: colors.sheetHandle }}
       backgroundStyle={{ backgroundColor: colors.sheetBg }}
       onChange={addStoreSheet.handleChange}
+      onDismiss={addStoreSheet.handleDismiss}
       snapPoints={addStoreSheet.snapPoints}
       enableOverDrag={addStoreSheet.enableOverDrag}
       enablePanDownToClose={addStoreSheet.enablePanDownToClose}

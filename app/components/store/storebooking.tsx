@@ -25,6 +25,7 @@ import {
   useCreateFreeBarberAppointmentMutation,
   useCreateStoreAppointmentMutation,
   useAddStoreToAppointmentMutation,
+  useGetServicePackagesByOwnerQuery,
 } from "../../store/api";
 import { APPOINTMENT_CONSTANTS } from "../../constants/appointment";
 import {
@@ -47,6 +48,11 @@ import { getCurrentLocationSafe } from "../../utils/location/location-helper";
 import { useAppointmentBooking } from "../../hook/useAppointmentBooking";
 import { useAppointmentPricing } from "../../hook/useAppointmentPricing";
 import { getErrorMessage } from "../../utils/errorHandler";
+import {
+  wouldServicePackagesOverlap,
+  packageOverlapsAnySelectedService,
+  serviceIsInsideSelectedPackages,
+} from "../../utils/service-package-overlap";
 import { ImageCarousel } from "../common/imagecarousel";
 import { useCanPerformAction } from "../../hook/useCanPerformAction";
 import { useAlert } from "../../hook/useAlert";
@@ -95,6 +101,7 @@ const StoreBookingContent = ({
   const router = useSafeNavigation();
   const guard = useActionGuard();
   const { t } = useLanguage();
+  const { alert, alertSuccess, alertError } = useAlert();
   const isAddStoreMode = mode === "add-store";
   const [createCustomerAppointment, { isLoading: isCreatingCustomer }] =
     useCreateCustomerAppointmentMutation();
@@ -180,6 +187,60 @@ const StoreBookingContent = ({
     endHHmm,
   } = useAppointmentBooking({ chairs, preselectedServices });
 
+  // Paket seçimi state'i
+  const [selectedPackages, setSelectedPackages] = useState<string[]>([]);
+  const { data: packagesData } = useGetServicePackagesByOwnerQuery(storeId, {
+    skip: !storeId,
+  });
+  const packages = packagesData ?? [];
+  const packageSelected = selectedPackages.length > 0;
+  const serviceSelected = selectedServices.length > 0;
+
+  const togglePackage = useCallback(
+    (id: string) => {
+      const pkg = (packages as any[]).find((p: any) => p.id === id);
+      if (
+        pkg &&
+        selectedServices.length > 0 &&
+        packageOverlapsAnySelectedService(pkg, selectedServices)
+      ) {
+        alertError(t("common.error"), t("servicePackage.overlapsSingleService"));
+        return;
+      }
+      if (wouldServicePackagesOverlap(packages as any, selectedPackages, id)) {
+        alertError(t("common.error"), t("servicePackage.overlapError"));
+        return;
+      }
+      setSelectedPackages((prev) =>
+        prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+      );
+    },
+    [packages, selectedPackages, selectedServices, alertError, t],
+  );
+
+  const toggleServiceWithDisjoint = useCallback(
+    (id: string) => {
+      if (
+        serviceIsInsideSelectedPackages(
+          id,
+          packages as any,
+          selectedPackages,
+        )
+      ) {
+        alertError(t("common.error"), t("servicePackage.serviceInsidePackage"));
+        return;
+      }
+      toggleService(id);
+    },
+    [packages, selectedPackages, toggleService, alertError, t],
+  );
+
+  const packagePriceTotal = useMemo(() => {
+    return packages
+      .filter((p: any) => selectedPackages.includes(p.id))
+      .reduce((sum: number, p: any) => sum + Number(p.totalPrice ?? 0), 0);
+  }, [packages, selectedPackages]);
+
   // Update selectedChairId when date changes
   useEffect(() => {
     if (chairs.length > 0) {
@@ -219,8 +280,6 @@ const StoreBookingContent = ({
     isFreeBarber: isFreeBarber || isAddStoreMode,
   });
 
-  const { alert, alertSuccess, alertError } = useAlert();
-
   // Servis seçimi zorunlu olduğu durumlar:
   // 1. isAddStoreMode=true (FreeBarber dükkan ekliyor)
   // 2. isFreeBarber=true VE pricingType=percent (yüzdelik sistem, servis fiyatına göre hesaplanır)
@@ -235,11 +294,12 @@ const StoreBookingContent = ({
 
   const canSubmit = useMemo(() => {
     const baseReady = !!selectedChairId && selectedSlotKeys.length > 0;
-    return baseReady && (requireServices ? selectedServices.length > 0 : true);
+    return baseReady && (requireServices ? (selectedServices.length > 0 || selectedPackages.length > 0) : true);
   }, [
     selectedChairId,
     selectedSlotKeys.length,
     selectedServices.length,
+    selectedPackages.length,
     requireServices,
   ]);
 
@@ -722,15 +782,106 @@ const StoreBookingContent = ({
             )}
             {(isAddStoreMode || isFreeBarber || isCustomer) && (
               <View>
+                {/* Paket Seçimi */}
+                {packages.length > 0 && (
+                  <View style={{ marginBottom: 16 }}>
+                    <View className="flex-row items-center justify-between mb-3 px-1">
+                      <View className="flex-row items-center gap-2">
+                        <Icon source="tag-multiple-outline" size={20} color="#a78bfa" />
+                        <Text className="font-century-gothic-bold text-lg" style={{ color: colors.sectionHeaderText }}>
+                          {t("servicePackage.bookingSectionTitle")}
+                        </Text>
+                      </View>
+                      {packageSelected && (
+                        <View className="px-3 py-1.5 rounded-lg" style={{ backgroundColor: isDark ? 'rgba(167,139,250,0.2)' : 'rgba(167,139,250,0.1)' }}>
+                          <Text className="font-century-gothic-bold text-base" style={{ color: '#a78bfa' }}>
+                            {packagePriceTotal} {t("card.currencySymbol")}
+                          </Text>
+                        </View>
+                      )}
+                    </View>
+                    <FlatList
+                      data={packages}
+                      keyExtractor={(item: any) => item.id}
+                      scrollEnabled={false}
+                      nestedScrollEnabled
+                      contentContainerStyle={{ gap: 8 }}
+                      renderItem={({ item }: { item: any }) => {
+                        const isSelected = selectedPackages.includes(item.id);
+                        const isDisabled =
+                          !isSelected &&
+                          packageOverlapsAnySelectedService(item, selectedServices);
+                        return (
+                          <TouchableOpacity
+                            onPress={() => togglePackage(item.id)}
+                            activeOpacity={isDisabled ? 1 : 0.7}
+                            style={[
+                              { borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12 },
+                              isSelected
+                                ? { backgroundColor: isDark ? 'rgba(167,139,250,0.18)' : 'rgba(167,139,250,0.1)', borderColor: '#a78bfa', borderWidth: 1.5 }
+                                : { backgroundColor: colors.cardBg2, borderColor: colors.borderColor, borderWidth: 1 },
+                              isDisabled && { opacity: 0.45 },
+                            ]}
+                          >
+                            <View className="flex-row items-center justify-between">
+                              <View className="flex-row items-center flex-1 mr-2 gap-2">
+                                <Icon
+                                  source={isSelected ? "check-circle" : "tag-multiple-outline"}
+                                  size={20}
+                                  color={isSelected ? "#a78bfa" : (isDark ? "#6b7280" : "#9ca3af")}
+                                />
+                                <Text
+                                  className="font-century-gothic-bold text-sm flex-1"
+                                  style={{ color: isSelected ? '#a78bfa' : colors.sectionHeaderText }}
+                                  numberOfLines={1}
+                                >
+                                  {item.packageName}
+                                </Text>
+                              </View>
+                              <Text
+                                className="font-century-gothic-bold text-sm"
+                                style={{ color: isSelected ? '#a78bfa' : colors.textSecondary }}
+                              >
+                                {item.totalPrice} {t("card.currencySymbol")}
+                              </Text>
+                            </View>
+                            {(item.items ?? []).length > 0 && (
+                              <View className="flex-row flex-wrap gap-1 mt-2 ml-7">
+                                {(item.items as any[]).slice(0, 4).map((si: any) => (
+                                  <View key={si.serviceOfferingId} className="px-2 py-0.5 rounded-full" style={{ backgroundColor: isSelected ? (isDark ? 'rgba(167,139,250,0.2)' : 'rgba(167,139,250,0.12)') : (isDark ? '#1e293b' : '#f1f5f9') }}>
+                                    <Text className="text-xs" style={{ color: isSelected ? '#c4b5fd' : colors.textSecondary }}>
+                                      {si.serviceName}
+                                    </Text>
+                                  </View>
+                                ))}
+                                {(item.items ?? []).length > 4 && (
+                                  <View className="px-2 py-0.5 rounded-full" style={{ backgroundColor: isDark ? '#1e293b' : '#f1f5f9' }}>
+                                    <Text className="text-xs" style={{ color: colors.textSecondary }}>
+                                      +{(item.items ?? []).length - 4}
+                                    </Text>
+                                  </View>
+                                )}
+                              </View>
+                            )}
+                          </TouchableOpacity>
+                        );
+                      }}
+                    />
+                  </View>
+                )}
+
+                {/* Hizmet Seçimi */}
                 <View className="flex-row items-center justify-between mb-3 mt-2 px-1">
                   <Text className="font-century-gothic-bold text-lg" style={{ color: colors.sectionHeaderText }}>
                     {t("common.services")}
                   </Text>
-                  <View className="px-3 py-1.5 rounded-lg" style={{ backgroundColor: colors.cardBg2 }}>
-                    <Text className="font-century-gothic-bold text-lg" style={{ color: '#fea60e' }}>
-                      {servicePriceTotal} {t("card.currencySymbol")}
-                    </Text>
-                  </View>
+                  {serviceSelected && (
+                    <View className="px-3 py-1.5 rounded-lg" style={{ backgroundColor: colors.cardBg2 }}>
+                      <Text className="font-century-gothic-bold text-lg" style={{ color: '#fea60e' }}>
+                        {servicePriceTotal} {t("card.currencySymbol")}
+                      </Text>
+                    </View>
+                  )}
                 </View>
                 <FlatList
                   data={storeData?.serviceOfferings ?? []}
@@ -740,12 +891,24 @@ const StoreBookingContent = ({
                   contentContainerStyle={{ gap: 8 }}
                   renderItem={({ item }) => {
                     const isSelected = selectedServices.includes(item.id);
+                    const isDisabled =
+                      !isSelected &&
+                      serviceIsInsideSelectedPackages(
+                        item.id,
+                        packages as any,
+                        selectedPackages,
+                      );
                     return (
                       <TouchableOpacity
-                        onPress={() => toggleService(item.id)}
-                        activeOpacity={0.7}
+                        onPress={() =>
+                          isDisabled ? undefined : toggleServiceWithDisjoint(item.id)
+                        }
+                        activeOpacity={isDisabled ? 1 : 0.7}
                         className="flex-row items-center justify-between px-4 py-3 rounded-xl"
-                        style={isSelected ? { backgroundColor: isDark ? 'rgba(254,166,14,0.2)' : 'rgba(254,166,14,0.1)', borderColor: '#fea60e', borderWidth: 1.5 } : { backgroundColor: colors.cardBg2, borderColor: colors.borderColor, borderWidth: 1 }}
+                        style={[
+                          isSelected ? { backgroundColor: isDark ? 'rgba(254,166,14,0.2)' : 'rgba(254,166,14,0.1)', borderColor: '#fea60e', borderWidth: 1.5 } : { backgroundColor: colors.cardBg2, borderColor: colors.borderColor, borderWidth: 1 },
+                          isDisabled && { opacity: 0.45 },
+                        ]}
                       >
                         <View className="flex-row items-center flex-1 mr-2">
                           <Icon
@@ -755,7 +918,7 @@ const StoreBookingContent = ({
                           />
                           <Text
                             className="ml-3 text-sm flex-1"
-                            style={{ color: isSelected ? colors.sectionHeaderText : colors.sectionHeaderText }}
+                            style={{ color: colors.sectionHeaderText }}
                             numberOfLines={1}
                           >
                             {item.serviceName}
@@ -771,7 +934,7 @@ const StoreBookingContent = ({
                     );
                   }}
                 />
-                {requireServices && selectedServices.length === 0 && (storeData?.serviceOfferings?.length ?? 0) > 0 && (
+                {requireServices && selectedServices.length === 0 && selectedPackages.length === 0 && (storeData?.serviceOfferings?.length ?? 0) > 0 && (
                   <View className="flex-row items-center gap-2 mt-2 px-1">
                     <Icon source="alert-circle-outline" size={16} color="#f87171" />
                     <Text className="text-sm" style={{ color: '#f87171' }}>
@@ -869,7 +1032,8 @@ const StoreBookingContent = ({
                     appointmentDate: selectedDateOnly,
                     startTime: startTime,
                     endTime: endTime,
-                    serviceOfferingIds: selectedServices, // ✅ Sadece ID'leri gönder
+                    serviceOfferingIds: selectedServices,
+                    packageIds: selectedPackages,
                   };
 
                   const addStoreResult = await addStoreToAppointment({
@@ -923,7 +1087,8 @@ const StoreBookingContent = ({
                   appointmentDate: selectedDateOnly,
                   startTime: startTime,
                   endTime: endTime,
-                  serviceOfferingIds: selectedServices, // ✅ Sadece ID'leri gönder
+                  serviceOfferingIds: selectedServices,
+                  packageIds: selectedPackages,
                   freeBarberUserId: isCustomerFlow
                     ? null
                     : freeBarberUserId || null,

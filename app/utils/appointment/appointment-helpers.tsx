@@ -50,18 +50,3 @@ export const getAppointmentStatusText = (status: AppointmentStatus): string => {
             return '';
     }
 };
-
-/**
- * Check if appointment can be cancelled
- */
-export const canCancelAppointment = (status: AppointmentStatus): boolean => {
-    return status === AppointmentStatus.Pending || status === AppointmentStatus.Approved;
-};
-
-/**
- * Check if appointment can be completed (only for approved appointments)
- */
-export const canCompleteAppointment = (status: AppointmentStatus): boolean => {
-    return status === AppointmentStatus.Approved;
-};
-

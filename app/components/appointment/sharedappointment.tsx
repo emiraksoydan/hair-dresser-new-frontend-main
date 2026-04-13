@@ -1,5 +1,5 @@
 import { Icon } from "react-native-paper";
-import React, { useState, useCallback, useMemo, useEffect, useContext, useRef } from "react";
+import React, { useState, useCallback, useMemo, useEffect, useRef, useContext } from "react";
 import {
   View,
   TouchableOpacity,
@@ -45,6 +45,8 @@ import { useLanguage } from "../../hook/useLanguage";
 import { useAlert } from "../../hook/useAlert";
 import { useTheme } from "../../hook/useTheme";
 import { useActionGuard } from "../../hook/useActionGuard";
+import { useFabOverlayWhenSheetOpen } from "../../hook/usePanelMoreFab";
+import { useDeferredSheetPresent } from "../../hook/useDeferredSheetPresent";
 import { MoreFabPanelContext } from "../layout/MoreFabContext";
 
 export default function SharedAppointmentScreen() {
@@ -105,12 +107,25 @@ export default function SharedAppointmentScreen() {
   const cardMenuDotRefs = useRef<Record<string, View | null>>({});
   const cardMenuRootRef = useRef<View | null>(null);
 
-  // FAB'ı sheet açıkken gizle
-  const fabCtx = useContext(MoreFabPanelContext);
   const anySheetOpen = ratingSheet.isOpen || complaintSheet.isOpen || userSelectionSheet.isOpen;
-  useEffect(() => {
-    fabCtx?.reportOverlayOpen(anySheetOpen);
-  }, [anySheetOpen, fabCtx]);
+  useFabOverlayWhenSheetOpen(anySheetOpen);
+  const fabCtx = useContext(MoreFabPanelContext);
+
+  const { schedulePresent: scheduleRatingPresent, cancelScheduledPresent: cancelRatingPresent } =
+    useDeferredSheetPresent(ratingSheet.present);
+  const { schedulePresent: scheduleComplaintPresent, cancelScheduledPresent: cancelComplaintPresent } =
+    useDeferredSheetPresent(complaintSheet.present);
+  const { schedulePresent: scheduleUserSelectionPresent, cancelScheduledPresent: cancelUserSelectionPresent } =
+    useDeferredSheetPresent(userSelectionSheet.present);
+
+  const afterUserSelectionChainRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const clearAfterUserSelectionChain = useCallback(() => {
+    if (afterUserSelectionChainRef.current != null) {
+      clearTimeout(afterUserSelectionChainRef.current);
+      afterUserSelectionChainRef.current = null;
+    }
+  }, []);
+  useEffect(() => () => clearAfterUserSelectionChain(), [clearAfterUserSelectionChain]);
 
   // --- API ---
   const {
@@ -288,12 +303,9 @@ export default function SharedAppointmentScreen() {
         targetType,
         targetImage,
       });
-      // Sheet'i açmak için küçük bir gecikme ekle
-      setTimeout(() => {
-        ratingSheet.present();
-      }, 100);
+      scheduleRatingPresent(100);
     },
-    [ratingSheet],
+    [scheduleRatingPresent],
   );
 
   // Complaint bottom sheet aç
@@ -310,11 +322,9 @@ export default function SharedAppointmentScreen() {
         targetName,
         targetImage,
       });
-      setTimeout(() => {
-        complaintSheet.present();
-      }, 100);
+      scheduleComplaintPresent(100);
     },
-    [complaintSheet],
+    [scheduleComplaintPresent],
   );
 
   // Şikayet/engelleme yapılabilecek TÜM hedef kullanıcıları bul
@@ -430,12 +440,10 @@ export default function SharedAppointmentScreen() {
           targets,
           actionType,
         });
-        setTimeout(() => {
-          userSelectionSheet.present();
-        }, 100);
+        scheduleUserSelectionPresent(100);
       }
     },
-    [getAllComplaintTargets, openComplaintSheet, handleBlockUser, userSelectionSheet],
+    [getAllComplaintTargets, openComplaintSheet, handleBlockUser, scheduleUserSelectionPresent],
   );
 
   // Kullanıcı seçimi yapıldığında
@@ -443,18 +451,22 @@ export default function SharedAppointmentScreen() {
     (target: { userId: string; name: string; image?: string }) => {
       if (!userSelectionData) return;
 
+      const snapshot = userSelectionData;
+      clearAfterUserSelectionChain();
+      cancelComplaintPresent();
       userSelectionSheet.dismiss();
 
-      setTimeout(() => {
-        if (userSelectionData.actionType === "complaint") {
-          openComplaintSheet(userSelectionData.appointmentId, target.userId, target.name, target.image);
+      afterUserSelectionChainRef.current = setTimeout(() => {
+        afterUserSelectionChainRef.current = null;
+        if (snapshot.actionType === "complaint") {
+          openComplaintSheet(snapshot.appointmentId, target.userId, target.name, target.image);
         } else {
           handleBlockUser(target.userId, target.name);
         }
         setUserSelectionData(null);
       }, 300);
     },
-    [userSelectionData, userSelectionSheet, openComplaintSheet, handleBlockUser],
+    [userSelectionData, userSelectionSheet, openComplaintSheet, handleBlockUser, clearAfterUserSelectionChain, cancelComplaintPresent],
   );
 
   // Favori toggle
@@ -1907,6 +1919,77 @@ export default function SharedAppointmentScreen() {
                   </ScrollView>
                 </View>
               )}
+
+              {/* Paketler */}
+              {item.packages && item.packages.length > 0 && (
+                <View className="mt-2 mb-1.5">
+                  <View className="flex-row items-center mb-2">
+                    <Icon source="tag-multiple-outline" size={14} color="#a78bfa" />
+                    <Text
+                      style={{
+                        color: isDark ? "#c4b5fd" : "#7c3aed",
+                        fontFamily: "CenturyGothic-Bold",
+                        fontSize: 11,
+                        marginLeft: 6,
+                        letterSpacing: 0.15,
+                      }}
+                    >
+                      Paketler
+                    </Text>
+                  </View>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                    <View className="flex-row gap-2">
+                      {item.packages.map((pkg) => (
+                        <View
+                          key={pkg.packageId}
+                          className="rounded-lg px-3 py-2 gap-0.5"
+                          style={{
+                            backgroundColor: isDark ? 'rgba(167,139,250,0.1)' : 'rgba(167,139,250,0.08)',
+                            borderWidth: 1,
+                            borderColor: isDark ? 'rgba(167,139,250,0.3)' : 'rgba(167,139,250,0.25)',
+                            maxWidth: 200,
+                          }}
+                        >
+                          <View className="flex-row items-center gap-1.5">
+                            <Text
+                              style={{
+                                color: '#a78bfa',
+                                fontFamily: "CenturyGothic-Bold",
+                                fontSize: 12,
+                                maxWidth: 120,
+                              }}
+                              numberOfLines={1}
+                            >
+                              {pkg.packageName}
+                            </Text>
+                            <Text
+                              style={{
+                                color: isDark ? '#c4b5fd' : '#7c3aed',
+                                fontFamily: "CenturyGothic-Bold",
+                                fontSize: 12,
+                              }}
+                            >
+                              {Number(pkg.totalPrice).toFixed(0)} {t("card.currencySymbol")}
+                            </Text>
+                          </View>
+                          {pkg.serviceNamesSnapshot && (
+                            <Text
+                              style={{
+                                color: colors.textSecondary,
+                                fontFamily: "CenturyGothic",
+                                fontSize: 10,
+                              }}
+                              numberOfLines={1}
+                            >
+                              {pkg.serviceNamesSnapshot}
+                            </Text>
+                          )}
+                        </View>
+                      ))}
+                    </View>
+                  </ScrollView>
+                </View>
+              )}
             </View>
           </View>
     );
@@ -2157,6 +2240,10 @@ export default function SharedAppointmentScreen() {
             setSelectedRatingTarget(null);
           }
         }}
+        onDismiss={() => {
+          cancelRatingPresent();
+          ratingSheet.handleDismiss();
+        }}
       >
         {selectedRatingTarget ? (
           <RatingBottomSheet
@@ -2166,6 +2253,7 @@ export default function SharedAppointmentScreen() {
             targetType={selectedRatingTarget.targetType}
             targetImage={selectedRatingTarget.targetImage}
             onClose={() => {
+              cancelRatingPresent();
               setSelectedRatingTarget(null);
               ratingSheet.dismiss();
             }}
@@ -2187,6 +2275,10 @@ export default function SharedAppointmentScreen() {
             setSelectedComplaintTarget(null);
           }
         }}
+        onDismiss={() => {
+          cancelComplaintPresent();
+          complaintSheet.handleDismiss();
+        }}
       >
         <BottomSheetView className="h-full pt-2">
           {selectedComplaintTarget && (
@@ -2196,6 +2288,7 @@ export default function SharedAppointmentScreen() {
               targetName={selectedComplaintTarget.targetName}
               targetImage={selectedComplaintTarget.targetImage}
               onClose={() => {
+                cancelComplaintPresent();
                 setSelectedComplaintTarget(null);
                 complaintSheet.dismiss();
               }}
@@ -2217,6 +2310,11 @@ export default function SharedAppointmentScreen() {
           if (index < 0) {
             setUserSelectionData(null);
           }
+        }}
+        onDismiss={() => {
+          cancelUserSelectionPresent();
+          clearAfterUserSelectionChain();
+          userSelectionSheet.handleDismiss();
         }}
       >
         <BottomSheetView className="h-full pt-2 px-4">

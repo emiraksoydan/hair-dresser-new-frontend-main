@@ -9,7 +9,9 @@ import {
   Platform,
   Dimensions,
 } from "react-native";
+import { BottomSheetScrollView } from "@gorhom/bottom-sheet";
 import { Text } from "../common/Text";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import React, { useEffect, useMemo, useState, useRef } from "react";
 import { z } from "zod";
 import {
@@ -28,7 +30,7 @@ import {
 } from "../../utils/time/time-helper";
 import { Controller, useFieldArray, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Avatar, Divider, HelperText, Icon, IconButton, TextInput } from "react-native-paper";
+import { Avatar, Divider, HelperText, Icon, TextInput } from "react-native-paper";
 import { Button } from "../common/Button";
 import { Dropdown } from "react-native-element-dropdown";
 import { CategoryListSelect } from "../common/CategoryListSelect";
@@ -42,6 +44,10 @@ import {
   useUploadMultipleImagesMutation,
   useUploadImageMutation,
   useUpdateImageBlobMutation,
+  useAddServicePackageMutation,
+  useUpdateServicePackageMutation,
+  useDeleteServicePackageMutation,
+  useLazyGetServicePackagesByOwnerQuery,
 } from "../../store/api";
 import { useCategoryHierarchy } from "../../hook/useCategoryHierarchy";
 import { CrudSkeletonComponent } from "../common/crudskeleton";
@@ -72,6 +78,10 @@ import { useAppDispatch } from "../../store/hook";
 import { showSnack } from "../../store/snackbarSlice";
 import { WorkingHoursAccordion } from "./WorkingHoursAccordion";
 import { ManuelBarberItem } from "./ManuelBarberItem";
+import {
+  ServicePackageStep,
+  type PackageFormItem,
+} from "./ServicePackageStep";
 import { useOptimizedChairOptions } from "../../hooks/useOptimizedFieldArray";
 import {
   mapBarberType,
@@ -84,6 +94,7 @@ import { useAlert } from "../../hook/useAlert";
 import { StepFormIndicator } from "../common/StepFormIndicator";
 import { useTheme } from "../../hook/useTheme";
 import { useActionGuard } from "../../hook/useActionGuard";
+import { SheetCloseButton } from "../common/SheetCloseButton";
 
 const createChairPricingSchema = (t: (key: string) => string) =>
   z
@@ -164,7 +175,7 @@ const createChairPricingSchema = (t: (key: string) => string) =>
 const createBarberSchema = (t: (key: string) => string) =>
   z.object({
     id: z.string().uuid(),
-    name: z.string().trim().min(1, t("form.barberNameRequired")),
+    name: z.string().trim().min(1, t("form.personnelNameRequired")),
     avatar: z
       .object({
         uri: z.string(),
@@ -446,6 +457,7 @@ const FormStoreUpdate = React.memo(({
   error?: any; // API error durumu
   locationStatus?: "unknown" | "granted" | "denied"; // Location status
 }) => {
+  const insets = useSafeAreaInsets();
   const { userId } = useAuth();
   const { t, currentLanguage } = useLanguage();
   const { confirm } = useAlert();
@@ -509,6 +521,10 @@ const FormStoreUpdate = React.memo(({
     useLazyGetStoreByIdQuery();
   const [updateStore, { isLoading: updateLoading, isSuccess }] =
     useUpdateBarberStoreMutation();
+  const [addServicePackage] = useAddServicePackageMutation();
+  const [updateServicePackage] = useUpdateServicePackageMutation();
+  const [deleteServicePackageMutation] = useDeleteServicePackageMutation();
+  const [triggerGetPackagesByOwner] = useLazyGetServicePackagesByOwnerQuery();
   const [uploadMultipleImages] = useUploadMultipleImagesMutation();
   const [uploadImage] = useUploadImageMutation();
   const [deleteImage] = useDeleteImageMutation();
@@ -522,10 +538,12 @@ const FormStoreUpdate = React.memo(({
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const [currentStep, setCurrentStep] = React.useState(0);
   const [completedSteps, setCompletedSteps] = React.useState<Set<number>>(new Set());
+  const [formPackages, setFormPackages] = React.useState<PackageFormItem[]>([]);
   const stepSlideAnim = React.useRef(new Animated.Value(0)).current;
   const prevStepRef = React.useRef(0);
   /** Her `data` ile reset sonrası hiyerarşi effect'inin tekrar çalışması için (aksi halde ref true kalıp başlıklar boş kalıyordu). */
   const initialDataLoadedRef = React.useRef(false);
+  const hasAutoPickedLocationRef = React.useRef(false);
 
   const stepLabels = React.useMemo(() => [
     t("form.stepStoreInfo"),
@@ -533,7 +551,9 @@ const FormStoreUpdate = React.memo(({
     t("form.stepSubHeadings"),
     t("form.stepStoreServices"),
     t("form.stepStorePrices"),
-    t("form.stepStoreStaff"),
+    "Hizmet Paketleri",
+    t("form.stepStorePersonnel"),
+    t("form.stepStoreChairs"),
     t("form.stepStorePricing"),
     t("form.stepStoreHours"),
     t("form.stepStoreAddress"),
@@ -552,11 +572,13 @@ const FormStoreUpdate = React.memo(({
     2: ["selectedSubHeadings"],
     3: ["selectedCategories"],
     4: ["prices"],
-    5: ["barbers", "chairs"],
-    6: ["pricingType"],
-    7: ["workingHours", "holidayDays"],
-    8: ["location"],
-    9: [],
+    5: [], // Hizmet Paketleri — isteğe bağlı
+    6: ["barbers"],
+    7: ["chairs"],
+    8: ["pricingType"],
+    9: ["workingHours", "holidayDays"],
+    10: ["location"],
+    11: [],
   }), []);
 
   const {
@@ -624,6 +646,20 @@ const FormStoreUpdate = React.memo(({
   useEffect(() => {
     if (enabled && storeId) {
       triggerGetStore(storeId);
+      // Mevcut paketleri yükle
+      triggerGetPackagesByOwner(storeId).then((res) => {
+        if (res.data) {
+          setFormPackages(
+            res.data.map((p) => ({
+              localId: p.id,
+              id: p.id,
+              packageName: p.packageName,
+              totalPrice: p.totalPrice.toString().replace(".", ","),
+              serviceOfferingIds: p.items.map((i) => i.serviceOfferingId),
+            })),
+          );
+        }
+      });
     }
     // enabled false olduğunda veya storeId değiştiğinde data'yı temizle
     if (!enabled) {
@@ -631,6 +667,7 @@ const FormStoreUpdate = React.memo(({
       reset();
       setCurrentStep(0);
       setCompletedSteps(new Set());
+      setFormPackages([]);
     }
   }, [enabled, storeId, triggerGetStore, reset]);
 
@@ -666,7 +703,7 @@ const FormStoreUpdate = React.memo(({
   const [barberModalVisible, setBarberModalVisible] = useState(false);
   const [chairModalVisible, setChairModalVisible] = useState(false);
 
-  const [barberModalTitle, setBarberModalTitle] = useState(t("form.addBarber"));
+  const [barberModalTitle, setBarberModalTitle] = useState(t("form.addPersonnel"));
   const [chairModalTitle, setChairModalTitle] = useState(t("form.addChair"));
 
   const [barberInitialValues, setBarberInitialValues] = useState<
@@ -865,20 +902,22 @@ const FormStoreUpdate = React.memo(({
     const msgs: string[] = [];
     barbers.forEach((_, idx) => {
       const m = errors.barbers?.[idx]?.name?.message as string | undefined;
-      if (m) msgs.push(`• ${idx + 1}. berber: ${m}`);
+      if (m) msgs.push(`• ${t("form.personnelNumberLabel", { n: idx + 1 })}: ${m}`);
     });
     return msgs.join("\n");
-  }, [errors.barbers, barbers]);
+  }, [errors.barbers, barbers, t]);
   const chairsErrorText = React.useMemo(() => {
     if (!errors.chairs) return "";
     const msgs: string[] = [];
     chairs.forEach((_, idx) => {
       const m1 = errors.chairs?.[idx]?.name?.message as string | undefined;
       const m2 = errors.chairs?.[idx]?.barberId?.message as string | undefined;
-      if (m1 || m2) msgs.push(`• ${idx + 1}. koltuk: ${m1 ?? m2}`);
+      if (m1 || m2) {
+        msgs.push(`• ${t("form.chairNumberLabel", { n: idx + 1 })}: ${m1 ?? m2}`);
+      }
     });
     return msgs.join("\n");
-  }, [errors.chairs, chairs]);
+  }, [errors.chairs, chairs, t]);
 
   const {
     fields: chairFields,
@@ -1062,7 +1101,7 @@ const FormStoreUpdate = React.memo(({
   const openEditBarberModal = (index: number) => {
     const current = barbers[index];
     if (!current) return;
-    setBarberModalTitle(t("form.updateBarber"));
+    setBarberModalTitle(t("form.updatePersonnel"));
     setBarberInitialValues({
       name: current.name,
       profileImage: current.avatar
@@ -1103,7 +1142,7 @@ const FormStoreUpdate = React.memo(({
   };
 
   const openCreateBarberModal = () => {
-    setBarberModalTitle(t("form.addBarber"));
+    setBarberModalTitle(t("form.addPersonnel"));
     setBarberInitialValues({ name: "", profileImage: undefined, id: "" });
     setBarberModalVisible(true);
   };
@@ -1190,6 +1229,19 @@ const FormStoreUpdate = React.memo(({
       t("appointment.alerts.cancel"),
     );
   };
+
+  // Harita adımına girildiğinde otomatik konum al — sadece konum henüz set edilmemişse
+  useEffect(() => {
+    if (currentStep === 10 && !hasAutoPickedLocationRef.current) {
+      const lat = location?.latitude;
+      const lon = location?.longitude;
+      const locationNotSet = !lat || !lon || (lat === 0 && lon === 0);
+      if (locationNotSet) {
+        hasAutoPickedLocationRef.current = true;
+        pickMyCurrentLocation().catch(() => {});
+      }
+    }
+  }, [currentStep]);
 
   // Type değişince alt seviyeleri reset et
   const prevTypeRef = React.useRef<string | undefined>(undefined);
@@ -1581,6 +1633,47 @@ const FormStoreUpdate = React.memo(({
       );
     }
 
+    // Hizmet paketlerini senkronize et (ekleme / güncelleme / silme)
+    try {
+      const existingPackagesRes = await triggerGetPackagesByOwner(storeId);
+      const existingPackages = existingPackagesRes.data ?? [];
+      const existingIds = new Set(existingPackages.map((p) => p.id));
+      const formIds = new Set(formPackages.filter((p) => p.id).map((p) => p.id!));
+
+      // Silinen paketler
+      for (const existing of existingPackages) {
+        if (!formIds.has(existing.id)) {
+          await deleteServicePackageMutation(existing.id).catch(() => {});
+        }
+      }
+
+      for (const pkg of formPackages) {
+        const totalPriceNum = parseTR(pkg.totalPrice);
+        if (!totalPriceNum || totalPriceNum <= 0 || pkg.serviceOfferingIds.length === 0) continue;
+
+        if (pkg.id && existingIds.has(pkg.id)) {
+          // Güncelle
+          await updateServicePackage({
+            id: pkg.id,
+            ownerId: storeId,
+            packageName: pkg.packageName,
+            totalPrice: totalPriceNum,
+            serviceOfferingIds: pkg.serviceOfferingIds,
+          }).catch(() => {});
+        } else {
+          // Yeni ekle
+          await addServicePackage({
+            ownerId: storeId,
+            packageName: pkg.packageName,
+            totalPrice: totalPriceNum,
+            serviceOfferingIds: pkg.serviceOfferingIds,
+          }).catch(() => {});
+        }
+      }
+    } catch {
+      // Paket sync hatası güncellemeyi engellemez
+    }
+
     // Refresh store data to show updated images
     await triggerGetStore(storeId);
     onClose?.();
@@ -1590,19 +1683,19 @@ const FormStoreUpdate = React.memo(({
 
   return (
     <KeyboardAvoidingView
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
       style={{ flex: 1 }}
+      keyboardVerticalOffset={Platform.OS === "ios" ? 8 : 0}
     >
-      <View className="h-full" style={{ backgroundColor: colors.sheetBg }}>
-        <View className="flex-row justify-between items-center px-2">
+      <View style={{ flex: 1, backgroundColor: colors.sheetBg }}>
+        <View
+          className="flex-row justify-between items-center px-2"
+          style={{ zIndex: 2, elevation: 4 }}
+        >
           <Text className="flex-1 font-century-gothic text-2xl" style={{ color: colors.sectionHeaderText }}>
             {t("form.updateStore")}
           </Text>
-          <IconButton
-            onPress={() => onClose?.()}
-            icon="close"
-            iconColor={colors.sectionHeaderText}
-          />
+          <SheetCloseButton onPress={() => onClose?.()} color={colors.sectionHeaderText} />
         </View>
         <Divider style={{ height: 1, backgroundColor: colors.borderColor }} />
         {!enabled ? null : isLoading || !data ? (
@@ -1620,16 +1713,16 @@ const FormStoreUpdate = React.memo(({
               canNavigateFreely={true}
               completedSteps={completedSteps}
             />
-            <ScrollView
+            <BottomSheetScrollView
               key={currentStep}
               keyboardShouldPersistTaps="handled"
               nestedScrollEnabled
               showsVerticalScrollIndicator={false}
               alwaysBounceVertical={false}
-              contentContainerStyle={{ flexGrow: 1, paddingBottom: 50 }}
+              contentContainerStyle={{ flexGrow: 1, paddingBottom: 24 }}
               style={{ flex: 1 }}
             >
-              <Animated.View style={{ flex: 1, transform: [{ translateX: stepSlideAnim }] }}>
+              <Animated.View style={{ transform: [{ translateX: stepSlideAnim }] }}>
                 {currentStep === 0 && (
                   <>
                     <Text className="text-xl mt-4 px-2" style={{ color: colors.sectionHeaderText }}>
@@ -2129,34 +2222,115 @@ const FormStoreUpdate = React.memo(({
                     </View>
                   </>
                 )}
+                {/* Adım 5: Hizmet Paketleri */}
                 {currentStep === 5 && (
                   <>
+                    <View className="px-2 mt-4">
+                      <ServicePackageStep
+                        packages={formPackages}
+                        serviceOptions={(data?.serviceOfferings ?? []).map((s: any) => ({
+                          id: s.id,
+                          label: s.serviceName,
+                        }))}
+                        onPackagesChange={setFormPackages}
+                      />
+                    </View>
+                  </>
+                )}
+                {currentStep === 6 && (
+                  <>
                     <View
-                      className="mx-2 mt-2 mb-3 rounded-xl px-3 py-3"
+                      className="mx-2 mt-2 mb-4 rounded-xl px-3 py-3"
                       style={{
-                        backgroundColor: isDark ? "rgba(194, 165, 35, 0.12)" : "rgba(194, 165, 35, 0.08)",
+                        backgroundColor: isDark ? "rgba(194,165,35,0.10)" : "rgba(194,165,35,0.07)",
                         borderWidth: 1,
-                        borderColor: isDark ? "rgba(194, 165, 35, 0.28)" : "rgba(194, 165, 35, 0.35)",
+                        borderColor: isDark ? "rgba(194,165,35,0.28)" : "rgba(194,165,35,0.35)",
                       }}
                     >
-                      <Text style={{ fontFamily: "CenturyGothic", fontSize: 14, lineHeight: 21, color: colors.sectionHeaderText }}>
-                        {t("form.staffStepIntro")}
+                      <Text style={{ fontFamily: "CenturyGothic", fontSize: 13, lineHeight: 20, color: colors.sectionHeaderText }}>
+                        {t("form.personnelStepIntro")}
                       </Text>
                     </View>
-                    <View className="mt-2 mx-0 flex-row items-center px-2">
-                      <Text className="text-xl flex-1" style={{ color: colors.sectionHeaderText }}>
-                        {t("form.workingBarbersCount")} : {barberFields.length}{" "}
-                      </Text>
-                      <Button
-                        mode="text"
-                        textColor="#c2a523"
-                        onPress={openCreateBarberModal}
+
+                    <View
+                      style={{
+                        flexDirection: "row",
+                        alignItems: "center",
+                        marginHorizontal: 8,
+                        marginBottom: 10,
+                        paddingVertical: 6,
+                        paddingHorizontal: 12,
+                        borderRadius: 12,
+                        backgroundColor: isDark ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)",
+                        borderWidth: 1,
+                        borderColor: colors.borderColor,
+                      }}
+                    >
+                      <Icon source="account-group-outline" size={20} color="#c2a523" />
+                      <Text
+                        style={{
+                          flex: 1,
+                          marginLeft: 8,
+                          fontFamily: "CenturyGothic-Bold",
+                          fontSize: 15,
+                          color: colors.sectionHeaderText,
+                        }}
+                        numberOfLines={1}
                       >
-                        {t("form.addBarber")}
+                        {t("form.workingPersonnelCount")}
+                      </Text>
+                      {barberFields.length > 0 && (
+                        <View
+                          style={{
+                            minWidth: 24,
+                            height: 24,
+                            borderRadius: 12,
+                            backgroundColor: "#c2a523",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            marginRight: 8,
+                            paddingHorizontal: 6,
+                          }}
+                        >
+                          <Text style={{ fontFamily: "CenturyGothic-Bold", fontSize: 12, color: "#fff" }}>
+                            {barberFields.length}
+                          </Text>
+                        </View>
+                      )}
+                      <Button
+                        mode="contained-tonal"
+                        textColor="#c2a523"
+                        buttonColor={isDark ? "rgba(194,165,35,0.16)" : "rgba(194,165,35,0.12)"}
+                        compact
+                        icon="plus"
+                        onPress={openCreateBarberModal}
+                        style={{ borderRadius: 8 }}
+                        labelStyle={{ fontFamily: "CenturyGothic-Bold", fontSize: 13, marginVertical: 4 }}
+                      >
+                        {t("form.addPersonnel")}
                       </Button>
                     </View>
-                    {barberFields.length > 0 && (
-                      <View className="mx-2 mt-1">
+
+                    {barberFields.length === 0 ? (
+                      <View
+                        style={{
+                          marginHorizontal: 8,
+                          marginBottom: 12,
+                          paddingVertical: 18,
+                          borderRadius: 12,
+                          borderWidth: 1,
+                          borderColor: colors.borderColor,
+                          borderStyle: "dashed",
+                          alignItems: "center",
+                        }}
+                      >
+                        <Icon source="account-plus-outline" size={28} color={colors.textSecondary} />
+                        <Text style={{ fontFamily: "CenturyGothic", fontSize: 13, color: colors.textSecondary, marginTop: 6 }}>
+                          {t("form.addPersonnel")}
+                        </Text>
+                      </View>
+                    ) : (
+                      <View style={{ marginHorizontal: 8, marginBottom: 4 }}>
                         <Text
                           style={{
                             fontFamily: "CenturyGothic",
@@ -2180,28 +2354,27 @@ const FormStoreUpdate = React.memo(({
                               backgroundColor: colors.cardBg,
                             }}
                           >
-                            <View className="flex-row items-center">
+                            <View style={{ flexDirection: "row", alignItems: "center" }}>
                               {barbers[index]?.avatar?.uri ? (
-                                <Avatar.Image
-                                  size={44}
-                                  source={{ uri: barbers[index]?.avatar?.uri }}
-                                />
+                                <Avatar.Image size={44} source={{ uri: barbers[index]?.avatar?.uri }} />
                               ) : (
                                 <Avatar.Icon size={44} icon="account-circle" />
                               )}
                               <Text
-                                className="flex-1 ml-3"
                                 style={{
+                                  flex: 1,
+                                  marginLeft: 12,
                                   fontFamily: "CenturyGothic-Bold",
-                                  fontSize: 16,
+                                  fontSize: 15,
                                   color: colors.sectionHeaderText,
                                 }}
+                                numberOfLines={1}
                               >
-                                {t("form.barberNumberLabel", { n: index + 1 })}
+                                {(barbers[index]?.name ?? "").trim() || t("form.personnelNumberLabel", { n: index + 1 })}
                               </Text>
                               <TouchableOpacity
                                 onPress={() => openEditBarberModal(index)}
-                                className="p-2"
+                                style={{ padding: 8 }}
                                 accessibilityRole="button"
                                 accessibilityLabel={t("common.edit")}
                               >
@@ -2209,33 +2382,13 @@ const FormStoreUpdate = React.memo(({
                               </TouchableOpacity>
                               <TouchableOpacity
                                 onPress={() => handleDeleteBarber(index)}
-                                className="p-2"
+                                style={{ padding: 8 }}
                                 accessibilityRole="button"
                                 accessibilityLabel={t("common.delete")}
                               >
                                 <Icon size={22} source="delete-outline" color="#ef4444" />
                               </TouchableOpacity>
                             </View>
-                            <Text
-                              style={{
-                                fontSize: 12,
-                                fontFamily: "CenturyGothic",
-                                color: colors.textSecondary,
-                                marginTop: 12,
-                                marginBottom: 4,
-                              }}
-                            >
-                              {t("form.barberName")}
-                            </Text>
-                            <Text
-                              style={{
-                                fontSize: 15,
-                                fontFamily: "CenturyGothic",
-                                color: colors.sectionHeaderText,
-                              }}
-                            >
-                              {(barbers[index]?.name ?? "").trim() || "—"}
-                            </Text>
                           </View>
                         ))}
                         {!!barberErrorText && (
@@ -2245,35 +2398,108 @@ const FormStoreUpdate = React.memo(({
                         )}
                       </View>
                     )}
-                    <View className="mt-1 mx-0 px-2 flex-row items-center">
-                      <Text className="text-xl flex-1" style={{ color: colors.sectionHeaderText }}>
-                        {t("form.chairCount")} : {chairFields.length}
+                  </>
+                )}
+                {currentStep === 7 && (
+                  <>
+                    <View
+                      className="mx-2 mt-2 mb-4 rounded-xl px-3 py-3"
+                      style={{
+                        backgroundColor: isDark ? "rgba(194,165,35,0.10)" : "rgba(194,165,35,0.07)",
+                        borderWidth: 1,
+                        borderColor: isDark ? "rgba(194,165,35,0.28)" : "rgba(194,165,35,0.35)",
+                      }}
+                    >
+                      <Text style={{ fontFamily: "CenturyGothic", fontSize: 13, lineHeight: 20, color: colors.sectionHeaderText }}>
+                        {t("form.chairsStepIntro")}
                       </Text>
+                    </View>
+
+                    {/* ── KOLTUKLAR ── */}
+                    <View
+                      style={{
+                        flexDirection: "row",
+                        alignItems: "center",
+                        marginHorizontal: 8,
+                        marginBottom: 10,
+                        paddingVertical: 6,
+                        paddingHorizontal: 12,
+                        borderRadius: 12,
+                        backgroundColor: isDark ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)",
+                        borderWidth: 1,
+                        borderColor: colors.borderColor,
+                      }}
+                    >
+                      <Icon source="chair-rolling" size={20} color="#c2a523" />
+                      <Text
+                        style={{
+                          flex: 1,
+                          marginLeft: 8,
+                          fontFamily: "CenturyGothic-Bold",
+                          fontSize: 15,
+                          color: colors.sectionHeaderText,
+                        }}
+                        numberOfLines={1}
+                      >
+                        {t("form.chairCount")}
+                      </Text>
+                      {chairFields.length > 0 && (
+                        <View
+                          style={{
+                            minWidth: 24,
+                            height: 24,
+                            borderRadius: 12,
+                            backgroundColor: "#c2a523",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            marginRight: 8,
+                            paddingHorizontal: 6,
+                          }}
+                        >
+                          <Text style={{ fontFamily: "CenturyGothic-Bold", fontSize: 12, color: "#fff" }}>
+                            {chairFields.length}
+                          </Text>
+                        </View>
+                      )}
                       <Button
-                        mode="text"
+                        mode="contained-tonal"
                         textColor="#c2a523"
+                        buttonColor={isDark ? "rgba(194,165,35,0.16)" : "rgba(194,165,35,0.12)"}
+                        compact
+                        icon="plus"
                         onPress={openCreateChairModal}
+                        style={{ borderRadius: 8 }}
+                        labelStyle={{ fontFamily: "CenturyGothic-Bold", fontSize: 13, marginVertical: 4 }}
                       >
                         {t("form.addChair")}
                       </Button>
                     </View>
-                    {chairFields.length > 0 && (
+
+                    {chairFields.length === 0 ? (
                       <View
-                        className="rounded-xl mx-2 px-3 pt-3"
                         style={{
-                          backgroundColor: colors.cardBg,
+                          marginHorizontal: 8,
+                          marginBottom: 12,
+                          paddingVertical: 18,
+                          borderRadius: 12,
                           borderWidth: 1,
                           borderColor: colors.borderColor,
+                          borderStyle: "dashed",
+                          alignItems: "center",
                         }}
                       >
+                        <Icon source="seat-outline" size={28} color={colors.textSecondary} />
+                        <Text style={{ fontFamily: "CenturyGothic", fontSize: 13, color: colors.textSecondary, marginTop: 6 }}>
+                          {t("form.addChair")}
+                        </Text>
+                      </View>
+                    ) : (
+                      <View style={{ marginHorizontal: 8, marginBottom: 4 }}>
                         {chairFields.map((item, index) => {
                           const chair = chairs[index];
                           if (!chair) return null;
                           const isBarberChair = !!chair.barberId;
-                          const modeLabel = isBarberChair
-                            ? t("form.barberChair")
-                            : t("form.namedChair");
-                          // barberMap'i her render'da güncel kullan (barbers watch ediliyor)
+                          const modeLabel = isBarberChair ? t("form.barberChair") : t("form.namedChair");
                           const barberName = isBarberChair
                             ? (barberMap.get(chair.barberId!) ?? t("form.unassigned"))
                             : "-";
@@ -2289,13 +2515,13 @@ const FormStoreUpdate = React.memo(({
                                 backgroundColor: colors.cardBg,
                               }}
                             >
-                              <View className="flex-row items-center mb-2">
+                              <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 10 }}>
                                 <View
                                   style={{
                                     width: 36,
                                     height: 36,
                                     borderRadius: 10,
-                                    backgroundColor: isDark ? "rgba(194, 165, 35, 0.12)" : "rgba(194, 165, 35, 0.08)",
+                                    backgroundColor: isDark ? "rgba(194,165,35,0.12)" : "rgba(194,165,35,0.08)",
                                     alignItems: "center",
                                     justifyContent: "center",
                                   }}
@@ -2303,52 +2529,62 @@ const FormStoreUpdate = React.memo(({
                                   <Icon size={22} source="chair-rolling" color="#c2a523" />
                                 </View>
                                 <Text
-                                  className="flex-1 ml-2"
                                   style={{
+                                    flex: 1,
+                                    marginLeft: 10,
                                     fontFamily: "CenturyGothic-Bold",
-                                    fontSize: 16,
+                                    fontSize: 15,
                                     color: colors.sectionHeaderText,
                                   }}
+                                  numberOfLines={1}
                                 >
                                   {t("form.chairNumberLabel", { n: index + 1 })}
                                 </Text>
-                                <TouchableOpacity onPress={() => openEditChairModal(index)} className="p-2">
+                                <TouchableOpacity onPress={() => openEditChairModal(index)} style={{ padding: 8 }}>
                                   <Icon size={22} source="pencil" color="#c2a523" />
                                 </TouchableOpacity>
-                                <TouchableOpacity onPress={() => handleChair(index)} className="p-2">
+                                <TouchableOpacity onPress={() => handleChair(index)} style={{ padding: 8 }}>
                                   <Icon size={22} source="delete-outline" color="#ef4444" />
                                 </TouchableOpacity>
                               </View>
-                              <Text
-                                style={{
-                                  fontSize: 12,
-                                  fontFamily: "CenturyGothic",
-                                  color: colors.textSecondary,
-                                  marginBottom: 4,
-                                }}
-                              >
-                                {modeLabel}
-                              </Text>
-                              <Text
-                                style={{
-                                  fontSize: 15,
-                                  fontFamily: "CenturyGothic",
-                                  color: colors.sectionHeaderText,
-                                }}
-                              >
-                                {!isBarberChair ? chair.name ?? "—" : barberName}
-                              </Text>
+                              <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                                <View
+                                  style={{
+                                    paddingHorizontal: 8,
+                                    paddingVertical: 3,
+                                    borderRadius: 6,
+                                    backgroundColor: isDark ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.05)",
+                                  }}
+                                >
+                                  <Text style={{ fontSize: 11, fontFamily: "CenturyGothic", color: colors.textSecondary }}>
+                                    {modeLabel}
+                                  </Text>
+                                </View>
+                                <Text
+                                  style={{
+                                    flex: 1,
+                                    fontSize: 14,
+                                    fontFamily: "CenturyGothic",
+                                    color: colors.sectionHeaderText,
+                                  }}
+                                  numberOfLines={1}
+                                >
+                                  {!isBarberChair ? chair.name ?? "—" : barberName}
+                                </Text>
+                              </View>
                             </View>
                           );
                         })}
-                        <HelperText type="error" visible={!!chairsErrorText} style={{ fontFamily: 'CenturyGothic' }}>
-                          {chairsErrorText}
-                        </HelperText>
+                        {!!chairsErrorText && (
+                          <HelperText type="error" visible style={{ fontFamily: "CenturyGothic" }}>
+                            {chairsErrorText}
+                          </HelperText>
+                        )}
                       </View>
                     )}
                   </>
                 )}
-                {currentStep === 6 && (
+                {currentStep === 8 && (
                   <>
                     <View className="px-2">
                       <Text className="font-century-gothic ml-0 pt-4 mt-4 pb-2 text-xl" style={{ color: colors.sectionHeaderText }}>
@@ -2500,7 +2736,7 @@ const FormStoreUpdate = React.memo(({
                     </View>
                   </>
                 )}
-                {currentStep === 7 && (
+                {currentStep === 9 && (
                   <>
                     <View className="px-2">
                       <Text className="font-century-gothic ml-0 pt-4 pb-2 text-xl" style={{ color: colors.sectionHeaderText }}>
@@ -2529,7 +2765,7 @@ const FormStoreUpdate = React.memo(({
                       </View>
                   </>
                 )}
-                {currentStep === 8 && (
+                {currentStep === 10 && (
                   <>
                     <View className="px-2">
                       <Text className="font-century-gothic ml-0 pt-4 pb-2 text-xl" style={{ color: colors.sectionHeaderText }}>
@@ -2624,7 +2860,7 @@ const FormStoreUpdate = React.memo(({
                     </View>
                   </>
                 )}
-                {currentStep === 9 && (
+                {currentStep === 11 && (
                   <>
                     <View className="px-2 py-4">
                       <Text className="text-lg font-bold mb-4" style={{ color: colors.sectionHeaderText }}>
@@ -2682,7 +2918,7 @@ const FormStoreUpdate = React.memo(({
                         {/* Koltuklar */}
                         {(getValues("chairs") ?? []).length > 0 && (
                           <View className="py-1.5" style={{ borderBottomWidth: 1, borderBottomColor: colors.borderColor }}>
-                            <Text className="text-gray-400 text-sm mb-1">{"Berber Koltukları"}</Text>
+                            <Text className="text-gray-400 text-sm mb-1">{t("form.previewChairsSection")}</Text>
                             {(getValues("chairs") ?? []).map((chair: any, idx: number) => {
                               const isBarberChair = !!(chair.barberId) || chair.mode === "barber";
                               const barberName = isBarberChair && chair.barberId
@@ -2693,7 +2929,7 @@ const FormStoreUpdate = React.memo(({
                                 <View key={`chair-${idx}`} className="flex-row items-center py-0.5 gap-2">
                                   <Text className="text-sm" style={{ color: colors.textSecondary }}>{idx + 1}.</Text>
                                   <Text className="text-sm flex-1" style={{ color: colors.sectionHeaderText }}>{label}</Text>
-                                  <Text className="text-xs" style={{ color: colors.textSecondary }}>{isBarberChair ? "Berbere atanmış" : "İsimli"}</Text>
+                                  <Text className="text-xs" style={{ color: colors.textSecondary }}>{isBarberChair ? t("form.barberChair") : t("form.namedChair")}</Text>
                                 </View>
                               );
                             })}
@@ -2730,8 +2966,14 @@ const FormStoreUpdate = React.memo(({
                   </>
                 )}
               </Animated.View>
-            </ScrollView>
-            <View className="px-6 my-3 flex-row gap-3">
+            </BottomSheetScrollView>
+            <View
+              className="px-6 flex-row gap-3"
+              style={{
+                paddingTop: 12,
+                paddingBottom: Math.max(insets.bottom, 20) + 10,
+              }}
+            >
               {currentStep > 0 && (
                 <Button
                   className="flex-1"

@@ -1,4 +1,4 @@
-import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Dimensions,
   RefreshControl,
@@ -27,7 +27,8 @@ import { DeferredRender } from "../../components/common/deferredrender";
 import { CrudSkeletonComponent } from "../../components/common/crudskeleton";
 import { SkeletonComponent } from "../../components/common/skeleton";
 import { RatingsBottomSheet } from "../../components/rating/ratingsbottomsheet";
-import { MoreFabPanelContext } from "../../components/layout/MoreFabContext";
+import { useFabOverlayWhenSheetOpen } from "../../hook/usePanelMoreFab";
+import { useDeferredSheetPresent } from "../../hook/useDeferredSheetPresent";
 
 /**
  * Serbest berberin kendi paneli: arama/filtre yok; liste/yatay geçiş ve üst özet burada.
@@ -76,11 +77,9 @@ export default function MyPanelScreen() {
     enablePanDownToClose: true,
   });
 
-  const fabPanelCtx = useContext(MoreFabPanelContext);
-  useEffect(() => {
-    fabPanelCtx?.reportOverlayOpen(freeBarberPanelSheet.isOpen);
-    return () => fabPanelCtx?.reportOverlayOpen(false);
-  }, [freeBarberPanelSheet.isOpen, fabPanelCtx]);
+  useFabOverlayWhenSheetOpen(
+    freeBarberPanelSheet.isOpen || ratingsSheet.isOpen,
+  );
 
   const [freeBarberId, setFreeBarberId] = useState<string | null>(null);
   const [selectedRatingsTarget, setSelectedRatingsTarget] = useState<{
@@ -91,21 +90,38 @@ export default function MyPanelScreen() {
   const screenWidth = Dimensions.get("window").width;
 
   const { present: presentFreeBarberPanel } = freeBarberPanelSheet;
+  const { schedulePresent: schedulePanelPresent, cancelScheduledPresent: cancelScheduledPanelPresent } =
+    useDeferredSheetPresent(presentFreeBarberPanel);
+
+  const dismissFreeBarberPanelSheet = useCallback(() => {
+    cancelScheduledPanelPresent();
+    freeBarberPanelSheet.dismiss();
+  }, [cancelScheduledPanelPresent, freeBarberPanelSheet]);
+
   const handleOpenPanel = useCallback(
     (id: string | null) => {
       setFreeBarberId(id);
-      setTimeout(() => presentFreeBarberPanel(), 100);
+      schedulePanelPresent(100);
     },
-    [presentFreeBarberPanel],
+    [schedulePanelPresent],
   );
 
   const { present: presentRatings } = ratingsSheet;
+  const { schedulePresent: scheduleRatingsPresent, cancelScheduledPresent: cancelScheduledRatingsPresent } =
+    useDeferredSheetPresent(presentRatings);
+
+  const dismissRatingsSheet = useCallback(() => {
+    cancelScheduledRatingsPresent();
+    setSelectedRatingsTarget(null);
+    ratingsSheet.dismiss();
+  }, [cancelScheduledRatingsPresent, ratingsSheet]);
+
   const handlePressRatings = useCallback(
     (targetId: string, targetName: string) => {
       setSelectedRatingsTarget({ targetId, targetName });
-      setTimeout(() => presentRatings(), 100);
+      scheduleRatingsPresent(100);
     },
-    [presentRatings],
+    [scheduleRatingsPresent],
   );
 
   const onRefresh = useCallback(async () => {
@@ -203,6 +219,10 @@ export default function MyPanelScreen() {
         handleIndicatorStyle={{ backgroundColor: colors.sheetHandle }}
         backgroundStyle={{ backgroundColor: colors.sheetBg }}
         onChange={freeBarberPanelSheet.handleChange}
+        onDismiss={() => {
+          cancelScheduledPanelPresent();
+          freeBarberPanelSheet.handleDismiss();
+        }}
         snapPoints={freeBarberPanelSheet.snapPoints}
         enableOverDrag={freeBarberPanelSheet.enableOverDrag}
         enablePanDownToClose={freeBarberPanelSheet.enablePanDownToClose}
@@ -220,7 +240,7 @@ export default function MyPanelScreen() {
             <FormFreeBarberOperation
               freeBarberId={freeBarberId}
               enabled={freeBarberPanelSheet.isOpen}
-              onClose={() => freeBarberPanelSheet.dismiss()}
+              onClose={dismissFreeBarberPanelSheet}
               error={error}
               locationStatus={locationStatusForForm}
             />
@@ -239,15 +259,16 @@ export default function MyPanelScreen() {
           ratingsSheet.handleChange(index);
           if (index < 0) setSelectedRatingsTarget(null);
         }}
+        onDismiss={() => {
+          cancelScheduledRatingsPresent();
+          ratingsSheet.handleDismiss();
+        }}
       >
         {selectedRatingsTarget ? (
           <RatingsBottomSheet
             targetId={selectedRatingsTarget.targetId}
             targetName={selectedRatingsTarget.targetName}
-            onClose={() => {
-              setSelectedRatingsTarget(null);
-              ratingsSheet.dismiss();
-            }}
+            onClose={dismissRatingsSheet}
           />
         ) : (
           <View className="flex-1 pt-4">

@@ -70,11 +70,10 @@ export function AIAssistantSheet({ sheetRef, accentColor, onClose }: Props) {
     }
   }, [phase, pulseAnim]);
 
-  const handleClose = useCallback(async () => {
-    await cancelRecording();
+  /** Önce sheet kapanır; kayıt iptali onDismiss içinde (çift tetik / takılma azaltır). */
+  const handleClose = useCallback(() => {
     sheetRef.current?.dismiss();
-    onClose?.();
-  }, [cancelRecording, sheetRef, onClose]);
+  }, [sheetRef]);
 
   const handleMicPress = async () => {
     if (phase === "idle" || phase === "done" || phase === "error") {
@@ -125,7 +124,7 @@ export function AIAssistantSheet({ sheetRef, accentColor, onClose }: Props) {
       handleIndicatorStyle={{ backgroundColor: isDark ? "#475569" : "#cbd5e1" }}
       backgroundStyle={{ backgroundColor: sheetBg }}
       onDismiss={() => {
-        cancelRecording();
+        void cancelRecording();
         onClose?.();
       }}
       maxDynamicContentSize={520}

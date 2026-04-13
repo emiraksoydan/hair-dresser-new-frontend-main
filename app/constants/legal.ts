@@ -14,6 +14,9 @@ export const COMPANY_LEGAL_NAME =
 /** KVKK ve gizlilik başvuruları */
 export const KVKK_EMAIL = 'yavuzanteknoloji@gmail.com';
 
+/** Mağaza / web üzerinde kullanılan herkese açık site adresi */
+export const COMPANY_PUBLIC_WEBSITE = 'https://yavuzan.com';
+
 export interface LegalDocument {
   title: string;
   content: string;

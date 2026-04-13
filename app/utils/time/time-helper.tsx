@@ -67,18 +67,6 @@ export const addMinutesToHHmm = (hhmm: string, minutes: number): string => {
     return fmtHHmm(d);              // Date -> String
 };
 
-// Saatlerin ardışık olup olmadığını kontrol eder
-export const areHourlyContiguous = (keys: string[]): boolean => {
-    if (keys.length <= 1) return true;
-    const sorted = [...keys].sort(); // "HH:mm" sırala
-    
-    for (let i = 1; i < sorted.length; i++) {
-        // Bir önceki saate 60 dk ekleyince şu anki saate eşit mi?
-        if (addMinutesToHHmm(sorted[i - 1], 60) !== sorted[i]) return false;
-    }
-    return true;
-};
-
 // Önümüzdeki 7 günü array olarak döner
 export const build7Days = (): Date[] => {
     const base = new Date();

@@ -32,6 +32,13 @@ export enum StoreSelectionType {
   StoreSelection = 1, // Dükkan Seç
 }
 
+export type AppointmentServicePackageDto = {
+  packageId: string;
+  packageName: string;
+  totalPrice: number;
+  serviceNamesSnapshot: string; // Virgülle ayrılmış hizmet adları
+};
+
 export type CreateAppointmentRequestDto = {
   storeId?: string | null;
   chairId?: string | null;
@@ -39,7 +46,8 @@ export type CreateAppointmentRequestDto = {
   startTime?: string | null;
   endTime?: string | null;
   freeBarberUserId?: string | null;
-  serviceOfferingIds: string[]; // ✅ Sadece ID'ler (services değil)
+  serviceOfferingIds: string[]; // Sadece ID'ler — paket seçiliyse boş
+  packageIds?: string[] | null;  // Paket ID'leri — hizmet seçiliyse boş
   requestLatitude?: number | null;
   requestLongitude?: number | null;
   storeSelectionType?: StoreSelectionType | null;
@@ -52,7 +60,8 @@ export type AddStoreToAppointmentRequestDto = {
   appointmentDate: string;
   startTime: string;
   endTime: string;
-  serviceOfferingIds: string[]; // ✅ Sadece ID'ler
+  serviceOfferingIds: string[];
+  packageIds?: string[] | null;
 };
 
 export type CreateStoreToFreeBarberRequestDto = {
@@ -89,6 +98,7 @@ export type AppointmentGetDto = {
   createdAt: string;
 
   services: AppointmentServiceDto[];
+  packages: AppointmentServicePackageDto[]; // Randevuya bağlı paket snapshot'ları
   totalPrice: number;
   pricingType: PricingType;
   pricingValue: number;

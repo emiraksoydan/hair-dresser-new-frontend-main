@@ -38,8 +38,11 @@ module.exports = {
         NSLocationAlwaysUsageDescription: np.locationAlways,
         NSMicrophoneUsageDescription: np.microphone,
         UIBackgroundModes: ["location", "fetch"],
+        /** App Store export compliance: yalnızca standart/muaf şifreleme (HTTPS vb.) — ITSAppUsesNonExemptEncryption = false */
+        ITSAppUsesNonExemptEncryption: false,
       },
       bundleIdentifier: "com.hairdresser.app",
+      /** EAS: production ortamında GOOGLE_SERVICES_PLIST (type: file) secret — build sırasında geçici dosya yolu olur. */
       googleServicesFile: process.env.GOOGLE_SERVICES_PLIST ?? "./GoogleService-Info.plist",
     },
     android: {
@@ -55,11 +58,18 @@ module.exports = {
           apiKey: process.env.GOOGLE_MAPS_API_KEY,
         },
       },
+      /** EAS: GOOGLE_SERVICES_JSON (type: file) — aynı şekilde cloud build'de yol inject edilir. */
       googleServicesFile: process.env.GOOGLE_SERVICES_JSON ?? "./google-services.json",
       package: "com.hairdresser.app",
     },
     web: {
       favicon: "./assets/favicon.png",
+    },
+    /** Mağaza / native splash önizlemesi (expo-splash-screen plugin ile aynı görsel) */
+    splash: {
+      image: "./assets/icon.png",
+      resizeMode: "contain",
+      backgroundColor: "#ffffff",
     },
     plugins: [
       "expo-router",
@@ -70,9 +80,11 @@ module.exports = {
       [
         "expo-splash-screen",
         {
-          image: "./assets/splash-icon.png",
+          image: "./assets/icon.png",
           backgroundColor: "#ffffff",
           resizeMode: "contain",
+          /** Plugin modunda Android varsayılanı 100dp; üretimde logo küçük kalmasın diye yükseltildi */
+          imageWidth: 320,
         },
       ],
       [
@@ -83,8 +95,17 @@ module.exports = {
             targetSdkVersion: 35,
             buildToolsVersion: "35.0.0",
           },
+          /** iOS: Firebase Swift pod'ları + EAS pod install için sık gerekir */
+          ios: {
+            deploymentTarget: "15.1",
+            useFrameworks: "static",
+          },
         },
       ],
+      /** Podfile: use_modular_headers! — Firebase Swift pod'ları + static frameworks */
+      "./plugins/withIosFirebaseModularHeaders",
+      /** Podfile: RNFBApp + React — non-modular header (EAS archive) */
+      "./plugins/withIosAllowNonModularIncludes",
       [
         "expo-location",
         {

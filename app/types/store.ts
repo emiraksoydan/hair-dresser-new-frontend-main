@@ -198,3 +198,32 @@ export type UpdateImageDto = {
   ownerType?: number;
 };
 
+// --- Hizmet Paket Tipleri ---
+
+export type ServicePackageItemDto = {
+  serviceOfferingId: string;
+  serviceName: string;
+};
+
+export type ServicePackageGetDto = {
+  id: string;
+  packageName: string;
+  totalPrice: number;
+  items: ServicePackageItemDto[];
+};
+
+export type ServicePackageCreateDto = {
+  ownerId: string;
+  packageName: string;
+  totalPrice: number;
+  serviceOfferingIds: string[];
+};
+
+export type ServicePackageUpdateDto = {
+  id: string;
+  ownerId: string;
+  packageName: string;
+  totalPrice: number;
+  serviceOfferingIds: string[];
+};
+

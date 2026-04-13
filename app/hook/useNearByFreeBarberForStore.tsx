@@ -28,14 +28,15 @@ export function useNearbyStoresControl({
     const [locationStatus, setLocationStatus] = useState<LocationStatus>("unknown");
     const [freeBarbers, setFreeBarbers] = useState<FreeBarGetDto[]>([]);
     const [isLoading, setIsLoading] = useState(false);
-    const [isInitialLoad, setIsInitialLoad] = useState(true); // İlk yüklemeyi takip et
     const [error, setError] = useState<any>(null);
-    const [location, setLocation] = useState<{ latitude: number; longitude: number } | undefined>(undefined);
+    // location ve isInitialLoad ref olarak tutulur — fetchNearby döngüsünü önlemek için
+    const locationRef = useRef<{ latitude: number; longitude: number } | undefined>(undefined);
+    const isInitialLoadRef = useRef(true);
 
     /** Bağımsız “sadece benim işletmelerim” ekranında keşif kapalıyken yükleme bayrağını sıfırla */
     useEffect(() => {
         if (!enabled) {
-            setIsInitialLoad(false);
+            isInitialLoadRef.current = false;
             setIsLoading(false);
             setFreeBarbers([]);
             setError(null);
@@ -80,32 +81,27 @@ export function useNearbyStoresControl({
 
     const fetchNearby = useCallback(async (showLoading: boolean = false, isRetry: boolean = false) => {
         if (!enabled || !stores.length) return;
-        // Error varsa ve retry değilse ve manuel fetch değilse fetch yapma (hard refresh'te)
-        // isRetry true ise (retry butonuna basıldı), error'u temizleyip tekrar dene
         if (error && !showLoading && !isRetry) return;
-        
-        // Retry durumunda önce error'u temizle
+
         if (isRetry) {
             setError(null);
         }
 
-        // Sadece ilk yüklemede veya manuel fetch'te loading göster
+        const isInitialLoad = isInitialLoadRef.current;
         if (showLoading || isInitialLoad) {
             setIsLoading(true);
         }
         try {
-            // Her mağaza için ayrı istek atıp sonuçları topluyoruz
             let hasAnyError = false;
             let lastError: any = null;
-            
+
             const promises = stores.map(async store => {
                 const c = safeCoord(store.latitude, store.longitude);
                 if (!c) return null;
-                // İlk store'un konumunu kaydet (filtreleme için)
-                if (!location && c) {
-                    setLocation({ latitude: c.lat, longitude: c.lon });
+                // İlk store konumunu ref'e kaydet — state güncellemesi yerine
+                if (!locationRef.current && c) {
+                    locationRef.current = { latitude: c.lat, longitude: c.lon };
                 }
-                // Filtered endpoint kullan - tüm filtreleri gönder
                 const filterWithLocation: FilterRequestDto = {
                     ...filter,
                     latitude: c.lat,
@@ -115,7 +111,6 @@ export function useNearbyStoresControl({
                 };
                 const result = await trigger(filterWithLocation, false);
                 if ('error' in result) {
-                    // Hata varsa kaydet - servis hatası olabilir
                     hasAnyError = true;
                     lastError = result.error;
                     return [];
@@ -125,7 +120,6 @@ export function useNearbyStoresControl({
 
             const results = await Promise.all(promises);
 
-            // Tüm sonuçları tek bir listede birleştir ve ID'ye göre tekrar edenleri temizle
             const allBarbers = new Map<string, FreeBarGetDto>();
             results.forEach((list) => {
                 if (Array.isArray(list)) {
@@ -134,14 +128,13 @@ export function useNearbyStoresControl({
             });
 
             setFreeBarbers(Array.from(allBarbers.values()));
-            
-            // Eğer tüm istekler hata verdiyse ve sonuç boşsa, hatayı göster
+
             if (hasAnyError && allBarbers.size === 0) {
                 setError(lastError);
             } else {
                 setError(null);
             }
-            setIsInitialLoad(false); // İlk yükleme tamamlandı
+            isInitialLoadRef.current = false;
         } catch (err) {
             setError(err);
         } finally {
@@ -149,32 +142,20 @@ export function useNearbyStoresControl({
                 setIsLoading(false);
             }
         }
-    }, [enabled, stores, radiusKm, trigger, location, isInitialLoad, error, filter, currentUserId]);
+    }, [enabled, stores, radiusKm, trigger, error, filter, currentUserId]);
 
-    // 1. Durum: Store listesi veya koordinatı değişirse ANINDA çek (Optimistic update burayı tetikler)
-    // İlk yüklemede loading göster, sonraki güncellemelerde gösterme
+    // 1. Durum: Store listesi veya koordinatı değişirse ANINDA çek
     useEffect(() => {
-        fetchNearby(isInitialLoad);
-    }, [storesFingerprint, fetchNearby, isInitialLoad]);
+        fetchNearby(isInitialLoadRef.current);
+    }, [storesFingerprint, fetchNearby]);
 
     // 2. Durum: Filtre değişirse yeniden çek
     useEffect(() => {
-        // Skip if filter hasn't changed
-        if (prevFilterFingerprint.current === filterFingerprint) {
-            return;
-        }
-        
-        // Update previous fingerprint
+        if (prevFilterFingerprint.current === filterFingerprint) return;
         prevFilterFingerprint.current = filterFingerprint;
-        
-        // Skip if initial load not completed yet
-        if (isInitialLoad) {
-            return;
-        }
-        
-        // Refetch with new filter
+        if (isInitialLoadRef.current) return;
         fetchNearby(false);
-    }, [filterFingerprint, fetchNearby, isInitialLoad]);
+    }, [filterFingerprint, fetchNearby]);
 
     // 3. Durum: Periyodik olarak arka planda yenile (Timer)
     // Background refresh'lerde loading gösterme
@@ -194,14 +175,11 @@ export function useNearbyStoresControl({
         isLoading,
         locationStatus,
         hasLocation: locationStatus === "granted",
-        location,
+        location: locationRef.current,
         error,
         manualFetch: () => {
-            // Location denied ise hiçbir şey yapma
             if (locationStatus !== "granted") return;
-            // Error varsa retry olarak çağır (error'u temizleyip tekrar dener)
-            // Error yoksa normal fetch
             fetchNearby(true, !!error);
-        }, // Manuel fetch'te loading göster
+        },
     };
 }

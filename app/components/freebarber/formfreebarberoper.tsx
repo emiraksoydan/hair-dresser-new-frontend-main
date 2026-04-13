@@ -10,8 +10,10 @@ import {
   View,
   Dimensions,
 } from "react-native";
+import { BottomSheetScrollView } from "@gorhom/bottom-sheet";
 import { Text } from "../common/Text";
-import { Divider, HelperText, Icon, IconButton, Switch, TextInput } from "react-native-paper";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Divider, HelperText, Icon, Switch, TextInput } from "react-native-paper";
 import { Button } from "../common/Button";
 import { useForm, Controller } from "react-hook-form";
 import { z } from "zod";
@@ -48,7 +50,15 @@ import {
   useUploadMultipleImagesMutation,
   useUploadImageMutation,
   useUpdateImageBlobMutation,
+  useAddServicePackageMutation,
+  useUpdateServicePackageMutation,
+  useDeleteServicePackageMutation,
+  useLazyGetServicePackagesByOwnerQuery,
 } from "../../store/api";
+import {
+  ServicePackageStep,
+  type PackageFormItem,
+} from "../store/ServicePackageStep";
 import { useCategoryHierarchy } from "../../hook/useCategoryHierarchy";
 import { useAuth } from "../../hook/useAuth";
 import { useLanguage } from "../../hook/useLanguage";
@@ -58,6 +68,7 @@ import { useCanPerformAction } from "../../hook/useCanPerformAction";
 import { StepFormIndicator } from "../common/StepFormIndicator";
 import { useTheme } from "../../hook/useTheme";
 import { useActionGuard } from "../../hook/useActionGuard";
+import { SheetCloseButton } from "../common/SheetCloseButton";
 
 // --- Schema Definitions ---
 const createLocationSchema = (t: (key: string) => string) =>
@@ -242,8 +253,9 @@ const STEP_FIELDS: Record<number, (keyof FormFreeBarberValues)[]> = {
   4: ["selectedCategories"],
   5: ["beautySalonCertificateImage", "selectedBeautySalonMainHeadings", "selectedBeautySalonSubHeadings", "selectedBeautySalonCategories"],
   6: ["prices", "location"],
-  7: [],
-  8: ["isAvailable"],
+  7: [], // Hizmet Paketleri — isteğe bağlı
+  8: [],  // Preview
+  9: ["isAvailable"],
 };
 
 export const FormFreeBarberOperation = React.memo(
@@ -254,6 +266,7 @@ export const FormFreeBarberOperation = React.memo(
     const stepSlideAnim = useRef(new Animated.Value(0)).current;
     const prevStepRef = useRef(0);
 
+    const insets = useSafeAreaInsets();
     const dispatch = useAppDispatch();
     const { userId } = useAuth();
     const { t, currentLanguage } = useLanguage();
@@ -268,6 +281,7 @@ export const FormFreeBarberOperation = React.memo(
         t("form.stepServices"),
         t("form.stepBeautySalon"),
         t("form.stepPrices"),
+        "Hizmet Paketleri",
         t("form.stepPreview"),
       ];
       if (isEdit) base.push(t("form.stepAvailability"));
@@ -298,6 +312,11 @@ export const FormFreeBarberOperation = React.memo(
     const [isCertificateLoading, setIsCertificateLoading] =
       React.useState(false);
     const [isSubmitting, setIsSubmitting] = React.useState(false);
+    const [fbFormPackages, setFbFormPackages] = React.useState<PackageFormItem[]>([]);
+    const [addServicePackage] = useAddServicePackageMutation();
+    const [updateServicePackageMutation] = useUpdateServicePackageMutation();
+    const [deleteServicePackageMutation] = useDeleteServicePackageMutation();
+    const [triggerGetPackagesByOwner] = useLazyGetServicePackagesByOwnerQuery();
     const [loadedImages, setLoadedImages] = React.useState<Set<number>>(
       new Set(),
     );
@@ -625,6 +644,26 @@ export const FormFreeBarberOperation = React.memo(
       initialDataLoadedRef.current = true;
     }, [enabled, isEdit, data, parentCategories, isCategoryLoading, findParentHierarchyFromServices, reset, getValues]);
 
+    // Edit modunda mevcut paketleri yükle (data yüklendikten sonra)
+    useEffect(() => {
+      if (!enabled || !isEdit || !freeBarberId || !data) return;
+      triggerGetPackagesByOwner(freeBarberId).then((res) => {
+        if (res.data && Array.isArray(res.data) && res.data.length > 0) {
+          // Backend'den gelen paket itemlarında serviceName snapshot var.
+          // fbServiceOptions ID olarak serviceName kullandığından, serviceName ile eşleştiriyoruz.
+          const mapped: PackageFormItem[] = res.data.map((pkg: any) => ({
+            localId: pkg.id,
+            id: pkg.id,
+            packageName: pkg.packageName,
+            totalPrice: String(pkg.totalPrice),
+            serviceOfferingIds: pkg.items?.map((item: any) => item.serviceName ?? item.serviceOfferingId) ?? [],
+          }));
+          setFbFormPackages(mapped);
+        }
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [enabled, isEdit, freeBarberId, data?.id]);
+
     // Kategori hiyerarşisi artık useCategoryHierarchy hook'u tarafından otomatik yönetiliyor
     // Eski useEffect'ler kaldırıldı - mainHeadings, subHeadings, services hook'tan geliyor
 
@@ -708,6 +747,25 @@ export const FormFreeBarberOperation = React.memo(
       });
       return base;
     }, [beautySalonCategoryOptions, selectedBeautySalonCategories]);
+
+    // Service options for ServicePackageStep (combines main + beauty salon services)
+    const fbServiceOptions = useMemo(() => {
+      const options: { id: string; label: string }[] = [];
+      const seen = new Set<string>();
+      (selectedCategories ?? []).forEach((name) => {
+        if (!seen.has(name)) {
+          options.push({ id: name, label: name });
+          seen.add(name);
+        }
+      });
+      (selectedBeautySalonCategories ?? []).forEach((name) => {
+        if (!seen.has(name)) {
+          options.push({ id: name, label: name });
+          seen.add(name);
+        }
+      });
+      return options;
+    }, [selectedCategories, selectedBeautySalonCategories]);
 
     // Memoized category label lookup map to avoid O(n²) operations
     const categoryLabelMap = useMemo(() => {
@@ -1242,6 +1300,89 @@ export const FormFreeBarberOperation = React.memo(
               }),
             );
           }
+          // Paket senkronizasyonu
+          const ownerId = isEdit
+            ? (data?.id ?? freeBarberId ?? "")
+            : (mutationResult.data?.data ?? "");
+          if (ownerId && fbFormPackages.length > 0) {
+            // serviceName → serviceOfferingId map
+            let offeringNameToId: Map<string, string>;
+            if (!isEdit) {
+              // Create: panel henüz oluşturuldu, offerings ID'lerini çek
+              const panelRes = await triggerGetFreeBarberPanel(ownerId);
+              offeringNameToId = new Map(
+                (panelRes.data?.offerings ?? []).map((o: any) => [o.serviceName, o.id]),
+              );
+            } else {
+              offeringNameToId = new Map(
+                (data?.offerings ?? []).map((o: any) => [o.serviceName, o.id]),
+              );
+            }
+            const resolveIds = (names: string[]) =>
+              names.map((n) => offeringNameToId.get(n)).filter((id): id is string => !!id);
+
+            if (!isEdit) {
+              // Create modunda: tüm paketleri ekle
+              await Promise.allSettled(
+                fbFormPackages.map((pkg) =>
+                  addServicePackage({
+                    ownerId,
+                    packageName: pkg.packageName,
+                    totalPrice: parseFloat(pkg.totalPrice.replace(",", ".")) || 0,
+                    serviceOfferingIds: resolveIds(pkg.serviceOfferingIds),
+                  }),
+                ),
+              );
+            } else {
+              // Update modunda: ekle / güncelle / sil
+              const existingPkgsRes = await triggerGetPackagesByOwner(ownerId);
+              const existingPkgs = existingPkgsRes.data ?? [];
+              const existingIds = new Set(existingPkgs.map((p: any) => p.id));
+              const formIds = new Set(fbFormPackages.filter((p) => p.id).map((p) => p.id!));
+
+              // Silinecekler
+              await Promise.allSettled(
+                existingPkgs
+                  .filter((p: any) => !formIds.has(p.id))
+                  .map((p: any) => deleteServicePackageMutation(p.id)),
+              );
+
+              // Eklenecekler
+              const toAdd = fbFormPackages.filter((p) => !p.id);
+              await Promise.allSettled(
+                toAdd.map((pkg) =>
+                  addServicePackage({
+                    ownerId,
+                    packageName: pkg.packageName,
+                    totalPrice: parseFloat(pkg.totalPrice.replace(",", ".")) || 0,
+                    serviceOfferingIds: resolveIds(pkg.serviceOfferingIds),
+                  }),
+                ),
+              );
+
+              // Güncellenecekler
+              const toUpdate = fbFormPackages.filter((p) => p.id && existingIds.has(p.id));
+              await Promise.allSettled(
+                toUpdate.map((pkg) =>
+                  updateServicePackageMutation({
+                    id: pkg.id!,
+                    ownerId,
+                    packageName: pkg.packageName,
+                    totalPrice: parseFloat(pkg.totalPrice.replace(",", ".")) || 0,
+                    serviceOfferingIds: resolveIds(pkg.serviceOfferingIds),
+                  }),
+                ),
+              );
+            }
+          } else if (ownerId && isEdit) {
+            // Edit modunda paket listesi boşsa mevcut paketleri sil
+            const existingPkgsRes = await triggerGetPackagesByOwner(ownerId);
+            const existingPkgs = existingPkgsRes.data ?? [];
+            await Promise.allSettled(
+              existingPkgs.map((p: any) => deleteServicePackageMutation(p.id)),
+            );
+          }
+
           // Refresh panel data to show updated images
           if (isEdit) {
             await triggerGetFreeBarberPanel(freeBarberId!);
@@ -1278,6 +1419,12 @@ export const FormFreeBarberOperation = React.memo(
         deleteImage,
         uploadMultipleImages,
         updateImageBlob,
+        fbFormPackages,
+        addServicePackage,
+        updateServicePackageMutation,
+        deleteServicePackageMutation,
+        triggerGetPackagesByOwner,
+        triggerGetFreeBarberPanel,
       ],
     );
 
@@ -1339,21 +1486,19 @@ export const FormFreeBarberOperation = React.memo(
 
     return (
       <KeyboardAvoidingView
-        className="h-full"
         style={{ flex: 1 }}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
-        keyboardVerticalOffset={Platform.OS === "ios" ? 64 : 0}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 8 : 0}
       >
-      <View className="h-full flex-1">
-        <View className="flex-row justify-between items-center px-2 py-2">
+      <View style={{ flex: 1 }}>
+        <View
+          className="flex-row justify-between items-center px-2 py-2"
+          style={{ zIndex: 2, elevation: 4 }}
+        >
           <Text className="flex-1 font-century-gothic text-2xl" style={{ color: colors.sectionHeaderText }}>
             {!isEdit ? t("form.createPanel") : t("form.editPanel")}
           </Text>
-          <IconButton
-            onPress={() => onClose?.()}
-            icon="close"
-            iconColor={colors.sectionHeaderText}
-          />
+          <SheetCloseButton onPress={() => onClose?.()} color={colors.sectionHeaderText} />
         </View>
 
         <Divider style={{ height: 1, backgroundColor: colors.borderColor }} />
@@ -1371,7 +1516,7 @@ export const FormFreeBarberOperation = React.memo(
               canNavigateFreely={isEdit}
               completedSteps={completedSteps}
             />
-            <ScrollView
+            <BottomSheetScrollView
               key={currentStep}
               keyboardShouldPersistTaps="handled"
               nestedScrollEnabled
@@ -1380,7 +1525,7 @@ export const FormFreeBarberOperation = React.memo(
               contentContainerStyle={{ flexGrow: 1, paddingBottom: 24, paddingHorizontal: 16 }}
               style={{ flex: 1 }}
             >
-              <Animated.View style={{ flex: 1, transform: [{ translateX: stepSlideAnim }] }}>
+              <Animated.View style={{ transform: [{ translateX: stepSlideAnim }] }}>
                 {currentStep === 0 && (
                   <>
                     <Text className="text-xl mt-2" style={{ color: colors.sectionHeaderText }}>
@@ -2154,7 +2299,19 @@ export const FormFreeBarberOperation = React.memo(
 
                   </>
                 )}
+                {/* Adım 7: Hizmet Paketleri */}
                 {currentStep === 7 && (
+                  <>
+                    <View className="px-2 mt-4">
+                      <ServicePackageStep
+                        packages={fbFormPackages}
+                        serviceOptions={fbServiceOptions}
+                        onPackagesChange={setFbFormPackages}
+                      />
+                    </View>
+                  </>
+                )}
+                {currentStep === 8 && (
                   <>
                     <View className="px-0 py-4">
                       <Text className="text-lg font-bold mb-4" style={{ color: colors.sectionHeaderText }}>
@@ -2217,7 +2374,7 @@ export const FormFreeBarberOperation = React.memo(
                     </View>
                   </>
                 )}
-                {currentStep === 8 && isEdit && (
+                {currentStep === 9 && isEdit && (
                   <>
                     <View className="px-4 mt-2">
                       <View className="rounded-xl p-4 flex-row items-center justify-between" style={{ backgroundColor: colors.cardBg, borderWidth: 1, borderColor: colors.borderColor }}>
@@ -2239,48 +2396,53 @@ export const FormFreeBarberOperation = React.memo(
                     </View>
                   </>
                 )}
-
-                <View className="px-3 my-4 flex-row gap-3 pb-6">
-                  {currentStep > 0 && (
-                    <Button
-                      className="flex-1 font-century-gothic"
-                      mode="outlined"
-                      onPress={handlePrevStep}
-                      buttonColor="#ffb900"
-                      textColor="#ffb900"
-                      labelStyle={{ fontSize: 16 }}
-                    >
-                      {t("form.stepPrev")}
-                    </Button>
-                  )}
-                  {currentStep < totalSteps - 1 ? (
-                    <Button
-                      className="font-century-gothic flex-1"
-                      mode="contained"
-                      onPress={handleNextStep}
-                      buttonColor="#ffb900"
-                      textColor="#1F2937"
-                      labelStyle={{ fontSize: 16 }}
-                    >
-                      {t("form.stepNext")}
-                    </Button>
-                  ) : (
-                    <Button
-                      className="flex-1 font-century-gothic"
-                      disabled={isSubmitting || addFreeBarberLoad || updateFreeBarberLoad}
-                      loading={isSubmitting || addFreeBarberLoad || updateFreeBarberLoad}
-                      mode="contained"
-                      onPress={handleSubmit((form) => guard(() => OnSubmit(form)), onErrors)}
-                      buttonColor="#10B981"
-                      textColor="white"
-                      labelStyle={{ fontSize: 16 }}
-                    >
-                      {!isEdit ? t("common.add") : t("common.update")}
-                    </Button>
-                  )}
-                </View>
               </Animated.View>
-            </ScrollView>
+            </BottomSheetScrollView>
+            <View
+              className="px-3 flex-row gap-3"
+              style={{
+                paddingTop: 12,
+                paddingBottom: Math.max(insets.bottom, 20) + 10,
+              }}
+            >
+              {currentStep > 0 && (
+                <Button
+                  className="flex-1 font-century-gothic"
+                  mode="outlined"
+                  onPress={handlePrevStep}
+                  buttonColor="#ffb900"
+                  textColor="#ffb900"
+                  labelStyle={{ fontSize: 16 }}
+                >
+                  {t("form.stepPrev")}
+                </Button>
+              )}
+              {currentStep < totalSteps - 1 ? (
+                <Button
+                  className="font-century-gothic flex-1"
+                  mode="contained"
+                  onPress={handleNextStep}
+                  buttonColor="#ffb900"
+                  textColor="#1F2937"
+                  labelStyle={{ fontSize: 16 }}
+                >
+                  {t("form.stepNext")}
+                </Button>
+              ) : (
+                <Button
+                  className="flex-1 font-century-gothic"
+                  disabled={isSubmitting || addFreeBarberLoad || updateFreeBarberLoad}
+                  loading={isSubmitting || addFreeBarberLoad || updateFreeBarberLoad}
+                  mode="contained"
+                  onPress={handleSubmit((form) => guard(() => OnSubmit(form)), onErrors)}
+                  buttonColor="#10B981"
+                  textColor="white"
+                  labelStyle={{ fontSize: 16 }}
+                >
+                  {!isEdit ? t("common.add") : t("common.update")}
+                </Button>
+              )}
+            </View>
           </>
         )}
       </View>

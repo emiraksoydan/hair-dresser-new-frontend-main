@@ -27,47 +27,6 @@ interface FavoriteButtonProps {
 /**
  * Favori butonu — kalp animasyonu useFavoriteHeartPulse ile; button varyantında tüm satır tıklanabilir.
  */
-/**
- * Kendi panel / kendi işletme kartı: sayı alınan toplam favori, kalp ise "ben favoriledim mi" — karışıklığı önlemek için sadece istatistik (tıklanamaz).
- */
-export const FavoriteReceivedStat: React.FC<{
-  count: number;
-  className?: string;
-  variant?: "icon" | "button";
-  size?: number;
-}> = ({ count, className = "", variant = "icon", size = 25 }) => {
-  const { colors } = useTheme();
-  const { t } = useLanguage();
-  const label = t("panel.favoritesReceived", { count });
-  return (
-    <View
-      className={`flex-row items-center ${variant === "icon" ? "" : "gap-1"} ${className}`}
-      accessibilityRole="text"
-      accessibilityLabel={label}
-    >
-      <View className={variant === "icon" ? "px-1" : ""} pointerEvents="none">
-        <Icon
-          source="heart-outline"
-          size={size}
-          color={colors.textSecondary}
-        />
-      </View>
-      <Text
-        style={{ color: colors.sectionHeaderText, fontSize: 14 }}
-        className="font-century-gothic-sans-regular"
-      >
-        (
-        <AnimatedCountText
-          value={count}
-          style={{ color: colors.sectionHeaderText, fontSize: 14 }}
-          className="font-century-gothic-sans-regular"
-        />
-        )
-      </Text>
-    </View>
-  );
-};
-
 export const FavoriteButton: React.FC<FavoriteButtonProps> = ({
   isFavorite,
   favoriteCount,

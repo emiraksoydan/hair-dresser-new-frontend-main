@@ -41,6 +41,7 @@ interface NotificationItemProps {
   formatPricingPolicy: (t?: number, v?: number) => any;
   formatRating: (r?: number) => any;
   onAddStore?: (appointmentId: string) => void;
+  onCloseSheet?: () => void;
 }
 
 // Status tipi için yardımcı tip
@@ -175,6 +176,7 @@ export const NotificationItemOptimized = React.memo<NotificationItemProps>(
     formatPricingPolicy,
     formatRating,
     onAddStore,
+    onCloseSheet,
   }) => {
     const { colors, isDark } = useTheme();
     const { isAuthenticated } = useAuth();
@@ -289,6 +291,12 @@ export const NotificationItemOptimized = React.memo<NotificationItemProps>(
     }, [isExpiredCheck, appointmentStatus]);
 
     const isPending = finalAppointmentStatus === AppointmentStatus.Pending;
+
+    // Pending veya Approved randevuya ait bildirimlerde silme butonu gösterilmez
+    const canDelete =
+      !item.appointmentId ||
+      (finalAppointmentStatus !== AppointmentStatus.Pending &&
+        finalAppointmentStatus !== AppointmentStatus.Approved);
 
     // ========== SÜRE KONTROLÜ ==========
     const isExpired = isExpiredCheck;
@@ -496,11 +504,14 @@ export const NotificationItemOptimized = React.memo<NotificationItemProps>(
       const lat = payload?.store?.latitude;
       const lng = payload?.store?.longitude;
       if (!lat || !lng) return;
-      router.push({
-        pathname: "/(freebarbertabs)/(panel)",
-        params: { focusLat: String(lat), focusLng: String(lng) },
-      });
-    }, [payload?.store?.latitude, payload?.store?.longitude, router]);
+      onCloseSheet?.();
+      setTimeout(() => {
+        router.push({
+          pathname: "/(freebarbertabs)/(panel)",
+          params: { focusLat: String(lat), focusLng: String(lng) },
+        });
+      }, 220);
+    }, [payload?.store?.latitude, payload?.store?.longitude, router, onCloseSheet]);
 
     // Tıklama: Aksiyon bildirimlerinde (onay/red) dokunarak okuma yok; sadece diğer türlerde.
     // Karar bekleyen + süresi dolmamış aksiyonlarda kart tıklanmasın (butonlara odaklanılsın).
@@ -607,7 +618,7 @@ export const NotificationItemOptimized = React.memo<NotificationItemProps>(
             {getMessage(item.title)}
           </Text>
           <View className="flex-row items-center gap-2">
-            {onDelete && (
+            {onDelete && canDelete && (
                 <TouchableOpacity
                   onPress={handleDelete}
                   disabled={isDeleting}
@@ -755,6 +766,47 @@ export const NotificationItemOptimized = React.memo<NotificationItemProps>(
                   </View>
                 </View>
               )}
+
+            {/* Service Packages */}
+            {payload.packages && payload.packages.length > 0 && (
+              <View className="mb-2 mt-2">
+                <Text
+                  style={[contentStyles.sectionLabel, { color: colors.textSecondary }]}
+                >
+                  Paketler
+                </Text>
+                <View style={{ gap: 6 }}>
+                  {payload.packages.map((pkg: any) => (
+                    <View
+                      key={pkg.packageId}
+                      className="px-3 py-2 rounded-xl"
+                      style={{
+                        backgroundColor: isDark ? 'rgba(167,139,250,0.1)' : 'rgba(167,139,250,0.08)',
+                        borderWidth: 1,
+                        borderColor: isDark ? 'rgba(167,139,250,0.3)' : 'rgba(167,139,250,0.2)',
+                      }}
+                    >
+                      <View className="flex-row items-center justify-between">
+                        <View className="flex-row items-center gap-1.5 flex-1 mr-2">
+                          <Icon source="tag-multiple-outline" size={14} color="#a78bfa" />
+                          <Text style={{ fontFamily: 'CenturyGothic-Bold', fontSize: 13, color: colors.sectionHeaderText, flex: 1 }} numberOfLines={1}>
+                            {pkg.packageName}
+                          </Text>
+                        </View>
+                        <Text style={{ fontFamily: 'CenturyGothic-Bold', fontSize: 13, color: '#a78bfa' }}>
+                          {pkg.totalPrice} {t('card.currencySymbol')}
+                        </Text>
+                      </View>
+                      {pkg.serviceNamesSnapshot && (
+                        <Text style={{ fontFamily: 'CenturyGothic', fontSize: 11, color: colors.textSecondary, marginTop: 2, marginLeft: 20 }} numberOfLines={1}>
+                          {pkg.serviceNamesSnapshot}
+                        </Text>
+                      )}
+                    </View>
+                  ))}
+                </View>
+              </View>
+            )}
 
             {/* Note Section */}
             {payload.note &&

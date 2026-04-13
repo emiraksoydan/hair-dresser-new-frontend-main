@@ -1,11 +1,11 @@
 import { useSelector } from "react-redux";
 import { hideSnack } from "../store/snackbarSlice";
 import { RootState } from "../store/redux-store";
-import { Snackbar } from "react-native-paper";
+import { Portal, Snackbar } from "react-native-paper";
 import React, { useRef, useCallback, useEffect } from "react";
 import { useDispatch } from "react-redux";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Modal, StyleSheet, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 import { useLanguage } from "./useLanguage";
 
 // useSnackbar hook kaldırıldı - direkt slice kullanın:
@@ -49,16 +49,9 @@ export const GlobalSnackbar: React.FC = () => {
     }
   }, [visible, handleDismiss]);
 
-  // RN Modal, Paper Modal / başka Portal katmanlarının üstünde — snackbar her zaman önde
+  // Portal kullanımı: Modal'ın aksine arkasındaki UI'ı bloke etmez (Android'de Modal tüm dokunuşları engeller)
   return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="none"
-      statusBarTranslucent
-      presentationStyle="overFullScreen"
-      onRequestClose={handleDismiss}
-    >
+    <Portal>
       <View style={styles.overlay} pointerEvents="box-none">
         <Snackbar
           visible={visible}
@@ -73,7 +66,7 @@ export const GlobalSnackbar: React.FC = () => {
             elevation: 999,
           }}
           style={{
-            backgroundColor: isError ? "#b91c1c" : "#15803d", // Kırmızı: hata, Yeşil: başarı
+            backgroundColor: isError ? "#b91c1c" : "#15803d",
           }}
           action={{
             label: t("common.close"),
@@ -84,7 +77,7 @@ export const GlobalSnackbar: React.FC = () => {
           {message}
         </Snackbar>
       </View>
-    </Modal>
+    </Portal>
   );
 };
 

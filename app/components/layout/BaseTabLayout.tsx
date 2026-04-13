@@ -1,10 +1,10 @@
 import React, { useState, useMemo, useCallback, useRef, useEffect } from "react";
-import { View, Pressable, ActivityIndicator } from "react-native";
+import { View, Pressable, ActivityIndicator, TouchableOpacity, StyleSheet } from "react-native";
 import { AIAssistantSheet } from "../ai/AIAssistantSheet";
 import { useSegments } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Tabs } from "expo-router";
-import { BottomSheetModal } from "@gorhom/bottom-sheet";
+import { BottomSheetModal, BottomSheetView } from "@gorhom/bottom-sheet";
 import { CustomCurvedTabBar, CustomTabItem } from "../common/CustomCurvedTabBar";
 import { Text } from "../common/Text";
 import { BadgeIconButton } from "../common/badgeiconbutton";
@@ -31,6 +31,9 @@ import { useLanguage } from "../../hook/useLanguage";
 import { useTheme } from "../../hook/useTheme";
 import { useGetBadgeCountsQuery } from "../../store/api";
 import { UserType } from "../../types";
+import { useMultiAccount } from "../../context/MultiAccountContext";
+import { useNotificationOpener } from "../../context/NotificationOpenerContext";
+import { AccountSwitcherSheet } from "../common/AccountSwitcherSheet";
 
 export interface TabConfig {
   name: string;
@@ -119,6 +122,7 @@ export const BaseTabLayout: React.FC<BaseTabLayoutProps> = ({
   const aiSheetRef = useRef<BottomSheetModal>(null);
   const [aiSheetOpen, setAiSheetOpen] = useState(false);
   const [notiSheetOpen, setNotiSheetOpen] = useState(false);
+  const [accountSwitcherOpen, setAccountSwitcherOpen] = useState(false);
   const [overlaySheetOpen, setOverlaySheetOpen] = useState(false);
   const [panelFabItems, setPanelFabItems] = useState<MoreFabMenuItem[] | null>(null);
   const [headerDeleteAction, setHeaderDeleteAction] = useState<HeaderDeleteAction>(null);
@@ -147,6 +151,38 @@ export const BaseTabLayout: React.FC<BaseTabLayoutProps> = ({
     enablePanDownToClose: true,
     enableOverDrag: false,
   });
+
+  const { registerOpenNotifications } = useNotificationOpener();
+  useEffect(() => {
+    registerOpenNotifications(notificationsSheet.present);
+  }, [registerOpenNotifications, notificationsSheet.present]);
+
+  // Multi-account switcher
+  const {
+    accounts,
+    currentUserId,
+    switchAccount,
+    registerOpenAccountSwitcher,
+    prepareAccountSwitcherList,
+    isSwitchingAccount,
+  } = useMultiAccount();
+  const accountSwitcherSheet = useBottomSheet({
+    snapPoints: ["50%", "85%"],
+    enablePanDownToClose: true,
+    enableOverDrag: false,
+  });
+
+  const openAccountSwitcherSheet = useCallback(async () => {
+    await prepareAccountSwitcherList();
+    accountSwitcherSheet.present();
+  }, [prepareAccountSwitcherList, accountSwitcherSheet.present]);
+
+  // Register the open function so profile header chevron can trigger it too
+  useEffect(() => {
+    registerOpenAccountSwitcher(() => {
+      void openAccountSwitcherSheet();
+    });
+  }, [registerOpenAccountSwitcher, openAccountSwitcherSheet]);
 
   // Badge count'ları API'den al (SignalR ile anlık güncellenir)
   const { data: badgeCounts } = useGetBadgeCountsQuery(undefined, {
@@ -212,8 +248,15 @@ export const BaseTabLayout: React.FC<BaseTabLayoutProps> = ({
     noopShopping,
   ]);
 
+  /** Birden fazla sheet aynı anda açık olabilsin; her kaynak +1/-1 ile FAB gizlenir (boolean tek başına yetmez). */
+  const overlayFabLockRef = useRef(0);
   const reportOverlayOpen = useCallback((open: boolean) => {
-    setOverlaySheetOpen(open);
+    if (open) {
+      overlayFabLockRef.current += 1;
+    } else {
+      overlayFabLockRef.current = Math.max(0, overlayFabLockRef.current - 1);
+    }
+    setOverlaySheetOpen(overlayFabLockRef.current > 0);
   }, []);
 
   const moreFabContextValue = useMemo(
@@ -282,7 +325,17 @@ export const BaseTabLayout: React.FC<BaseTabLayoutProps> = ({
       headerTitle: tab.headerTitle,
       hideHeaderTitle: tab.hideHeaderTitle,
     })),
-    [tabs, colors.headerBg, insets.top]
+    [tabs, colors.headerBg, colors.headerText, insets.top, accounts, currentUserId, openAccountSwitcherSheet]
+  );
+
+  const otherAccounts = useMemo(
+    () =>
+      accounts.filter(
+        (a) =>
+          currentUserId == null ||
+          a.id.toLowerCase() !== currentUserId.toLowerCase()
+      ),
+    [accounts, currentUserId]
   );
 
   // Custom Curved Tab Bar renderer
@@ -323,6 +376,25 @@ export const BaseTabLayout: React.FC<BaseTabLayoutProps> = ({
         }
       };
 
+      const handleTabDoubleTap = async (index: number, tabItem: CustomTabItem) => {
+        // Only handle double-tap on the profile tab
+        if (tabItem.key !== "(profile)") return;
+        const otherAccounts = accounts.filter(
+          (a) =>
+            currentUserId == null ||
+            a.id.toLowerCase() !== currentUserId.toLowerCase()
+        );
+        if (otherAccounts.length === 0) {
+          void openAccountSwitcherSheet();
+          return;
+        }
+        if (otherAccounts.length === 1) {
+          await switchAccount(otherAccounts[0]!);
+        } else {
+          void openAccountSwitcherSheet();
+        }
+      };
+
       return (
         <View style={{
           // screenBg kullan: notch (oval oyuk) alanı görünsün - dark/light her ikisinde kontrast sağlar
@@ -337,6 +409,7 @@ export const BaseTabLayout: React.FC<BaseTabLayoutProps> = ({
             tabs={customTabs}
             activeIndex={activeIndex}
             onTabPress={handleTabPress}
+            onTabDoubleTap={handleTabDoubleTap}
             accentColor={accentColor}
             backgroundColor={colors.tabBarBg}
             activeIconColor="#FFFFFF"
@@ -346,7 +419,7 @@ export const BaseTabLayout: React.FC<BaseTabLayoutProps> = ({
         </View>
       );
     },
-    [tabs, unreadMsg, accentColor, colors, isDark],
+    [tabs, unreadMsg, accentColor, colors, isDark, accounts, currentUserId, switchAccount, openAccountSwitcherSheet],
   );
 
   return (
@@ -374,6 +447,21 @@ export const BaseTabLayout: React.FC<BaseTabLayoutProps> = ({
               headerTitle: () =>
                 tabOpt.hideHeaderTitle ? (
                   <View style={{ flex: 1 }} />
+                ) : tabOpt.name === "(profile)" ? (
+                  <View style={{ alignItems: "center", justifyContent: "center" }}>
+                    <TouchableOpacity
+                      onPress={() => {
+                        void openAccountSwitcherSheet();
+                      }}
+                      activeOpacity={0.7}
+                      style={{ flexDirection: "row", alignItems: "center", gap: 4 }}
+                    >
+                      <Text className="text-2xl" style={{ color: colors.headerText }}>
+                        {tabOpt.headerTitle}
+                      </Text>
+                      <Icon source="chevron-down" size={22} color={colors.headerText} />
+                    </TouchableOpacity>
+                  </View>
                 ) : (
                   <View className="flex-1 justify-center">
                     <Text className="text-2xl mr-0" style={{ color: colors.headerText }}>
@@ -419,11 +507,48 @@ export const BaseTabLayout: React.FC<BaseTabLayoutProps> = ({
 
       <HelpGuideOnboardingNudge />
 
+      {/* Account Switcher Bottom Sheet */}
+      <BottomSheetModal
+        ref={accountSwitcherSheet.ref}
+        backdropComponent={accountSwitcherSheet.makeBackdrop()}
+        handleIndicatorStyle={{ backgroundColor: colors.sheetHandle }}
+        backgroundStyle={{ backgroundColor: colors.sheetBg }}
+        snapPoints={accountSwitcherSheet.snapPoints}
+        enableOverDrag={accountSwitcherSheet.enableOverDrag}
+        enablePanDownToClose={accountSwitcherSheet.enablePanDownToClose}
+        onChange={(index) => {
+          accountSwitcherSheet.handleChange(index);
+          setAccountSwitcherOpen(index >= 0);
+        }}
+        onDismiss={() => setAccountSwitcherOpen(false)}
+      >
+        <AccountSwitcherSheet
+          accounts={accounts}
+          currentUserId={currentUserId}
+          onSelectAccount={async (target) => {
+            if (
+              currentUserId == null ||
+              target.id.toLowerCase() !== currentUserId.toLowerCase()
+            ) {
+              await switchAccount(target);
+            }
+          }}
+          onClose={() => accountSwitcherSheet.dismiss()}
+          onAddAccount={() => router.push({ pathname: '/(auth)', params: { addAccount: 'true' } } as any)}
+        />
+      </BottomSheetModal>
+
       {/* Additional Bottom Sheets */}
       {renderAdditionalBottomSheets?.()}
 
       {/* Additional children */}
       {children}
+
+      {isSwitchingAccount && (
+        <View style={[styles.switchingOverlay, { backgroundColor: isDark ? "rgba(0,0,0,0.48)" : "rgba(0,0,0,0.32)" }]}>
+          <ActivityIndicator size="large" color={accentColor} />
+        </View>
+      )}
 
       {showMainFab ? (
         <MoreActionsFab
@@ -432,6 +557,7 @@ export const BaseTabLayout: React.FC<BaseTabLayoutProps> = ({
           fabNudgeDown={fabNudgeDown}
           hidden={
             notiSheetOpen ||
+            accountSwitcherOpen ||
             aiSheetOpen ||
             overlaySheetOpen ||
             layoutSheetOpen
@@ -449,3 +575,12 @@ export const BaseTabLayout: React.FC<BaseTabLayoutProps> = ({
     </MoreFabPanelContext.Provider>
   );
 };
+
+const styles = StyleSheet.create({
+  switchingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 999,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+});

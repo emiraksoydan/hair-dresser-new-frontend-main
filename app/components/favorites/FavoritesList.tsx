@@ -1,5 +1,5 @@
 import { Icon } from "react-native-paper";
-import React, { useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { View, FlatList, Dimensions, RefreshControl, ScrollView, TouchableOpacity } from 'react-native';
 import { PerplexityAnimatedList } from '../common/PerplexityAnimatedList';
 import { Text } from '../common/Text';
@@ -24,7 +24,8 @@ import { FormFreeBarberOperation } from '../freebarber/formfreebarberoper';
 import { SkeletonComponent } from '../common/skeleton';
 import { useLanguage } from '../../hook/useLanguage';
 import { useTheme } from '../../hook/useTheme';
-import { MoreFabPanelContext } from '../layout/MoreFabContext';
+import { useFabOverlayWhenSheetOpen } from '../../hook/usePanelMoreFab';
+import { useDeferredSheetPresent } from '../../hook/useDeferredSheetPresent';
 
 type FavoritesListProps = {
     mode?: 'store' | 'customer' | 'freebarber';
@@ -70,12 +71,21 @@ const FavoritesList: React.FC<FavoritesListProps> = ({ mode = 'store' }) => {
         enableHandlePanningGesture: false,
     });
 
-    const fabPanelCtx = useContext(MoreFabPanelContext);
-    useEffect(() => {
-        const anyPanelSheetOpen = updateStoreSheet.isOpen || updateFreeBarberSheet.isOpen;
-        fabPanelCtx?.reportOverlayOpen(anyPanelSheetOpen);
-        return () => fabPanelCtx?.reportOverlayOpen(false);
-    }, [updateStoreSheet.isOpen, updateFreeBarberSheet.isOpen, fabPanelCtx]);
+    const anyFavoritesSheetOpen =
+        ratingsSheet.isOpen ||
+        updateStoreSheet.isOpen ||
+        updateFreeBarberSheet.isOpen;
+    useFabOverlayWhenSheetOpen(anyFavoritesSheetOpen);
+
+    const { present: presentRatings } = ratingsSheet;
+    const { schedulePresent: scheduleRatingsPresent, cancelScheduledPresent: cancelRatingsPresent } =
+        useDeferredSheetPresent(presentRatings);
+    const { present: presentUpdateStore } = updateStoreSheet;
+    const { schedulePresent: scheduleUpdateStorePresent, cancelScheduledPresent: cancelUpdateStorePresent } =
+        useDeferredSheetPresent(presentUpdateStore);
+    const { present: presentUpdateFreeBarber } = updateFreeBarberSheet;
+    const { schedulePresent: scheduleUpdateFreeBarberPresent, cancelScheduledPresent: cancelUpdateFreeBarberPresent } =
+        useDeferredSheetPresent(presentUpdateFreeBarber);
 
     const [selectedRatingsTarget, setSelectedRatingsTarget] = useState<{ targetId: string; targetName: string } | null>(null);
     const [selectedStoreForUpdate, setSelectedStoreForUpdate] = useState<BarberStoreGetDto | null>(null);
@@ -111,9 +121,7 @@ const FavoritesList: React.FC<FavoritesListProps> = ({ mode = 'store' }) => {
         // barberStoreOwnerId ile currentUserId karşılaştır
         if (store.barberStoreOwnerId && currentUserId && store.barberStoreOwnerId === currentUserId) {
             setSelectedStoreForUpdate(store);
-            setTimeout(() => {
-                updateStoreSheet.present();
-            }, 100);
+            scheduleUpdateStorePresent(100);
             return;
         }
 
@@ -122,15 +130,13 @@ const FavoritesList: React.FC<FavoritesListProps> = ({ mode = 'store' }) => {
             pathname: "/store/[storeId]",
             params: { storeId: store.id, mode: mode },
         });
-    }, [router, mode, currentUserId, updateStoreSheet, dispatch, storeSwipeIdOrder]);
+    }, [router, mode, currentUserId, scheduleUpdateStorePresent, dispatch, storeSwipeIdOrder]);
 
     const goFreeBarberDetail = useCallback((freeBarber: FreeBarGetDto) => {
         // Eğer kullanıcının kendi freeBarber paneli ise update sheet'e yönlendir
         // freeBarberUserId ile currentUserId karşılaştır
         if (freeBarber.freeBarberUserId && currentUserId && freeBarber.freeBarberUserId === currentUserId) {
-            setTimeout(() => {
-                updateFreeBarberSheet.present();
-            }, 100);
+            scheduleUpdateFreeBarberPresent(100);
             return;
         }
 
@@ -139,15 +145,12 @@ const FavoritesList: React.FC<FavoritesListProps> = ({ mode = 'store' }) => {
             pathname: "/freebarber/[freeBarberId]",
             params: { freeBarberId: freeBarber.id },
         });
-    }, [router, currentUserId, updateFreeBarberSheet, dispatch, freeBarberSwipeIdOrder]);
+    }, [router, currentUserId, scheduleUpdateFreeBarberPresent, dispatch, freeBarberSwipeIdOrder]);
 
     const handlePressRatings = useCallback((targetId: string, targetName: string) => {
         setSelectedRatingsTarget({ targetId, targetName });
-        // Sheet'i açmak için küçük bir gecikme ekle
-        setTimeout(() => {
-            ratingsSheet.present();
-        }, 100);
-    }, [ratingsSheet]);
+        scheduleRatingsPresent(100);
+    }, [scheduleRatingsPresent]);
 
     const customerFavorites = useMemo(() => {
         return favorites?.filter(f => f.targetType === FavoriteTargetType.Customer && f.customer) || [];
@@ -371,12 +374,17 @@ const FavoritesList: React.FC<FavoritesListProps> = ({ mode = 'store' }) => {
                         setSelectedRatingsTarget(null);
                     }
                 }}
+                onDismiss={() => {
+                    cancelRatingsPresent();
+                    ratingsSheet.handleDismiss();
+                }}
             >
                 {selectedRatingsTarget ? (
                     <RatingsBottomSheet
                         targetId={selectedRatingsTarget.targetId}
                         targetName={selectedRatingsTarget.targetName}
                         onClose={() => {
+                            cancelRatingsPresent();
                             setSelectedRatingsTarget(null);
                             ratingsSheet.dismiss();
                         }}
@@ -405,6 +413,11 @@ const FavoritesList: React.FC<FavoritesListProps> = ({ mode = 'store' }) => {
                         // RTK Query otomatik olarak cache'i güncelleyecek
                     }
                 }}
+                onDismiss={() => {
+                    cancelUpdateStorePresent();
+                    updateStoreSheet.handleDismiss();
+                    setSelectedStoreForUpdate(null);
+                }}
             >
                 <BottomSheetView className="h-full pt-2">
                     {selectedStoreForUpdate && (
@@ -412,6 +425,7 @@ const FavoritesList: React.FC<FavoritesListProps> = ({ mode = 'store' }) => {
                             storeId={selectedStoreForUpdate.id}
                             enabled={updateStoreSheet.isOpen}
                             onClose={() => {
+                                cancelUpdateStorePresent();
                                 updateStoreSheet.dismiss();
                                 setSelectedStoreForUpdate(null);
                             }}
@@ -436,6 +450,10 @@ const FavoritesList: React.FC<FavoritesListProps> = ({ mode = 'store' }) => {
                         // RTK Query otomatik olarak cache'i güncelleyecek
                     }
                 }}
+                onDismiss={() => {
+                    cancelUpdateFreeBarberPresent();
+                    updateFreeBarberSheet.handleDismiss();
+                }}
             >
                 <BottomSheetView className="h-full pt-2">
                     {myFreeBarber && updateFreeBarberSheet.isOpen && (
@@ -443,6 +461,7 @@ const FavoritesList: React.FC<FavoritesListProps> = ({ mode = 'store' }) => {
                             freeBarberId={myFreeBarber.id}
                             enabled={true}
                             onClose={() => {
+                                cancelUpdateFreeBarberPresent();
                                 updateFreeBarberSheet.dismiss();
                             }}
                         />

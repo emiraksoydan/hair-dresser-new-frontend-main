@@ -90,7 +90,7 @@ export function useNearbyControl({
             {
                 accuracy: Location.Accuracy.Balanced,
                 distanceInterval: 50,
-                timeInterval: 3000,
+                timeInterval: 10000,
             },
             (pos) => {
                 const lat = pos.coords.latitude;

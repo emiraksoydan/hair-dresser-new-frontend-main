@@ -9,7 +9,7 @@
 | EAS kurulumu (`eas init`) | ✅ Tamamlandı |
 | `app.config.js` güncellendi | ✅ Tamamlandı |
 | `eas.json` hazır | ✅ Tamamlandı |
-| Apple Developer hesabı | ⏳ Onay bekleniyor |
+| Apple Developer hesabı | ✅ Aktif |
 | Google Play Console hesabı | ⏳ Onay bekleniyor |
 | Adım 1–20 | ⬜ Yapılmadı |
 
@@ -131,18 +131,27 @@ Play Console sol menüde sırayla aç, hepsini tamamla:
 
 ## AŞAMA 3 — EAS Secrets Tanımla
 
-### Adım 9 — Google Maps API Key'i Secret Olarak Ekle
-Terminal'de proje klasöründe çalıştır:
+### Adım 9 — Production ortam değişkenleri (EAS)
+`eas.json` içindeki `production` profili `"environment": "production"` kullanır; değişkenler [expo.dev](https://expo.dev) → Project → **Environment variables** → **production** ile eşleşir.
+
+**Önerilen (Windows):** proje kökünde:
 
 ```bash
-eas secret:create --scope project --name GOOGLE_MAPS_API_KEY --value "API_KEY_BURAYA"
+npm run verify:firebase
+npm run eas:secrets
 ```
 
-Firebase dosyaları için (isteğe bağlı):
+Script sırasıyla `GOOGLE_MAPS_API_KEY` ve (dosyalar varsa) `google-services.json` / `GoogleService-Info.plist` için **file** tipinde `GOOGLE_SERVICES_JSON` / `GOOGLE_SERVICES_PLIST` oluşturur. Önce `npx eas login` gerekir.
+
+**Manuel (CLI):**
+
 ```bash
-eas secret:create --scope project --name GOOGLE_SERVICES_JSON --type file --value ./google-services.json
-eas secret:create --scope project --name GOOGLE_SERVICES_PLIST --type file --value ./GoogleService-Info.plist
+npx eas-cli env:create --environment production --name GOOGLE_MAPS_API_KEY --value "API_KEY_BURAYA" --visibility secret
+npx eas-cli env:create --environment production --name GOOGLE_SERVICES_JSON --type file --value ./google-services.json --visibility secret
+npx eas-cli env:create --environment production --name GOOGLE_SERVICES_PLIST --type file --value ./GoogleService-Info.plist --visibility secret
 ```
+
+> Eski `eas secret:create` yerine `eas env:create` + `--environment production` kullanın.
 
 ---
 

@@ -10,7 +10,7 @@ export type MoreFabMenuItem = {
 export type HeaderDeleteAction = { onPress: () => void; loading: boolean } | null;
 
 /** Panel ekranı `usePanelMoreFab` ile buraya satır ekler; layout birleştirip FAB'da gösterir.
- *  `reportOverlayOpen`: herhangi bir alt sheet açıldığında FAB'ı gizlemek için çağrılır.
+ *  `reportOverlayOpen(true|false)`: BaseTabLayout içinde ref-count; her açık sheet bir kilit (`useFabOverlayWhenSheetOpen`).
  *  `setHeaderDeleteAction`: randevu sekmesi header'ına "tümünü sil" butonu yerleştirmek için. */
 export const MoreFabPanelContext = createContext<{
   setPanelFabItems: (items: MoreFabMenuItem[] | null) => void;

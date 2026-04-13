@@ -1,4 +1,4 @@
-import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useMemo, useRef, useState } from "react";
 import {
   Dimensions,
   FlatList,
@@ -10,7 +10,7 @@ import {
 import { Icon } from "react-native-paper";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Text } from "../../components/common/Text";
-import MapView from "react-native-maps";
+import { OsmMapView as MapView } from "../../components/common/OsmMapView";
 import SearchBar from "../../components/common/searchbar";
 import { BottomSheetModal, BottomSheetView } from "@gorhom/bottom-sheet";
 import { useBottomSheet } from "../../hook/useBottomSheet";
@@ -48,7 +48,8 @@ import { useSubscriptionGuard } from "../../hook/useSubscriptionGuard";
 import { useSafeNavigation } from "../../hook/useSafeNavigation";
 import { isOtherUsersFreeBarber } from "../../utils/compare-eligibility";
 import { PanelCollapsibleTop } from "../../components/panel/PanelCollapsibleTop";
-import { usePanelMoreFab } from "../../hook/usePanelMoreFab";
+import { useFabOverlayWhenSheetOpen, usePanelMoreFab } from "../../hook/usePanelMoreFab";
+import { useDeferredSheetPresent } from "../../hook/useDeferredSheetPresent";
 import { getCompareStripBottom } from "../../components/layout/panelBottomOverlays";
 import {
   compareStripCtaStyle,
@@ -59,7 +60,6 @@ import { PerplexityListItem } from "../../components/panel/PerplexityListItem";
 import { PerplexityHorizontalList } from "../../components/panel/PerplexityHorizontalList";
 import { PanelEmptyCta } from "../../components/common/PanelEmptyCta";
 import { useBarberStoreSheet } from "../../context/BarberStoreSheetContext";
-import { MoreFabPanelContext } from "../../components/layout/MoreFabContext";
 
 const Index = () => {
   const insets = useSafeAreaInsets();
@@ -75,7 +75,6 @@ const Index = () => {
   const guard = useActionGuard();
   const { withSubscription } = useSubscriptionGuard();
   const barberStoreSheet = useBarberStoreSheet();
-  const fabCtx = useContext(MoreFabPanelContext);
 
   // Current user for filters
   const { data: currentUser } = useGetMeQuery();
@@ -152,6 +151,19 @@ const Index = () => {
     null,
   );
 
+  const panelMapFabItems = useMemo(
+    () => [
+      {
+        id: "panel-map-toggle",
+        icon: isMapMode ? "format-list-bulleted" : "map",
+        label: isMapMode ? t("common.list") : t("common.searchOnMap"),
+        onPress: () => setIsMapMode((m) => !m),
+      },
+    ],
+    [isMapMode, t],
+  );
+  usePanelMoreFab(panelMapFabItems);
+
   // Bottom sheet hooks
   const mapDetailSheet = useBottomSheet({
     snapPoints: ["90%", "100%"],
@@ -163,10 +175,7 @@ const Index = () => {
   });
 
   const anySheetOpen = mapDetailSheet.isOpen || ratingsSheet.isOpen;
-  useEffect(() => {
-    fabCtx?.reportOverlayOpen(anySheetOpen);
-    return () => { fabCtx?.reportOverlayOpen(false); };
-  }, [anySheetOpen, fabCtx]);
+  useFabOverlayWhenSheetOpen(anySheetOpen);
 
   const [searchQuery, setSearchQuery] = useState("");
   const [isList, setIsList] = useState(true);
@@ -235,15 +244,21 @@ const Index = () => {
   );
 
   const { present: presentRatings } = ratingsSheet;
+  const { schedulePresent: scheduleRatingsPresent, cancelScheduledPresent: cancelRatingsPresent } =
+    useDeferredSheetPresent(presentRatings);
+
+  const dismissRatingsSheet = useCallback(() => {
+    cancelRatingsPresent();
+    setSelectedRatingsTarget(null);
+    ratingsSheet.dismiss();
+  }, [cancelRatingsPresent, ratingsSheet]);
+
   const handlePressRatings = useCallback(
     (targetId: string, targetName: string) => {
       setSelectedRatingsTarget({ targetId, targetName });
-      // Sheet'i açmak için küçük bir gecikme ekle
-      setTimeout(() => {
-        presentRatings();
-      }, 100);
+      scheduleRatingsPresent(100);
     },
-    [presentRatings],
+    [scheduleRatingsPresent],
   );
 
   // Filter fonksiyonları - filters are applied instantly, no apply button needed
@@ -829,15 +844,16 @@ const Index = () => {
             setSelectedRatingsTarget(null);
           }
         }}
+        onDismiss={() => {
+          cancelRatingsPresent();
+          ratingsSheet.handleDismiss();
+        }}
       >
         {selectedRatingsTarget ? (
           <RatingsBottomSheet
             targetId={selectedRatingsTarget.targetId}
             targetName={selectedRatingsTarget.targetName}
-            onClose={() => {
-              setSelectedRatingsTarget(null);
-              ratingsSheet.dismiss();
-            }}
+            onClose={dismissRatingsSheet}
           />
         ) : (
           <View className="flex-1 pt-4">

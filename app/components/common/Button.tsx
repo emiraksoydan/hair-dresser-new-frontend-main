@@ -17,6 +17,8 @@ interface ButtonProps {
     contentStyle?: ViewStyle;
     labelStyle?: TextStyle;
     testID?: string;
+    /** Daha az dikey padding kullanır (küçük butonlar için). */
+    compact?: boolean;
 }
 
 export const Button: React.FC<ButtonProps> = ({
@@ -33,6 +35,7 @@ export const Button: React.FC<ButtonProps> = ({
     contentStyle,
     labelStyle,
     testID,
+    compact = false,
 }) => {
     const isDisabled = disabled || loading;
 
@@ -104,8 +107,8 @@ export const Button: React.FC<ButtonProps> = ({
 
     const buttonStyle: ViewStyle = {
         borderRadius: 10,
-        paddingVertical: 10,
-        paddingHorizontal: 16,
+        paddingVertical: compact ? 4 : 10,
+        paddingHorizontal: compact ? 10 : 16,
         backgroundColor: isDisabled ? colors.bgDisabled : colors.bg,
         borderWidth: mode === 'outlined' ? 1 : 0,
         borderColor: isDisabled

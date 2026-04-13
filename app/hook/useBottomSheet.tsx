@@ -30,6 +30,9 @@ export const useBottomSheet = (options: UseBottomSheetOptions = {}) => {
         if (ref.current) {
             try {
                 ref.current.present();
+                // Eagerly set open so DeferredRender doesn't wait for onChange
+                // (onChange can be unreliable on Android with 100% snap + no pan gesture)
+                setIsOpen(true);
             } catch (error) {
                 // Silently fail - ref might not be ready yet
             }
@@ -44,6 +47,10 @@ export const useBottomSheet = (options: UseBottomSheetOptions = {}) => {
                 // Hata durumunda sessizce geç
             }
         }
+    }, []);
+
+    const handleDismiss = useCallback(() => {
+        setIsOpen(false);
     }, []);
 
     const makeBackdrop = useCallback(
@@ -69,6 +76,7 @@ export const useBottomSheet = (options: UseBottomSheetOptions = {}) => {
         dismiss,
         makeBackdrop,
         handleChange,
+        handleDismiss,
         snapPoints,
         enablePanDownToClose,
         enableOverDrag,

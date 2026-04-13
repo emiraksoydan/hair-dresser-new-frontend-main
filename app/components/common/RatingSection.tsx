@@ -35,6 +35,8 @@ export const RatingSection: React.FC<RatingSectionProps> = ({
   const starSize = starSizeProp ?? (compact ? 15 : 19);
   const ratingFont = compact ? 14 : 17;
   const reviewFont = compact ? 12 : 15;
+  const ratingLineHeight = compact ? 18 : 22;
+  const reviewLineHeight = compact ? 16 : 20;
 
   return (
     <View className={`flex-row items-center gap-1 ${className}`}>
@@ -44,7 +46,7 @@ export const RatingSection: React.FC<RatingSectionProps> = ({
         color="#ffb900"
         starStyle={{ marginHorizontal: 0 }}
       />
-      <Text style={{ color: colors.sectionHeaderText, fontSize: ratingFont, fontFamily: 'CenturyGothic-Bold' }} className="flex-1">
+      <Text style={{ color: colors.sectionHeaderText, fontSize: ratingFont, lineHeight: ratingLineHeight, fontFamily: 'CenturyGothic-Bold' }} className="flex-1">
         {formattedRating}
       </Text>
       {showReviewsLink && onPressRatings && (
@@ -53,12 +55,12 @@ export const RatingSection: React.FC<RatingSectionProps> = ({
           activeOpacity={0.7}
           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
         >
-          <Text style={{ color: colors.textSecondary, fontSize: reviewFont }} className="underline mr-1 mb-0">
+          <Text style={{ color: colors.textSecondary, fontSize: reviewFont, lineHeight: reviewLineHeight }} className="underline mr-1">
             {t('card.reviews')}{' '}
             (
             <AnimatedCountText
               value={reviewCount || 0}
-              style={{ color: colors.textSecondary, fontSize: reviewFont }}
+              style={{ color: colors.textSecondary, fontSize: reviewFont, lineHeight: reviewLineHeight }}
               className="underline"
             />
             )
@@ -66,11 +68,11 @@ export const RatingSection: React.FC<RatingSectionProps> = ({
         </TouchableOpacity>
       )}
       {!showReviewsLink && (
-        <Text style={{ color: colors.textSecondary, fontSize: reviewFont }}>
+        <Text style={{ color: colors.textSecondary, fontSize: reviewFont, lineHeight: reviewLineHeight }}>
           (
           <AnimatedCountText
             value={reviewCount || 0}
-            style={{ color: colors.textSecondary, fontSize: reviewFont }}
+            style={{ color: colors.textSecondary, fontSize: reviewFont, lineHeight: reviewLineHeight }}
           />
           )
         </Text>

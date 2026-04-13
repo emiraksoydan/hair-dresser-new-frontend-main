@@ -46,6 +46,11 @@ export function MoreActionsFab({ items, accentColor, fabNudgeDown = 0, hidden = 
     setOpen(false);
   }, [itemsKey]);
 
+  /** Sheet / tam ekran overlay açılınca FAB gizlenir; menü açık kaldıysa kapat (çift dokunma / z-index). */
+  useEffect(() => {
+    if (hidden) setOpen(false);
+  }, [hidden]);
+
   const actions = useMemo(
     () =>
       items.map((item) => ({

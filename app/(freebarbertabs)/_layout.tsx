@@ -8,6 +8,7 @@ import { UserType } from "../types";
 import { useLanguage } from "../hook/useLanguage";
 import { getCommonTabs, panelTabConfigs, accentColors } from "../config/tabConfig";
 import { useBottomSheet } from "../hook/useBottomSheet";
+import { useDeferredSheetPresent } from "../hook/useDeferredSheetPresent";
 import { useTheme } from "../hook/useTheme";
 import { DeferredRender } from "../components/common/deferredrender";
 import { CrudSkeletonComponent } from "../components/common/crudskeleton";
@@ -35,12 +36,21 @@ const FreeBarberLayout = () => {
 
   const { error: minePanelError } = useGetFreeBarberMinePanelQuery();
 
+  const { present: presentPanelSheet } = panelSheet;
+  const { schedulePresent: schedulePanelPresent, cancelScheduledPresent: cancelScheduledPanelPresent } =
+    useDeferredSheetPresent(presentPanelSheet);
+
+  const dismissPanelSheet = useCallback(() => {
+    cancelScheduledPanelPresent();
+    panelSheet.dismiss();
+  }, [cancelScheduledPanelPresent, panelSheet]);
+
   const openPanel = useCallback(
     (freeBarberId: string | null) => {
       setPanelTargetId(freeBarberId);
-      setTimeout(() => panelSheet.present(), 50);
+      schedulePanelPresent(50);
     },
-    [panelSheet],
+    [schedulePanelPresent],
   );
 
   const panelSheetApi = useMemo(() => ({ openPanel }), [openPanel]);
@@ -62,6 +72,10 @@ const FreeBarberLayout = () => {
       handleIndicatorStyle={{ backgroundColor: colors.sheetHandle }}
       backgroundStyle={{ backgroundColor: colors.sheetBg }}
       onChange={panelSheet.handleChange}
+      onDismiss={() => {
+        cancelScheduledPanelPresent();
+        panelSheet.handleDismiss();
+      }}
       snapPoints={panelSheet.snapPoints}
       enableOverDrag={panelSheet.enableOverDrag}
       enablePanDownToClose={panelSheet.enablePanDownToClose}
@@ -79,7 +93,7 @@ const FreeBarberLayout = () => {
           <FormFreeBarberOperation
             freeBarberId={panelTargetId}
             enabled={panelSheet.isOpen}
-            onClose={() => panelSheet.dismiss()}
+            onClose={dismissPanelSheet}
             error={minePanelError}
             locationStatus={locationStatusForForm}
           />

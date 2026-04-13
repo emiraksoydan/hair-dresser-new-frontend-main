@@ -1,5 +1,5 @@
 import { Icon } from "react-native-paper";
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef, useCallback } from 'react';
 import { View, TouchableOpacity, Dimensions, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
@@ -27,6 +27,7 @@ interface CustomCurvedTabBarProps {
   tabs: CustomTabItem[];
   activeIndex: number;
   onTabPress: (index: number, tab: CustomTabItem) => void;
+  onTabDoubleTap?: (index: number, tab: CustomTabItem) => void;
   accentColor?: string;
   backgroundColor?: string;
   activeIconColor?: string;
@@ -68,10 +69,13 @@ const CurvedBackground: React.FC<{
   );
 };
 
+const DOUBLE_TAP_DELAY = 450; // ms
+
 export const CustomCurvedTabBar: React.FC<CustomCurvedTabBarProps> = ({
   tabs,
   activeIndex,
   onTabPress,
+  onTabDoubleTap,
   accentColor = '#FFB900',
   backgroundColor = '#1a1b25',
   activeIconColor = '#FFFFFF',
@@ -82,6 +86,7 @@ export const CustomCurvedTabBar: React.FC<CustomCurvedTabBarProps> = ({
   const tabWidth = SCREEN_WIDTH / tabs.length;
   const floatSize = 40;
   const floatOffset = 16;
+  const lastTapRef = useRef<{ index: number; time: number } | null>(null);
 
   // Animasyon değerleri
   const animatedIndex = useSharedValue(activeIndex);
@@ -109,6 +114,25 @@ export const CustomCurvedTabBar: React.FC<CustomCurvedTabBarProps> = ({
   // Tab item component
   const TabItem = ({ tab, index }: { tab: CustomTabItem; index: number }) => {
     const isActive = index === activeIndex;
+
+    const handlePress = () => {
+      const now = Date.now();
+      const last = lastTapRef.current;
+      const isProfileTab = tab.key === '(profile)';
+      const isActiveProfileTab = isProfileTab && isActive;
+
+      if (last && last.index === index && now - last.time < DOUBLE_TAP_DELAY) {
+        lastTapRef.current = null;
+        onTabDoubleTap?.(index, tab);
+      } else {
+        lastTapRef.current = { index, time: now };
+        // Keep single-tap navigation immediate except active profile tab.
+        // Active profile first tap should wait for potential double-tap.
+        if (!isActiveProfileTab) {
+          onTabPress(index, tab);
+        }
+      }
+    };
 
     /** Yüzen ana ikon ile sekme ikonu üst üste binmesin */
     const tabIconAnimatedStyle = useAnimatedStyle(() => {
@@ -166,8 +190,10 @@ export const CustomCurvedTabBar: React.FC<CustomCurvedTabBarProps> = ({
     return (
       <TouchableOpacity
         key={tab.key}
-        onPress={() => onTabPress(index, tab)}
+        onPress={handlePress}
         activeOpacity={0.7}
+        hitSlop={{ top: 10, bottom: 12, left: 12, right: 12 }}
+        pressRetentionOffset={{ top: 20, left: 20, right: 20, bottom: 20 }}
         style={[styles.tabItem, { width: tabWidth }]}
       >
         <View style={styles.tabContent}>
@@ -212,6 +238,22 @@ export const CustomCurvedTabBar: React.FC<CustomCurvedTabBarProps> = ({
     };
   });
 
+  // Float button'a basıldığında da double-tap algılanmalı (zIndex nedeniyle
+  // float button TabItem press olayını engeller, bu yüzden buraya da ekliyoruz)
+  const handleFloatPress = useCallback(() => {
+    const activeTab = tabs[activeIndex];
+    if (!activeTab) return;
+    const now = Date.now();
+    const last = lastTapRef.current;
+    if (last && last.index === activeIndex && now - last.time < DOUBLE_TAP_DELAY) {
+      lastTapRef.current = null;
+      onTabDoubleTap?.(activeIndex, activeTab);
+    } else {
+      lastTapRef.current = { index: activeIndex, time: now };
+      // Float'a tek tıklama — aktif sekmeye navigate (zaten orada, no-op)
+    }
+  }, [tabs, activeIndex, onTabDoubleTap]);
+
   const bottomPadding = Math.max(insets.bottom, 0);
 
   return (
@@ -229,7 +271,10 @@ export const CustomCurvedTabBar: React.FC<CustomCurvedTabBarProps> = ({
 
       {/* Floating active button - curve'a değmiyor */}
       <AnimatedView style={[styles.floatContainer, floatAnimatedStyle]}>
-        <View
+        <TouchableOpacity
+          activeOpacity={0.85}
+          onPress={handleFloatPress}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           style={[
             styles.floatButton,
             {
@@ -257,7 +302,7 @@ export const CustomCurvedTabBar: React.FC<CustomCurvedTabBarProps> = ({
                 </Text>
               </View>
             )}
-        </View>
+        </TouchableOpacity>
       </AnimatedView>
 
       {/* Tab Items */}

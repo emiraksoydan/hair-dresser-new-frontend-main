@@ -9,9 +9,11 @@ import {
   Platform,
   Dimensions,
 } from "react-native";
+import { BottomSheetScrollView } from "@gorhom/bottom-sheet";
 import { Text } from "../common/Text";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import React, { useEffect, useMemo, useState, useRef, useCallback } from "react";
-import { Avatar, Chip, Divider, HelperText, Icon, IconButton, TextInput } from "react-native-paper";
+import { Avatar, Chip, Divider, HelperText, Icon, TextInput } from "react-native-paper";
 import { Button } from "../common/Button";
 import { useForm, Controller, useWatch, useFieldArray } from "react-hook-form";
 import { z } from "zod";
@@ -33,6 +35,7 @@ import {
 import {
   useAddBarberStoreMutation,
   useLazyGetMineStoresQuery,
+  useLazyGetStoreByIdQuery,
   useUploadImageMutation,
   useUploadMultipleImagesMutation,
 } from "../../store/api";
@@ -60,6 +63,8 @@ import { resolveMimeType } from "../../utils/form/pick-document";
 import { ChairItem } from "./ChairItem";
 import { WorkingHoursAccordion } from "./WorkingHoursAccordion";
 import { ManuelBarberItem } from "./ManuelBarberItem";
+import { ServicePackageStep, type PackageFormItem } from "./ServicePackageStep";
+import { useAddServicePackageMutation } from "../../store/api";
 import { useOptimizedChairOptions } from "../../hooks/useOptimizedFieldArray";
 import { useAuth } from "../../hook/useAuth";
 import { useLanguage } from "../../hook/useLanguage";
@@ -70,6 +75,7 @@ import { ensureLocationGateWithUI } from "../location/location-gate";
 import { LocationStatus } from "../../types";
 import { StepFormIndicator } from "../common/StepFormIndicator";
 import { extractCreatedStoreIdFromResponse } from "../../utils/form/store-create-response";
+import { SheetCloseButton } from "../common/SheetCloseButton";
 
 const createChairPricingSchema = (t: (key: string) => string) =>
   z
@@ -227,7 +233,7 @@ const createTaxDocumentImageField = (t: (key: string) => string) =>
 const createBarberSchema = (t: (key: string) => string) =>
   z.object({
     id: z.string(),
-    name: z.string().trim().min(1, t("form.barberNameRequired")),
+    name: z.string().trim().min(1, t("form.personnelNameRequired")),
     avatar: z
       .object({
         uri: z.string(),
@@ -260,7 +266,7 @@ const createChairSchema = (t: (key: string) => string) =>
           ctx.addIssue({
             code: z.ZodIssueCode.custom,
             path: ["barberId"],
-            message: t("form.barberSelectionRequired"),
+            message: t("form.personnelSelectionRequired"),
           });
         }
       }
@@ -436,7 +442,10 @@ const FormStoreAdd = ({
   const [completedSteps, setCompletedSteps] = useState<Set<number>>(new Set());
   const stepSlideAnim = useRef(new Animated.Value(0)).current;
   const prevStepRef = useRef(0);
+  const [formPackages, setFormPackages] = useState<PackageFormItem[]>([]);
+  const [addServicePackage] = useAddServicePackageMutation();
 
+  const insets = useSafeAreaInsets();
   const { userId } = useAuth();
   const { t, currentLanguage } = useLanguage();
   const { colors, isDark } = useTheme();
@@ -450,7 +459,9 @@ const FormStoreAdd = ({
     t("form.stepSubHeadings"),
     t("form.stepStoreServices"),
     t("form.stepStorePrices"),
-    t("form.stepStoreStaff"),
+    "Hizmet Paketleri",
+    t("form.stepStorePersonnel"),
+    t("form.stepStoreChairs"),
     t("form.stepStorePricing"),
     t("form.stepStoreHours"),
     t("form.stepStoreAddress"),
@@ -469,11 +480,13 @@ const FormStoreAdd = ({
     2: ["selectedSubHeadings"],
     3: ["selectedCategories"],
     4: ["prices"],
-    5: ["barbers", "chairs"],
-    6: ["pricingType"],
-    7: ["workingHours", "holidayDays"],
-    8: ["location"],
-    9: [],
+    5: [], // Hizmet Paketleri — isteğe bağlı, validation yok
+    6: ["barbers"],
+    7: ["chairs"],
+    8: ["pricingType"],
+    9: ["workingHours", "holidayDays"],
+    10: ["location"],
+    11: [],
   }), []);
 
   const fullSchema = useMemo(() => createFullSchema(t), [t, currentLanguage]);
@@ -590,6 +603,7 @@ const FormStoreAdd = ({
   }, []);
 
   const [triggerGetMineStores] = useLazyGetMineStoresQuery();
+  const [triggerGetStoreById] = useLazyGetStoreByIdQuery();
   const [uploadMultipleImages] = useUploadMultipleImagesMutation();
   const [uploadImage] = useUploadImageMutation();
   const guard = useActionGuard();
@@ -858,6 +872,38 @@ const FormStoreAdd = ({
       );
     }
 
+    // Hizmet paketlerini oluştur (isteğe bağlı, hata yok sayılır)
+    if (formPackages.length > 0 && !uploadError) {
+      const createdStoreId = extractCreatedStoreIdFromResponse(storeResult.data);
+      if (createdStoreId) {
+        try {
+          // Yeni oluşturulan dükkanın service offering ID'lerini al
+          const storeDetailRes = await triggerGetStoreById(createdStoreId);
+          const storeOfferings = storeDetailRes.data?.serviceOfferings ?? [];
+          // serviceName -> id haritası
+          const offeringNameToId = new Map(
+            storeOfferings.map((o: any) => [o.serviceName?.toLowerCase(), o.id])
+          );
+          for (const pkg of formPackages) {
+            const serviceIds = pkg.serviceOfferingIds
+              .map((name) => offeringNameToId.get(name.toLowerCase()))
+              .filter((id): id is string => !!id);
+            if (serviceIds.length === 0) continue;
+            const totalPriceNum = parseTR(pkg.totalPrice);
+            if (!totalPriceNum || totalPriceNum <= 0) continue;
+            await addServicePackage({
+              ownerId: createdStoreId,
+              packageName: pkg.packageName,
+              totalPrice: totalPriceNum,
+              serviceOfferingIds: serviceIds,
+            }).catch(() => {/* package hataları store'u engellemez */});
+          }
+        } catch {
+          // Package oluşturma hatası store oluşturmayı engellemez
+        }
+      }
+    }
+
     // Refresh stores list to show new store with images
     await triggerGetMineStores();
     onClose?.();
@@ -1108,9 +1154,9 @@ const FormStoreAdd = ({
     reverseAndSetAddress(IST.latitude, IST.longitude);
   }, []);
 
-  // Harita adımına (step 8) gelindiğinde otomatik olarak kullanıcının konumunu al
+  // Harita adımına gelindiğinde otomatik olarak kullanıcının konumunu al
   useEffect(() => {
-    if (currentStep === 8 && !hasAutoPickedLocationRef.current) {
+    if (currentStep === 10 && !hasAutoPickedLocationRef.current) {
       hasAutoPickedLocationRef.current = true;
       pickMyCurrentLocation().catch(() => { });
     }
@@ -1164,10 +1210,10 @@ const FormStoreAdd = ({
     const msgs: string[] = [];
     barbers.forEach((_, idx) => {
       const m = errors.barbers?.[idx]?.name?.message as string | undefined;
-      if (m) msgs.push(`• ${idx + 1}. berber: ${m}`);
+      if (m) msgs.push(`• ${t("form.personnelNumberLabel", { n: idx + 1 })}: ${m}`);
     });
     return msgs.join("\n");
-  }, [errors.barbers, barbers]);
+  }, [errors.barbers, barbers, t]);
 
   const chairsErrorText = React.useMemo(() => {
     if (!errors.chairs) return "";
@@ -1175,22 +1221,28 @@ const FormStoreAdd = ({
     chairs.forEach((_, idx) => {
       const m1 = errors.chairs?.[idx]?.name?.message as string | undefined;
       const m2 = errors.chairs?.[idx]?.barberId?.message as string | undefined;
-      if (m1 || m2) msgs.push(`• ${idx + 1}. koltuk: ${m1 ?? m2}`);
+      if (m1 || m2) {
+        msgs.push(`• ${t("form.chairNumberLabel", { n: idx + 1 })}: ${m1 ?? m2}`);
+      }
     });
     return msgs.join("\n");
-  }, [errors.chairs, chairs]);
+  }, [errors.chairs, chairs, t]);
 
   return (
     <KeyboardAvoidingView
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
       style={{ flex: 1 }}
+      keyboardVerticalOffset={Platform.OS === "ios" ? 8 : 0}
     >
-      <View className="h-full" style={{ backgroundColor: colors.sheetBg }}>
-        <View className="flex-row justify-between items-center px-2">
+      <View style={{ flex: 1, backgroundColor: colors.sheetBg }}>
+        <View
+          className="flex-row justify-between items-center px-2"
+          style={{ zIndex: 2, elevation: 4 }}
+        >
           <Text className="text-white flex-1 font-century-gothic text-2xl" style={{ color: colors.sectionHeaderText }}>
             İşletme Ekle
           </Text>
-          <IconButton onPress={onClose} icon="close" iconColor={colors.sectionHeaderText} />
+          <SheetCloseButton onPress={() => onClose?.()} color={colors.sectionHeaderText} />
         </View>
         <Divider style={{ borderWidth: 0.1, backgroundColor: colors.borderColor }} />
         <StepFormIndicator
@@ -1200,16 +1252,16 @@ const FormStoreAdd = ({
           canNavigateFreely={false}
           completedSteps={completedSteps}
         />
-        <ScrollView
+        <BottomSheetScrollView
           key={currentStep}
           keyboardShouldPersistTaps="handled"
           nestedScrollEnabled
           showsVerticalScrollIndicator={false}
           alwaysBounceVertical={false}
-          contentContainerStyle={{ flexGrow: 1, paddingBottom: 50 }}
+          contentContainerStyle={{ flexGrow: 1, paddingBottom: 24 }}
           style={{ flex: 1 }}
         >
-          <Animated.View style={{ flex: 1, transform: [{ translateX: stepSlideAnim }] }}>
+          <Animated.View style={{ transform: [{ translateX: stepSlideAnim }] }}>
             {currentStep === 0 && (
               <>
                 <Text className="text-white text-xl mt-4 px-2" style={{ color: colors.sectionHeaderText }}>
@@ -1674,43 +1726,115 @@ const FormStoreAdd = ({
                 </View>
               </>
             )}
+            {/* Adım 5: Hizmet Paketleri */}
             {currentStep === 5 && (
               <>
+                <View className="px-2 mt-4">
+                  <ServicePackageStep
+                    packages={formPackages}
+                    serviceOptions={(selectedCategories ?? []).map((catId) => ({
+                      id: catId,
+                      label: services.find((s: any) => s.id === catId)?.name ?? catId,
+                    }))}
+                    onPackagesChange={setFormPackages}
+                  />
+                </View>
+              </>
+            )}
+            {currentStep === 6 && (
+              <>
                 <View
-                  className="mx-2 mt-2 mb-3 rounded-xl px-3 py-3"
+                  className="mx-2 mt-2 mb-4 rounded-xl px-3 py-3"
                   style={{
-                    backgroundColor: isDark ? "rgba(194, 165, 35, 0.12)" : "rgba(194, 165, 35, 0.08)",
+                    backgroundColor: isDark ? "rgba(194,165,35,0.10)" : "rgba(194,165,35,0.07)",
                     borderWidth: 1,
-                    borderColor: isDark ? "rgba(194, 165, 35, 0.28)" : "rgba(194, 165, 35, 0.35)",
+                    borderColor: isDark ? "rgba(194,165,35,0.28)" : "rgba(194,165,35,0.35)",
                   }}
                 >
-                  <Text style={{ fontFamily: "CenturyGothic", fontSize: 14, lineHeight: 21, color: colors.sectionHeaderText }}>
-                    {t("form.staffStepIntro")}
+                  <Text style={{ fontFamily: "CenturyGothic", fontSize: 13, lineHeight: 20, color: colors.sectionHeaderText }}>
+                    {t("form.personnelStepIntro")}
                   </Text>
                 </View>
-                <View className="mt-2 mx-0 flex-row items-center px-2">
-                  <Text className="text-white text-xl flex-1" style={{ color: colors.sectionHeaderText }}>
-                    {t("form.workingBarbersCount")} : {barberFields.length}{" "}
-                  </Text>
-                  <Button
-                    mode="text"
-                    textColor="#c2a523"
-                    onPress={() =>
-                      addBarber({ id: uuid(), name: "", avatar: null })
-                    }
+
+                <View
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    marginHorizontal: 8,
+                    marginBottom: 10,
+                    paddingVertical: 6,
+                    paddingHorizontal: 12,
+                    borderRadius: 12,
+                    backgroundColor: isDark ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)",
+                    borderWidth: 1,
+                    borderColor: colors.borderColor,
+                  }}
+                >
+                  <Icon source="account-group-outline" size={20} color="#c2a523" />
+                  <Text
+                    style={{
+                      flex: 1,
+                      marginLeft: 8,
+                      fontFamily: "CenturyGothic-Bold",
+                      fontSize: 15,
+                      color: colors.sectionHeaderText,
+                    }}
+                    numberOfLines={1}
                   >
-                    {t("form.addBarber")}
+                    {t("form.workingPersonnelCount")}
+                  </Text>
+                  {barberFields.length > 0 && (
+                    <View
+                      style={{
+                        minWidth: 24,
+                        height: 24,
+                        borderRadius: 12,
+                        backgroundColor: "#c2a523",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        marginRight: 8,
+                        paddingHorizontal: 6,
+                      }}
+                    >
+                      <Text style={{ fontFamily: "CenturyGothic-Bold", fontSize: 12, color: "#fff" }}>
+                        {barberFields.length}
+                      </Text>
+                    </View>
+                  )}
+                  <Button
+                    mode="contained-tonal"
+                    textColor="#c2a523"
+                    buttonColor={isDark ? "rgba(194,165,35,0.16)" : "rgba(194,165,35,0.12)"}
+                    compact
+                    icon="plus"
+                    onPress={() => addBarber({ id: uuid(), name: "", avatar: null })}
+                    style={{ borderRadius: 8 }}
+                    labelStyle={{ fontFamily: "CenturyGothic-Bold", fontSize: 13, marginVertical: 4 }}
+                  >
+                    {t("form.addPersonnel")}
                   </Button>
                 </View>
-                {barberFields.length > 0 && (
+
+                {barberFields.length === 0 ? (
                   <View
-                    className="rounded-xl mx-2 px-3 pt-3 pb-2"
                     style={{
-                      backgroundColor: colors.cardBg,
+                      marginHorizontal: 8,
+                      marginBottom: 12,
+                      paddingVertical: 18,
+                      borderRadius: 12,
                       borderWidth: 1,
                       borderColor: colors.borderColor,
+                      borderStyle: "dashed",
+                      alignItems: "center",
                     }}
                   >
+                    <Icon source="account-plus-outline" size={28} color={colors.textSecondary} />
+                    <Text style={{ fontFamily: "CenturyGothic", fontSize: 13, color: colors.textSecondary, marginTop: 6 }}>
+                      {t("form.addPersonnel")}
+                    </Text>
+                  </View>
+                ) : (
+                  <View style={{ marginHorizontal: 8, marginBottom: 4 }}>
                     {barberFields.map((item, index) => (
                       <ManuelBarberItem
                         key={item._key}
@@ -1731,36 +1855,109 @@ const FormStoreAdd = ({
                         }}
                       />
                     ))}
-                    <HelperText type="error" visible={!!barberErrorText} style={{ fontFamily: 'CenturyGothic' }}>
-                      {barberErrorText}
-                    </HelperText>
+                    {!!barberErrorText && (
+                      <HelperText type="error" visible style={{ fontFamily: "CenturyGothic" }}>
+                        {barberErrorText}
+                      </HelperText>
+                    )}
                   </View>
                 )}
-
-                <View className="mt-1 mx-0 px-2 flex-row items-center">
-                  <Text className="text-white text-xl flex-1" style={{ color: colors.sectionHeaderText }}>
-                    {t("form.chairCount")} : {chairFields.length}
+              </>
+            )}
+            {currentStep === 7 && (
+              <>
+                <View
+                  className="mx-2 mt-2 mb-4 rounded-xl px-3 py-3"
+                  style={{
+                    backgroundColor: isDark ? "rgba(194,165,35,0.10)" : "rgba(194,165,35,0.07)",
+                    borderWidth: 1,
+                    borderColor: isDark ? "rgba(194,165,35,0.28)" : "rgba(194,165,35,0.35)",
+                  }}
+                >
+                  <Text style={{ fontFamily: "CenturyGothic", fontSize: 13, lineHeight: 20, color: colors.sectionHeaderText }}>
+                    {t("form.chairsStepIntro")}
                   </Text>
+                </View>
+
+                <View
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    marginHorizontal: 8,
+                    marginBottom: 10,
+                    paddingVertical: 6,
+                    paddingHorizontal: 12,
+                    borderRadius: 12,
+                    backgroundColor: isDark ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)",
+                    borderWidth: 1,
+                    borderColor: colors.borderColor,
+                  }}
+                >
+                  <Icon source="chair-rolling" size={20} color="#c2a523" />
+                  <Text
+                    style={{
+                      flex: 1,
+                      marginLeft: 8,
+                      fontFamily: "CenturyGothic-Bold",
+                      fontSize: 15,
+                      color: colors.sectionHeaderText,
+                    }}
+                    numberOfLines={1}
+                  >
+                    {t("form.chairCount")}
+                  </Text>
+                  {chairFields.length > 0 && (
+                    <View
+                      style={{
+                        minWidth: 24,
+                        height: 24,
+                        borderRadius: 12,
+                        backgroundColor: "#c2a523",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        marginRight: 8,
+                        paddingHorizontal: 6,
+                      }}
+                    >
+                      <Text style={{ fontFamily: "CenturyGothic-Bold", fontSize: 12, color: "#fff" }}>
+                        {chairFields.length}
+                      </Text>
+                    </View>
+                  )}
                   <Button
-                    mode="text"
+                    mode="contained-tonal"
                     textColor="#c2a523"
-                    onPress={() =>
-                      addChair({ id: uuid(), mode: "named", name: "" })
-                    }
+                    buttonColor={isDark ? "rgba(194,165,35,0.16)" : "rgba(194,165,35,0.12)"}
+                    compact
+                    icon="plus"
+                    onPress={() => addChair({ id: uuid(), mode: "named", name: "" })}
+                    style={{ borderRadius: 8 }}
+                    labelStyle={{ fontFamily: "CenturyGothic-Bold", fontSize: 13, marginVertical: 4 }}
                   >
                     {t("form.addChair")}
                   </Button>
                 </View>
 
-                {chairFields.length > 0 && (
+                {chairFields.length === 0 ? (
                   <View
-                    className="rounded-xl mx-2 px-3 pt-3 pb-2"
                     style={{
-                      backgroundColor: colors.cardBg,
+                      marginHorizontal: 8,
+                      marginBottom: 12,
+                      paddingVertical: 18,
+                      borderRadius: 12,
                       borderWidth: 1,
                       borderColor: colors.borderColor,
+                      borderStyle: "dashed",
+                      alignItems: "center",
                     }}
                   >
+                    <Icon source="seat-outline" size={28} color={colors.textSecondary} />
+                    <Text style={{ fontFamily: "CenturyGothic", fontSize: 13, color: colors.textSecondary, marginTop: 6 }}>
+                      {t("form.addChair")}
+                    </Text>
+                  </View>
+                ) : (
+                  <View style={{ marginHorizontal: 8, marginBottom: 4 }}>
                     {chairFields.map((item, index) => (
                       <ChairItem
                         key={item._key}
@@ -1772,32 +1969,25 @@ const FormStoreAdd = ({
                         errors={errors}
                         onRemove={() => removeChair(index)}
                         onModeChange={(mode) => {
-                          setValue(`chairs.${index}.mode`, mode, {
-                            shouldDirty: true,
-                            shouldValidate: true,
-                          });
+                          setValue(`chairs.${index}.mode`, mode, { shouldDirty: true, shouldValidate: true });
                           if (mode === "named") {
-                            setValue(`chairs.${index}.barberId`, undefined, {
-                              shouldDirty: true,
-                              shouldValidate: true,
-                            });
+                            setValue(`chairs.${index}.barberId`, undefined, { shouldDirty: true, shouldValidate: true });
                           } else {
-                            setValue(`chairs.${index}.name`, undefined, {
-                              shouldDirty: true,
-                              shouldValidate: true,
-                            });
+                            setValue(`chairs.${index}.name`, undefined, { shouldDirty: true, shouldValidate: true });
                           }
                         }}
                       />
                     ))}
-                    <HelperText type="error" visible={!!chairsErrorText} style={{ fontFamily: 'CenturyGothic' }}>
-                      {chairsErrorText}
-                    </HelperText>
+                    {!!chairsErrorText && (
+                      <HelperText type="error" visible style={{ fontFamily: "CenturyGothic" }}>
+                        {chairsErrorText}
+                      </HelperText>
+                    )}
                   </View>
                 )}
               </>
             )}
-            {currentStep === 6 && (
+            {currentStep === 8 && (
               <>
                 <View className="px-2">
                   <Text className="text-white font-century-gothic ml-0 pt-4 mt-4 pb-2 text-xl" style={{ color: colors.sectionHeaderText }}>
@@ -1958,7 +2148,7 @@ const FormStoreAdd = ({
                 </View>
               </>
             )}
-            {currentStep === 7 && (
+            {currentStep === 9 && (
               <>
                 <View className="px-2">
                   <Text className="text-white font-century-gothic ml-0 pt-4 pb-2 text-xl" style={{ color: colors.sectionHeaderText }}>
@@ -1987,7 +2177,7 @@ const FormStoreAdd = ({
                 </View>
               </>
             )}
-            {currentStep === 8 && (
+            {currentStep === 10 && (
               <>
                 <View className="px-2">
                   <Text className="text-white font-century-gothic ml-0 pt-4 pb-2 text-xl" style={{ color: colors.sectionHeaderText }}>
@@ -2068,7 +2258,7 @@ const FormStoreAdd = ({
                 </View>
               </>
             )}
-            {currentStep === 9 && (
+            {currentStep === 11 && (
               <>
                 <View className="px-2 py-4">
                   <Text className="text-lg font-bold mb-4" style={{ color: colors.sectionHeaderText }}>
@@ -2129,7 +2319,7 @@ const FormStoreAdd = ({
                     {/* Koltuklar */}
                     {(chairs ?? []).length > 0 && (
                       <View className="py-1.5" style={{ borderBottomWidth: 1, borderBottomColor: colors.borderColor }}>
-                        <Text className="text-gray-400 text-sm mb-1">{"Berber Koltukları"}</Text>
+                        <Text className="text-gray-400 text-sm mb-1">{t("form.previewChairsSection")}</Text>
                         {(chairs ?? []).map((chair: any, idx: number) => {
                           const isBarberChair = !!(chair.barberId) || chair.mode === "barber";
                           const barberName = isBarberChair && chair.barberId
@@ -2140,7 +2330,7 @@ const FormStoreAdd = ({
                             <View key={`chair-${idx}`} className="flex-row items-center py-0.5 gap-2">
                               <Text className="text-sm" style={{ color: colors.textSecondary }}>{idx + 1}.</Text>
                               <Text className="text-sm flex-1" style={{ color: colors.sectionHeaderText }}>{label}</Text>
-                              <Text className="text-xs" style={{ color: colors.textSecondary }}>{isBarberChair ? "Berbere atanmış" : "İsimli"}</Text>
+                              <Text className="text-xs" style={{ color: colors.textSecondary }}>{isBarberChair ? t("form.barberChair") : t("form.namedChair")}</Text>
                             </View>
                           );
                         })}
@@ -2177,8 +2367,14 @@ const FormStoreAdd = ({
               </>
             )}
           </Animated.View>
-        </ScrollView>
-        <View className="px-6 my-3 flex-row gap-3">
+        </BottomSheetScrollView>
+        <View
+          className="px-6 flex-row gap-3"
+          style={{
+            paddingTop: 12,
+            paddingBottom: Math.max(insets.bottom, 20) + 10,
+          }}
+        >
           {currentStep > 0 && (
             <Button
               className="flex-1"

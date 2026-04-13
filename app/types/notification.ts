@@ -104,6 +104,12 @@ export interface NotificationPayload {
     serviceName: string;
     price: number;
   }>;
+  packages?: Array<{
+    packageId: string;
+    packageName: string;
+    totalPrice: number;
+    serviceNamesSnapshot?: string | null;
+  }>;
 
   // Favori durumu (recipient'a göre)
   isCustomerInFavorites?: boolean; // Store veya FreeBarber için müşteri favorilerinde mi?

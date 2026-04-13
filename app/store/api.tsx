@@ -17,7 +17,8 @@ import {
     ComplaintGetDto, CreateComplaintDto,
     RequestGetDto, CreateRequestDto,
     BlockedGetDto, CreateBlockedDto, UnblockDto, BlockStatusDto,
-    CategoryHierarchyDto, EarningsDto, AIAssistantResponseDto
+    CategoryHierarchyDto, EarningsDto, AIAssistantResponseDto,
+    ServicePackageCreateDto, ServicePackageUpdateDto, ServicePackageGetDto, AppointmentServicePackageDto
 } from '../types';
 import { FilterRequestDto, SavedFilterGetDto, SavedFilterCreateDto, SavedFilterUpdateDto } from '../types/filter';
 import { transformArrayResponse, transformObjectResponse, transformBooleanResponse, transformApiResponse } from '../utils/api/transform-response';
@@ -411,8 +412,8 @@ export const api = createApi({
                         ? { cancellationReason: String(cancellationReason).trim() }
                         : {},
             }),
-            invalidatesTags: (result, error, appointmentId) => [
-                { type: 'Appointment', id: appointmentId },
+            invalidatesTags: (result, error, arg) => [
+                { type: 'Appointment', id: arg.appointmentId },
                 { type: 'Appointment', id: 'LIST' },
                 // Notification invalidation removed - badge.updated SignalR event handles this
             ],
@@ -489,27 +490,8 @@ export const api = createApi({
         }),
         deleteNotification: builder.mutation<ApiResponse<boolean>, string>({
             query: (id) => ({ url: `Notification/${id}`, method: 'DELETE' }),
-            invalidatesTags: (_result, error) => (error ? [] : [{ type: 'Notification' as const, id: 'LIST' }]),
-            async onQueryStarted(id, { dispatch, queryFulfilled }) {
-                const norm = (s: string) => s.replace(/-/g, '').toLowerCase();
-                const idN = norm(id);
-                let wasUnread = false;
-                const listPatch = dispatch(
-                    api.util.updateQueryData('getAllNotifications', undefined, (draft) => {
-                        const index = draft.findIndex((n) => norm(n.id) === idN);
-                        if (index >= 0) { wasUnread = !draft[index].isRead; draft.splice(index, 1); }
-                    }),
-                );
-                const badgePatch = wasUnread ? dispatch(
-                    api.util.updateQueryData('getBadgeCounts', undefined, (draft) => {
-                        if (draft?.data?.notificationUnreadCount !== undefined) {
-                            draft.data.notificationUnreadCount = Math.max(0, draft.data.notificationUnreadCount - 1);
-                        }
-                    }),
-                ) : null;
-                try { await queryFulfilled; }
-                catch { listPatch.undo(); badgePatch?.undo(); }
-            },
+            // Server-confirmed delete: remove only after successful response
+            invalidatesTags: [{ type: 'Notification' as const, id: 'LIST' }],
         }),
         deleteAllNotifications: builder.mutation<ApiResponse<boolean>, void>({
             query: () => ({ url: 'Notification/all', method: 'DELETE' }),
@@ -1465,6 +1447,30 @@ export const api = createApi({
             }),
         }),
 
+        // --- SERVICE PACKAGE API ---
+        addServicePackage: builder.mutation<{ message: string; success: boolean }, ServicePackageCreateDto>({
+            query: (dto) => ({ url: 'ServicePackage', method: 'POST', body: dto }),
+            invalidatesTags: ['GetStoreById', 'MineFreeBarberPanel'],
+        }),
+        updateServicePackage: builder.mutation<{ message: string; success: boolean }, ServicePackageUpdateDto>({
+            query: (dto) => ({ url: 'ServicePackage', method: 'PUT', body: dto }),
+            invalidatesTags: ['GetStoreById', 'MineFreeBarberPanel'],
+        }),
+        deleteServicePackage: builder.mutation<{ message: string; success: boolean }, string>({
+            query: (id) => ({ url: `ServicePackage/${id}`, method: 'DELETE' }),
+            invalidatesTags: ['GetStoreById', 'MineFreeBarberPanel'],
+        }),
+        getServicePackagesByOwner: builder.query<ServicePackageGetDto[], string>({
+            query: (ownerId) => `ServicePackage/owner/${ownerId}`,
+            keepUnusedDataFor: CACHE_DURATIONS.DYNAMIC,
+            transformResponse: transformArrayResponse<ServicePackageGetDto>,
+        }),
+        getServicePackagesByAppointment: builder.query<AppointmentServicePackageDto[], string>({
+            query: (appointmentId) => `ServicePackage/appointment/${appointmentId}`,
+            keepUnusedDataFor: CACHE_DURATIONS.DYNAMIC,
+            transformResponse: transformArrayResponse<AppointmentServicePackageDto>,
+        }),
+
     }),
 });
 
@@ -1596,4 +1602,11 @@ export const {
     useLazyGetFreeBarberEarningsQuery,
     // AI Assistant
     useAiAssistantMutation,
+    // Service Package
+    useAddServicePackageMutation,
+    useUpdateServicePackageMutation,
+    useDeleteServicePackageMutation,
+    useGetServicePackagesByOwnerQuery,
+    useLazyGetServicePackagesByOwnerQuery,
+    useGetServicePackagesByAppointmentQuery,
 } = api;

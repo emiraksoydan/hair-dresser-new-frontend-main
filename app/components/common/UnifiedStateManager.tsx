@@ -133,14 +133,23 @@ export const UnifiedStateManager: React.FC<UnifiedStateProps> = ({
 
   return (
     <View
-      className="flex-1 items-center justify-start py-4 px-2"
-      style={{ backgroundColor: colors.screenBg }}
+      className="items-center justify-start py-4 px-2"
+      style={{
+        backgroundColor: colors.screenBg,
+        flexGrow: 1,
+        // overflow visible: Android'de default hidden kesmesin
+        overflow: 'visible',
+      }}
     >
       <View
         style={{
           backgroundColor: colors.cardBg,
           borderWidth: 1,
           borderColor: colors.borderColor2,
+          // Alt köşelerin kırpılmaması için margin ekle
+          marginBottom: 12,
+          // Android shadow/elevation olmadan borderRadius görünmesi için
+          overflow: 'hidden',
         }}
         className="rounded-2xl p-6 pb-8 items-center w-full"
       >
@@ -177,6 +186,11 @@ export const getErrorType = (error: any): StateType => {
 
   const status = error.status;
   const message = error?.data?.message || error?.message || '';
+
+  // Account switch / unmount sırasında iptal edilen istekler için state göstermeyelim.
+  if (status === "CUSTOM_ERROR" && String(message).trim() === "") {
+    return "error";
+  }
 
   // RTK Query string status types - bunlar network/timeout hatalarını gösterir
   if (
@@ -234,6 +248,11 @@ export const useUnifiedState = (props: {
   } else if (locationStatus === "unknown") {
     state = "location-unavailable";
   } else if (error) {
+    const status = error?.status;
+    const message = String(error?.data?.message || error?.message || "").trim();
+    if (status === "CUSTOM_ERROR" && message === "") {
+      return { shouldShowState: false, state: null, hasData };
+    }
     state = getErrorType(error);
   } else if (fetchedOnce && !hasData) {
     state = "empty";

@@ -305,11 +305,11 @@ export const BarberEditModal: React.FC<Props> = ({
             <Controller
               control={control}
               name="name"
-              rules={{ required: "Berber adı zorunlu" }}
+              rules={{ required: t("form.personnelNameRequired") }}
               render={({ field: { value, onChange, onBlur } }) => (
                 <>
                   <TextInput
-                    label="Berber adı"
+                    label={t("form.personnelName")}
                     mode="outlined"
                     dense
                     value={value}

@@ -1,7 +1,7 @@
 import React, { useEffect } from "react";
-import { View, Pressable } from "react-native";
+import { View } from "react-native";
 import { Text } from "../common/Text";
-import { Dialog, HelperText, Portal, TextInput } from "react-native-paper";
+import { Dialog, HelperText, Portal, Icon } from "react-native-paper";
 import { useAppDispatch } from "../../store/hook";
 import { showSnack } from "../../store/snackbarSlice";
 import { Button } from "../common/Button";
@@ -13,8 +13,10 @@ import {
 } from "../../store/api";
 import { getErrorMessage } from "../../utils/errorHandler";
 import { MESSAGES } from "../../constants/messages";
-import { Dropdown } from "react-native-element-dropdown";
 import { useLanguage } from "../../hook/useLanguage";
+import { PersonnelSelectList } from "./PersonnelSelectList";
+import { ChairNamePlateField } from "./ChairNamePlateField";
+import { ChairModeSegmentedControl } from "./ChairModeSegmentedControl";
 import { useTheme } from "../../hook/useTheme";
 import { useActionGuard } from "../../hook/useActionGuard";
 
@@ -64,7 +66,6 @@ export const ChairEditModal: React.FC<Props> = ({
   const barberOptions = barbers.map((b) => ({ label: b.name, value: b.id }));
   const { t } = useLanguage();
   const { colors, isDark } = useTheme();
-  const accent = "#c2a523";
   const dispatch = useAppDispatch();
   const guard = useActionGuard();
 
@@ -171,76 +172,63 @@ export const ChairEditModal: React.FC<Props> = ({
           {title}
         </Dialog.Title>
         <Dialog.Content style={{ paddingBottom: 0, marginBottom: 0 }}>
+          <View
+            style={{
+              borderRadius: 12,
+              borderWidth: 1,
+              borderColor: colors.borderColor,
+              backgroundColor: isDark
+                ? "rgba(194, 165, 35, 0.08)"
+                : "rgba(194, 165, 35, 0.07)",
+              padding: 12,
+              marginBottom: 14,
+              flexDirection: "row",
+              alignItems: "flex-start",
+              gap: 10,
+            }}
+          >
+            <View
+              style={{
+                width: 36,
+                height: 36,
+                borderRadius: 10,
+                backgroundColor: isDark
+                  ? "rgba(194, 165, 35, 0.22)"
+                  : "rgba(194, 165, 35, 0.2)",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <Icon source="chair-rolling" size={22} color="#c2a523" />
+            </View>
+            <Text
+              style={{
+                flex: 1,
+                fontFamily: "CenturyGothic",
+                fontSize: 12,
+                lineHeight: 18,
+                color: colors.textSecondary,
+              }}
+            >
+              {t("form.chairDialogIntro")}
+            </Text>
+          </View>
+
           <Text
             style={{
-              fontFamily: "CenturyGothic",
-              fontSize: 12,
-              color: colors.textSecondary,
+              fontFamily: "CenturyGothic-Bold",
+              fontSize: 13,
+              color: colors.sectionHeaderText,
               marginBottom: 8,
             }}
           >
-            {t("form.chairAssignmentType")}
+            {t("form.chairSetupTitle")}
           </Text>
-          <View style={{ flexDirection: "row", gap: 10, marginBottom: 8 }}>
-            <Pressable
-              onPress={() => handleModeChange("named")}
-              style={({ pressed }) => ({
-                flex: 1,
-                paddingVertical: 11,
-                paddingHorizontal: 8,
-                borderRadius: 12,
-                borderWidth: 1.5,
-                borderColor: mode === "named" ? accent : colors.borderColor2,
-                backgroundColor:
-                  mode === "named"
-                    ? isDark
-                      ? "rgba(194, 165, 35, 0.14)"
-                      : "rgba(194, 165, 35, 0.1)"
-                    : colors.cardBg,
-                opacity: pressed ? 0.88 : 1,
-              })}
-            >
-              <Text
-                style={{
-                  textAlign: "center",
-                  fontFamily: "CenturyGothic",
-                  fontSize: 13,
-                  color: colors.sectionHeaderText,
-                }}
-              >
-                {t("form.assignByDisplayName")}
-              </Text>
-            </Pressable>
-            <Pressable
-              onPress={() => handleModeChange("barber")}
-              style={({ pressed }) => ({
-                flex: 1,
-                paddingVertical: 11,
-                paddingHorizontal: 8,
-                borderRadius: 12,
-                borderWidth: 1.5,
-                borderColor: mode === "barber" ? accent : colors.borderColor2,
-                backgroundColor:
-                  mode === "barber"
-                    ? isDark
-                      ? "rgba(194, 165, 35, 0.14)"
-                      : "rgba(194, 165, 35, 0.1)"
-                    : colors.cardBg,
-                opacity: pressed ? 0.88 : 1,
-              })}
-            >
-              <Text
-                style={{
-                  textAlign: "center",
-                  fontFamily: "CenturyGothic",
-                  fontSize: 13,
-                  color: colors.sectionHeaderText,
-                }}
-              >
-                {t("form.assignToBarber")}
-              </Text>
-            </Pressable>
-          </View>
+          <ChairModeSegmentedControl
+            mode={mode ?? "named"}
+            onModeChange={handleModeChange}
+            footerHint={t("form.chairModePickerHint")}
+          />
 
           <Text
             style={{
@@ -266,20 +254,13 @@ export const ChairEditModal: React.FC<Props> = ({
                 }
                 render={({ field: { value, onChange, onBlur } }) => (
                   <>
-                    <TextInput
-                      label={t("form.chairNameFieldLabel")}
-                      mode="outlined"
-                      dense
+                    <ChairNamePlateField
                       value={value ?? ""}
-                      onChangeText={onChange}
+                      onChange={onChange}
                       onBlur={onBlur}
-                      textColor={colors.sectionHeaderText}
-                      outlineColor={errors.name ? "#b00020" : colors.borderColor2}
-                      theme={{
-                        roundness: 10,
-                        colors: { onSurfaceVariant: colors.textSecondary, primary: colors.sectionHeaderText },
-                      }}
-                      style={{ backgroundColor: colors.cardBg, borderWidth: 0 }}
+                      error={!!errors.name}
+                      caption={t("form.chairNameFieldLabel")}
+                      placeholder={t("form.chairNamePlaceholder")}
                     />
                     <HelperText type="error" visible={!!errors.name}>
                       {errors.name?.message as string}
@@ -294,49 +275,23 @@ export const ChairEditModal: React.FC<Props> = ({
                 name="barberId"
                 rules={
                   mode === "barber"
-                    ? { required: t("form.barberSelectionRequired") }
+                    ? { required: t("form.personnelSelectionRequired") }
                     : undefined
                 }
                 render={({ field: { value, onChange } }) => (
                   <>
-                    <Dropdown
-                      data={barberOptions}
-                      labelField="label"
-                      valueField="value"
-                      placeholder={t("form.selectBarber")}
+                    <PersonnelSelectList
+                      options={barberOptions}
                       value={value ?? undefined}
-                      onChange={(item: { label: string; value: string }) => {
-                        onChange(item.value);
-                      }}
-                      style={{
-                        height: 42,
-                        borderRadius: 10,
-                        paddingHorizontal: 12,
-                        backgroundColor: colors.cardBg,
-                        borderWidth: 1,
-                        borderColor: colors.borderColor2,
-                        justifyContent: "center",
-                        marginTop: 0,
-                      }}
-                      placeholderStyle={{
-                        color: "gray",
-                        fontFamily: "CenturyGothic",
-                      }}
-                      selectedTextStyle={{
-                        color: colors.sectionHeaderText,
-                        fontFamily: "CenturyGothic",
-                      }}
-                      itemTextStyle={{
-                        color: colors.sectionHeaderText,
-                        fontFamily: "CenturyGothic",
-                      }}
-                      containerStyle={{
-                        backgroundColor: colors.cardBg,
-                        borderWidth: 0,
-                        borderRadius: 10,
-                        overflow: "hidden",
-                      }}
-                      activeColor="#3a3b3d"
+                      onChange={onChange}
+                      disabled={barberOptions.length === 0}
+                      emptyHint={t("form.addPersonnelForChairHint")}
+                      hasError={!!errors.barberId}
+                      listTitle={t("form.personnelListTitle")}
+                      listBadgeLabel={t("form.personnelListBadge", {
+                        count: barberOptions.length,
+                      })}
+                      hint={t("form.selectPersonnelListHint")}
                     />
                     <HelperText type="error" visible={!!errors.barberId}>
                       {errors.barberId?.message as string}

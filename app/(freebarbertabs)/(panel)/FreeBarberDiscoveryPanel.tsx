@@ -9,7 +9,7 @@ import {
 import { Icon } from "react-native-paper";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Text } from "../../components/common/Text";
-import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useBottomSheet } from "../../hook/useBottomSheet";
 import SearchBar from "../../components/common/searchbar";
 import { SkeletonComponent } from "../../components/common/skeleton";
@@ -30,7 +30,8 @@ import {
 } from "../../types";
 import { useLocalSearchParams } from "expo-router";
 import { useSafeNavigation } from "../../hook/useSafeNavigation";
-import MapView, { Marker } from "react-native-maps";
+import { Marker } from "react-native-maps";
+import { OsmMapView as MapView } from "../../components/common/OsmMapView";
 import { safeCoord } from "../../utils/location/geo";
 import StoreBookingContent from "../../components/store/storebooking";
 import {
@@ -57,7 +58,8 @@ import { StoreMarker } from "../../components/common/storemarker";
 import { DeferredRender } from "../../components/common/deferredrender";
 import { isOtherUsersStore } from "../../utils/compare-eligibility";
 import { PanelCollapsibleTop } from "../../components/panel/PanelCollapsibleTop";
-import { usePanelMoreFab } from "../../hook/usePanelMoreFab";
+import { useFabOverlayWhenSheetOpen, usePanelMoreFab } from "../../hook/usePanelMoreFab";
+import { useDeferredSheetPresent } from "../../hook/useDeferredSheetPresent";
 import { getCompareStripBottom } from "../../components/layout/panelBottomOverlays";
 import {
   compareStripCtaStyle,
@@ -68,8 +70,6 @@ import { PerplexityListItem } from "../../components/panel/PerplexityListItem";
 import { PerplexityHorizontalList } from "../../components/panel/PerplexityHorizontalList";
 import { PanelEmptyCta } from "../../components/common/PanelEmptyCta";
 import { useFreeBarberPanelSheet } from "../../context/FreeBarberPanelSheetContext";
-import { MoreFabPanelContext } from "../../components/layout/MoreFabContext";
-
 const Index = () => {
   const insets = useSafeAreaInsets();
   const compareStripBottom = useMemo(
@@ -84,7 +84,6 @@ const Index = () => {
   const guard = useActionGuard();
   const { withSubscription } = useSubscriptionGuard();
   const freeBarberPanelSheet = useFreeBarberPanelSheet();
-  const fabCtx = useContext(MoreFabPanelContext);
 
   const { data: notifications = [], refetch: refetchNotifications } =
     useGetAllNotificationsQuery();
@@ -190,8 +189,14 @@ const Index = () => {
     return createFilterRequestDto(undefined, currentUserId, t);
   }, [createFilterRequestDto, currentUserId, t, filterCriteria]);
 
-  // Önce location'ı al (useNearbyStores'dan)
-  // Backend'de free barber panel kontrolü yapılıyor, frontend'de sadece enabled kontrolü yapıyoruz
+  // Free barber paneli varlığını her zaman kontrol et (lokasyon beklenmeden)
+  const { data: freeBarber, refetch: refetchFreeBarber } =
+    useGetFreeBarberMinePanelQuery(undefined);
+
+  // Paneli olan kullanıcılar için store listesini getir
+  const hasFreeBarberPanel = !!freeBarber?.id;
+
+  // Panel yoksa store'ları hiç çekme
   const {
     stores,
     loading,
@@ -203,17 +208,10 @@ const Index = () => {
     location,
     manualFetch,
   } = useNearbyStores({
-    enabled: true,
+    enabled: hasFreeBarberPanel,
     filter: storeFilterDto,
-    useFilteredEndpoint: true, // Her zaman filtered endpoint kullan
+    useFilteredEndpoint: true,
   });
-
-  // Free barber paneli varlığını her zaman kontrol et (lokasyon beklenmeden)
-  const { data: freeBarber, refetch: refetchFreeBarber } =
-    useGetFreeBarberMinePanelQuery(undefined);
-
-  // Free barber paneli yoksa stores'u filtrele (backend'de zaten kontrol ediliyor ama ekstra güvenlik için)
-  const hasFreeBarberPanel = !!freeBarber?.id;
   const displayStores = useMemo(() => {
     // Backend'de zaten kontrol ediliyor, ama frontend'de de ekstra kontrol
     if (!hasFreeBarberPanel) {
@@ -312,10 +310,7 @@ const Index = () => {
   });
 
   const anySheetOpen = mapDetailSheet.isOpen || ratingsSheet.isOpen;
-  useEffect(() => {
-    fabCtx?.reportOverlayOpen(anySheetOpen);
-    return () => { fabCtx?.reportOverlayOpen(false); };
-  }, [anySheetOpen, fabCtx]);
+  useFabOverlayWhenSheetOpen(anySheetOpen);
 
   const [expandedStoreBarber, setExpandedStoreBarber] = useState(true);
   const [selectedRatingsTarget, setSelectedRatingsTarget] = useState<{
@@ -337,15 +332,21 @@ const Index = () => {
   const hasStoreBarbers = displayStores.length > 0;
 
   const { present: presentRatings } = ratingsSheet;
+  const { schedulePresent: scheduleRatingsPresent, cancelScheduledPresent: cancelRatingsPresent } =
+    useDeferredSheetPresent(presentRatings);
+
+  const dismissRatingsSheet = useCallback(() => {
+    cancelRatingsPresent();
+    setSelectedRatingsTarget(null);
+    ratingsSheet.dismiss();
+  }, [cancelRatingsPresent, ratingsSheet]);
+
   const handlePressRatings = useCallback(
     (targetId: string, targetName: string) => {
       setSelectedRatingsTarget({ targetId, targetName });
-      // Sheet'i açmak için küçük bir gecikme ekle
-      setTimeout(() => {
-        presentRatings();
-      }, 100);
+      scheduleRatingsPresent(100);
     },
-    [presentRatings],
+    [scheduleRatingsPresent],
   );
 
   const handleViewMyPanelPress = useCallback(() => {
@@ -973,15 +974,16 @@ const Index = () => {
             setSelectedRatingsTarget(null);
           }
         }}
+        onDismiss={() => {
+          cancelRatingsPresent();
+          ratingsSheet.handleDismiss();
+        }}
       >
         {selectedRatingsTarget ? (
           <RatingsBottomSheet
             targetId={selectedRatingsTarget.targetId}
             targetName={selectedRatingsTarget.targetName}
-            onClose={() => {
-              setSelectedRatingsTarget(null);
-              ratingsSheet.dismiss();
-            }}
+            onClose={dismissRatingsSheet}
           />
         ) : (
           <View className="flex-1 pt-4">

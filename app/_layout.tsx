@@ -1,6 +1,6 @@
 
 import 'react-native-reanimated';
-import { StatusBar, StyleSheet, View } from 'react-native'
+import { StatusBar, StyleSheet, View, ActivityIndicator } from 'react-native'
 import { Text } from './components/common/Text'
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
@@ -31,7 +31,9 @@ import './tasks/backgroundLocation';
 import './i18n/config';
 import { ThemeProvider } from './context/ThemeContext';
 import { useTheme } from './hook/useTheme';
-import { BrandIntro } from './components/splash/BrandIntro';
+// import { BrandIntro } from './components/splash/BrandIntro';
+import { MultiAccountProvider, useMultiAccount } from './context/MultiAccountContext';
+import { NotificationOpenerProvider } from './context/NotificationOpenerContext';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -66,7 +68,7 @@ function ThemedStack() {
 
 const RootLayout = () => {
   const [bootReady, setBootReady] = useState(false);
-  const [brandIntroDone, setBrandIntroDone] = useState(false);
+  // const [brandIntroDone, setBrandIntroDone] = useState(false);
 
   const [fontsLoaded] = useFonts({
     'CenturyGothic': require('../assets/fonts/centurygothic.ttf'),
@@ -84,6 +86,12 @@ const RootLayout = () => {
       }
       setBootReady(true);
       try {
+        // Android: native splash kapanmadan önce bir kare bekle — font + ilk paint ile titreme azalır
+        if (Platform.OS === 'android') {
+          await new Promise<void>((resolve) => {
+            requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+          });
+        }
         await SplashScreen.hideAsync();
       } catch {
         // Ignore splash screen errors
@@ -93,9 +101,9 @@ const RootLayout = () => {
 
   if (!fontsLoaded || !bootReady) return null;
 
-  if (!brandIntroDone) {
-    return <BrandIntro onFinish={() => setBrandIntroDone(true)} />;
-  }
+  // if (!brandIntroDone) {
+  //   return <BrandIntro onFinish={() => setBrandIntroDone(true)} />;
+  // }
 
   // Century Gothic fontunu tüm Paper component'lerinde kullan
   const centuryGothicFont = 'CenturyGothic';
@@ -131,12 +139,17 @@ const RootLayout = () => {
         <GestureHandlerRootView className="flex flex-1">
           <PaperProvider theme={paperTheme}>
             <BottomSheetModalProvider>
-              <SignalRBootstrap />
-              <FcmTokenBootstrap />
-              <ThemedStack />
-              <ThemedStatusBar />
-              <GlobalSnackbar />
-              <GlobalAlert />
+              <MultiAccountProvider>
+                <NotificationOpenerProvider>
+                <SignalRBootstrap />
+                <FcmTokenBootstrap />
+                <ThemedStack />
+                <ThemedStatusBar />
+                <GlobalSnackbar />
+                <GlobalAlert />
+                <AccountSwitchOverlay />
+                </NotificationOpenerProvider>
+              </MultiAccountProvider>
             </BottomSheetModalProvider>
           </PaperProvider>
         </GestureHandlerRootView>
@@ -154,6 +167,29 @@ function SignalRBootstrap() {
 function FcmTokenBootstrap() {
   useFcmToken();
   return null;
+}
+
+/** Hesap geçişi sırasında tüm ekranı kapatan tam saydam overlay. */
+function AccountSwitchOverlay() {
+  const { isSwitchingAccount } = useMultiAccount();
+  if (!isSwitchingAccount) return null;
+  return (
+    <View
+      style={{
+        ...StyleSheet.absoluteFillObject,
+        // Android'de zIndex çalışması için elevation şart
+        elevation: 9999,
+        zIndex: 9999,
+        backgroundColor: 'rgba(0,0,0,0.6)',
+        alignItems: 'center',
+        justifyContent: 'center',
+        // pointerEvents style içinde olmalı (JSX prop React Native'de deprecated)
+        pointerEvents: 'auto',
+      }}
+    >
+      <ActivityIndicator size="large" color="#fea60e" />
+    </View>
+  );
 }
 
 export default RootLayout

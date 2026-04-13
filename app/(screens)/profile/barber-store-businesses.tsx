@@ -1,4 +1,4 @@
-import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Dimensions,
   FlatList,
@@ -9,7 +9,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Text } from "../../components/common/Text";
 import { IconButton } from "react-native-paper";
-import MapView from "react-native-maps";
+import { OsmMapView as MapView } from "../../components/common/OsmMapView";
 import SearchBar from "../../components/common/searchbar";
 import { BottomSheetModal, BottomSheetView } from "@gorhom/bottom-sheet";
 import { useBottomSheet } from "../../hook/useBottomSheet";
@@ -52,8 +52,8 @@ import { useActionGuard } from "../../hook/useActionGuard";
 import { useSafeNavigation } from "../../hook/useSafeNavigation";
 import { isOtherUsersFreeBarber } from "../../utils/compare-eligibility";
 import { PanelCollapsibleTop } from "../../components/panel/PanelCollapsibleTop";
-import { usePanelMoreFab } from "../../hook/usePanelMoreFab";
-import { MoreFabPanelContext } from "../../components/layout/MoreFabContext";
+import { useFabOverlayWhenSheetOpen, usePanelMoreFab } from "../../hook/usePanelMoreFab";
+import { useDeferredSheetPresent } from "../../hook/useDeferredSheetPresent";
 import { getCompareStripBottom } from "../../components/layout/panelBottomOverlays";
 import {
   compareStripCtaStyle,
@@ -197,11 +197,12 @@ const Index = () => {
     enablePanDownToClose: true,
   });
 
-  const fabPanelCtx = useContext(MoreFabPanelContext);
-  useEffect(() => {
-    fabPanelCtx?.reportOverlayOpen(updateStoreSheet.isOpen);
-    return () => fabPanelCtx?.reportOverlayOpen(false);
-  }, [updateStoreSheet.isOpen, fabPanelCtx]);
+  const anyProfileSheetOpen =
+    addStoreSheet.isOpen ||
+    updateStoreSheet.isOpen ||
+    mapDetailSheet.isOpen ||
+    ratingsSheet.isOpen;
+  useFabOverlayWhenSheetOpen(anyProfileSheetOpen);
 
   const [searchQuery, setSearchQuery] = useState("");
   const [isList, setIsList] = useState(true);
@@ -264,15 +265,15 @@ const Index = () => {
   const hasFreeBarbers = displayFreeBarbers.length > 0;
 
   const { present: presentUpdateStore } = updateStoreSheet;
+  const { schedulePresent: scheduleUpdateStorePresent, cancelScheduledPresent: cancelUpdateStorePresent } =
+    useDeferredSheetPresent(presentUpdateStore);
+
   const handlePressUpdateStore = useCallback(
     (store: BarberStoreMineDto) => {
       setStoreId(store.id);
-      // Sheet'i açmak için küçük bir gecikme ekle
-      setTimeout(() => {
-        presentUpdateStore();
-      }, 100);
+      scheduleUpdateStorePresent(100);
     },
-    [presentUpdateStore],
+    [scheduleUpdateStorePresent],
   );
 
   const { present: presentMapDetail } = mapDetailSheet;
@@ -285,15 +286,15 @@ const Index = () => {
   );
 
   const { present: presentRatings } = ratingsSheet;
+  const { schedulePresent: scheduleRatingsPresent, cancelScheduledPresent: cancelRatingsPresent } =
+    useDeferredSheetPresent(presentRatings);
+
   const handlePressRatings = useCallback(
     (targetId: string, targetName: string) => {
       setSelectedRatingsTarget({ targetId, targetName });
-      // Sheet'i açmak için küçük bir gecikme ekle
-      setTimeout(() => {
-        presentRatings();
-      }, 100);
+      scheduleRatingsPresent(100);
     },
-    [presentRatings],
+    [scheduleRatingsPresent],
   );
 
   // Filter fonksiyonları - filters are applied instantly, no apply button needed
@@ -1063,12 +1064,14 @@ const Index = () => {
         })}
       />
 
+
       <BottomSheetModal
         ref={addStoreSheet.ref}
         backdropComponent={addStoreSheet.makeBackdrop()}
         handleIndicatorStyle={{ backgroundColor: colors.sheetHandle }}
         backgroundStyle={{ backgroundColor: colors.sheetBg }}
         onChange={addStoreSheet.handleChange}
+        onDismiss={addStoreSheet.handleDismiss}
         snapPoints={addStoreSheet.snapPoints}
         enableOverDrag={addStoreSheet.enableOverDrag}
         enablePanDownToClose={addStoreSheet.enablePanDownToClose}
@@ -1090,6 +1093,10 @@ const Index = () => {
         handleIndicatorStyle={{ backgroundColor: colors.sheetHandle }}
         backgroundStyle={{ backgroundColor: colors.sheetBg }}
         onChange={updateStoreSheet.handleChange}
+        onDismiss={() => {
+          cancelUpdateStorePresent();
+          updateStoreSheet.handleDismiss();
+        }}
         snapPoints={updateStoreSheet.snapPoints}
         enableOverDrag={updateStoreSheet.enableOverDrag}
         enablePanDownToClose={updateStoreSheet.enablePanDownToClose}
@@ -1108,6 +1115,7 @@ const Index = () => {
               storeId={storeId}
               enabled={updateStoreSheet.isOpen}
               onClose={() => {
+                cancelUpdateStorePresent();
                 updateStoreSheet.dismiss();
               }}
               error={storesError || freeBarbersError}
@@ -1161,12 +1169,17 @@ const Index = () => {
             setSelectedRatingsTarget(null);
           }
         }}
+        onDismiss={() => {
+          cancelRatingsPresent();
+          ratingsSheet.handleDismiss();
+        }}
       >
         {selectedRatingsTarget ? (
           <RatingsBottomSheet
             targetId={selectedRatingsTarget.targetId}
             targetName={selectedRatingsTarget.targetName}
             onClose={() => {
+              cancelRatingsPresent();
               setSelectedRatingsTarget(null);
               ratingsSheet.dismiss();
             }}

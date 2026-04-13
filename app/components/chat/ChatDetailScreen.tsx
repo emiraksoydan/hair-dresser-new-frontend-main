@@ -91,16 +91,22 @@ async function transcribeWithWhisper(
       headers: { Authorization: `Bearer ${authToken}` },
       body: formData,
     });
-    const json = await res.json().catch(() => ({}));
+    const json = (await res.json().catch(() => ({}))) as Record<string, unknown>;
     if (!res.ok) {
       const msg = typeof json?.message === "string" ? json.message : undefined;
       return { text: null, serverMessage: msg };
     }
-    const text = json?.data ?? null;
+    const rawData = json.data ?? json.Data;
+    const text =
+      typeof rawData === "string"
+        ? rawData
+        : rawData && typeof rawData === "object" && rawData !== null && "text" in rawData && typeof (rawData as { text?: string }).text === "string"
+          ? (rawData as { text: string }).text
+          : null;
     if (typeof text === "string" && text.trim() === "") {
       return { text: "", isEmpty: true };
     }
-    return { text: typeof text === "string" ? text : null };
+    return { text: typeof text === "string" ? text.trim() : null };
   } catch {
     return { text: null };
   }

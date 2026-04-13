@@ -4,7 +4,7 @@ import { Text } from '../../components/common/Text'
 import { Avatar, HelperText, Icon, IconButton, Modal as PaperModal, Portal, Switch, TextInput } from "react-native-paper";
 import { OtpInput } from 'react-native-otp-entry';
 import { Button } from '../../components/common/Button';
-import { useRevokeMutation, useGetMeQuery, useUpdateProfileMutation, useUploadImageMutation, useUpdateImageBlobMutation, useSendPhoneChangeOtpMutation, useUpdatePhoneMutation, useGetSettingQuery, useUpdateSettingMutation, useSendDeleteAccountOtpMutation, useDeleteAccountMutation } from '../../store/api';
+import { useRevokeMutation, useGetMeQuery, useUpdateProfileMutation, useUploadImageMutation, useUpdateImageBlobMutation, useSendPhoneChangeOtpMutation, useUpdatePhoneMutation, useGetSettingQuery, useUpdateSettingMutation, useSendDeleteAccountOtpMutation, useDeleteAccountMutation, useDeleteImageMutation } from '../../store/api';
 import { tokenStore } from '../../lib/tokenStore';
 import { clearStoredTokens, saveTokens } from '../../lib/tokenStorage';
 import { resetSignalRState } from '../../store/signalrSlice';
@@ -24,12 +24,18 @@ import { MESSAGES } from '../../constants/messages';
 import { useLanguage } from '../../hook/useLanguage';
 import { LanguageSelector } from '../../components/common/LanguageSelector';
 import { useThemeContext } from '../../context/ThemeContext';
+import { usePermissionSwitches } from '../../hook/usePermissionSwitches';
 import { useTheme } from '../../hook/useTheme';
 import { DEFAULT_AVATAR } from '../../constants/images';
 import { useSafeNavigation } from '../../hook/useSafeNavigation';
 import { useActionGuard } from '../../hook/useActionGuard';
 import { getTabFabScrollPadding } from '../../components/layout/panelBottomOverlays';
 import { getProfilePaperSwitchProps } from '../../constants/colors';
+import { jwtDecode } from 'jwt-decode';
+import { loadAllAccounts, removeAccount } from '../../lib/multiAccountStorage';
+import { JwtPayload } from '../../types';
+import { updateAccountsPhoneByPreviousPhone } from '../../lib/multiAccountStorage';
+import { useMultiAccount } from '../../context/MultiAccountContext';
 
 const createProfileSchema = (t: (key: string) => string) => z.object({
     firstName: z.string({ required_error: t('auth.firstName') + ' ' + t('common.required') })
@@ -53,6 +59,7 @@ const Index = () => {
     const scrollBottomPad = useMemo(() => getTabFabScrollPadding(insets.bottom), [insets.bottom]);
     const { t, currentLanguage } = useLanguage();
     const { themeMode, toggleTheme } = useThemeContext();
+    const { locationGranted, notificationGranted, handleLocationToggle, handleNotificationToggle } = usePermissionSwitches();
     const { colors, isDark } = useTheme();
     const profileSchema = useMemo(() => createProfileSchema(t), [t, currentLanguage]);
     const resolver = useMemo(() => zodResolver(profileSchema), [profileSchema]);
@@ -67,6 +74,7 @@ const Index = () => {
     const [updateProfile, { isLoading: isUpdating }] = useUpdateProfileMutation();
     const [uploadImage] = useUploadImageMutation();
     const [updateImageBlob] = useUpdateImageBlobMutation();
+    const [deleteImage] = useDeleteImageMutation();
     const [sendPhoneChangeOtp, { isLoading: isSendingOtp }] = useSendPhoneChangeOtpMutation();
     const [updatePhone, { isLoading: isUpdatingPhone }] = useUpdatePhoneMutation();
     const { data: settingData } = useGetSettingQuery();
@@ -82,6 +90,7 @@ const Index = () => {
     const [localShowPriceAnimation, setLocalShowPriceAnimation] = useState<boolean | null>(null);
     const displayShowImageAnimation = localShowImageAnimation !== null ? localShowImageAnimation : (settingData?.data?.showImageAnimation ?? true);
     const displayShowPriceAnimation = localShowPriceAnimation !== null ? localShowPriceAnimation : (settingData?.data?.showPriceAnimation ?? true);
+    const { switchAccount } = useMultiAccount();
 
     useEffect(() => {
         if (settingData?.data) {
@@ -208,6 +217,7 @@ const Index = () => {
             return;
         }
         if (result.data?.success && result.data?.data) {
+            const previousPhone = userData?.data?.phoneNumber || '';
             tokenStore.set({
                 accessToken: result.data.data.token,
                 refreshToken: result.data.data.refreshToken,
@@ -216,6 +226,7 @@ const Index = () => {
                 accessToken: result.data.data.token,
                 refreshToken: result.data.data.refreshToken,
             });
+            await updateAccountsPhoneByPreviousPhone(previousPhone, newPhoneInput);
             closePhoneModal();
             dispatch(showSnack({ message: t('profile.phoneChangeSuccess'), isError: false }));
             await refetch();
@@ -267,6 +278,22 @@ const Index = () => {
         }
     }), [guard, userData?.data?.id, userData?.data?.imageId, uploadImage, updateImageBlob, dispatch, t]);
 
+    const handleDeleteImage = useCallback(async () => {
+        const imageId = userData?.data?.imageId;
+        if (!imageId) return;
+        try {
+            const result = await deleteImage(imageId);
+            if ('error' in result) {
+                dispatch(showSnack({ message: (result.error as any)?.data?.message ?? t('profile.photoUploadError'), isError: true }));
+                return;
+            }
+            dispatch(showSnack({ message: t('profile.photoDeleted'), isError: false }));
+            await refetch();
+        } catch (error: any) {
+            dispatch(showSnack({ message: error?.message ?? t('profile.photoUploadError'), isError: true }));
+        }
+    }, [userData?.data?.imageId, deleteImage, dispatch, t, refetch]);
+
     const handleRefresh = useCallback(async () => {
         setRefreshing(true);
         try {
@@ -282,10 +309,38 @@ const Index = () => {
         setIsLoggingOutState(true);
         try {
             const tokenLoad = tokenStore.refresh;
+
+            // currentUserId'yi await'ten ÖNCE yakala.
+            // baseQueryWithReauth, logout await'i sırasında 401 alıp tokenStore.clear()
+            // çağırabilir; bu durumda tokenStore.access null olur ve removeAccount atlanır.
+            const currentAccessToken = tokenStore.access;
+            let loggedOutUserId: string | null = null;
+            if (currentAccessToken) {
+                try {
+                    const decoded = jwtDecode<JwtPayload>(currentAccessToken);
+                    loggedOutUserId = decoded.identifier || (decoded as any).sub || null;
+                } catch {}
+            }
+
             if (tokenLoad !== null && tokenLoad !== undefined) {
                 // Best effort — sunucu hatası olsa bile client çıkışı yapılır
                 await logout({ refreshToken: tokenLoad }).catch(() => {});
             }
+
+            if (loggedOutUserId) {
+                await removeAccount(loggedOutUserId);
+            }
+
+            const remaining = await loadAllAccounts();
+            // Çıkış yapılan hesabın hâlâ listede görünmediğinden emin ol
+            const nextAccount = [...remaining]
+                .filter(a => !loggedOutUserId || a.id.toLowerCase() !== loggedOutUserId.toLowerCase())
+                .sort((a, b) => b.savedAt - a.savedAt)[0];
+            if (nextAccount) {
+                await switchAccount(nextAccount);
+                return;
+            }
+
             InteractionManager.runAfterInteractions(async () => {
                 // 1. SignalR bağlantısını kapat
                 await resetSignalRState();
@@ -302,8 +357,11 @@ const Index = () => {
             });
         } catch {
             setIsLoggingOutState(false);
+            return;
+        } finally {
+            setIsLoggingOutState(false);
         }
-    }, [logout, router, dispatch]);
+    }, [logout, switchAccount, router, dispatch]);
 
     const handleSendDeleteAccountOtp = useCallback(async () => {
         const result = await sendDeleteAccountOtp({ language: currentLanguage });
@@ -321,10 +379,29 @@ const Index = () => {
 
     const handleDeleteAccount = useCallback(async () => {
         try {
+            const currentAccessToken = tokenStore.access;
+            let currentUserId: string | null = null;
+            if (currentAccessToken) {
+                try {
+                    const decoded = jwtDecode<JwtPayload>(currentAccessToken);
+                    currentUserId = decoded.identifier || (decoded as any).sub || null;
+                } catch {}
+            }
             const result = await deleteAccount({ otpCode: deleteAccountOtpCode }).unwrap();
             if (result.success) {
                 setDeleteAccountModalVisible(false);
                 dispatch(showSnack({ message: t('profile.deleteAccountSuccess'), isError: false }));
+                if (currentUserId) {
+                    await removeAccount(currentUserId);
+                }
+
+                const remaining = await loadAllAccounts();
+                const nextAccount = [...remaining].sort((a, b) => b.savedAt - a.savedAt)[0];
+                if (nextAccount) {
+                    await switchAccount(nextAccount);
+                    return;
+                }
+
                 await resetSignalRState();
                 dispatch(api.util.resetApiState());
                 tokenStore.clear();
@@ -336,7 +413,7 @@ const Index = () => {
         } catch (error: any) {
             dispatch(showSnack({ message: error?.data?.message || t('profile.deleteAccountError'), isError: true }));
         }
-    }, [deleteAccount, deleteAccountOtpCode, dispatch, router, t]);
+    }, [deleteAccount, deleteAccountOtpCode, dispatch, switchAccount, router, t]);
 
     // Memoize error message - Hook'lar early return'lerden önce olmalı
     const errorMessage = useMemo(() => {
@@ -398,19 +475,21 @@ const Index = () => {
         >
             <View className='items-center mx-6 py-6 rounded-xl' style={{ backgroundColor: colors.cardBg }}>
                 <View className="relative h-[120px] w-[120px]">
-                    <View style={{ 
-                        width: 120, 
-                        height: 120, 
-                        borderRadius: 60, 
-                        borderWidth: 1.5, 
+                    <View style={{
+                        width: 120,
+                        height: 120,
+                        borderRadius: 60,
+                        borderWidth: 1.5,
                         borderColor: '#fea60e',
                         overflow: 'hidden',
                         justifyContent: 'center',
-                        alignItems: 'center'
+                        alignItems: 'center',
+                        backgroundColor: '#ffffff',
                     }}>
                         <Avatar.Image
                             size={120}
                             source={avatarSource}
+                            theme={{ colors: { primaryContainer: '#ffffff' } }}
                         />
                     </View>
                     <IconButton
@@ -420,6 +499,15 @@ const Index = () => {
                         style={{ position: 'absolute', bottom: -5, right: -0, backgroundColor: isDark ? '#38393b' : '#d1d5db', }}
                         onPress={handleImagePick}
                     />
+                    {userData?.data?.imageId && (
+                        <IconButton
+                            icon="trash-can-outline"
+                            size={18}
+                            iconColor="#ef4444"
+                            style={{ position: 'absolute', bottom: -5, left: -0, backgroundColor: isDark ? '#38393b' : '#d1d5db', }}
+                            onPress={handleDeleteImage}
+                        />
+                    )}
                 </View>
                 <View className="flex-row items-center justify-center mt-4">
                     <Icon source="account" size={22} color={colors.sectionHeaderText} />
@@ -671,7 +759,42 @@ const Index = () => {
                             {...getProfilePaperSwitchProps(isDark)}
                         />
                     </View>
+                    <View style={{ height: 1, backgroundColor: colors.borderColor, marginVertical: 8 }} />
+                    <View className='flex-row items-center justify-between'>
+                        <View className='flex-1 mr-4'>
+                            <Text className='text-base font-century-gothic-bold' style={{ color: colors.sectionHeaderText }}>{t('profile.locationPermission')}</Text>
+                            <Text className='text-sm' style={{ color: colors.textSecondary }}>{t('profile.locationPermissionDescription')}</Text>
+                        </View>
+                        <Switch
+                            value={locationGranted}
+                            onValueChange={handleLocationToggle}
+                            {...getProfilePaperSwitchProps(isDark)}
+                        />
+                    </View>
+                    <View style={{ height: 1, backgroundColor: colors.borderColor, marginVertical: 8 }} />
+                    <View className='flex-row items-center justify-between'>
+                        <View className='flex-1 mr-4'>
+                            <Text className='text-base font-century-gothic-bold' style={{ color: colors.sectionHeaderText }}>{t('profile.notificationPermission')}</Text>
+                            <Text className='text-sm' style={{ color: colors.textSecondary }}>{t('profile.notificationPermissionDescription')}</Text>
+                        </View>
+                        <Switch
+                            value={notificationGranted}
+                            onValueChange={handleNotificationToggle}
+                            {...getProfilePaperSwitchProps(isDark)}
+                        />
+                    </View>
                 </View>
+
+                <Button
+                    mode='outlined'
+                    icon="account-plus-outline"
+                    onPress={() => router.push({ pathname: '/(auth)', params: { addAccount: 'true' } } as any)}
+                    contentStyle={{ alignItems: 'center', justifyContent: 'center', paddingLeft: 0 }}
+                    textColor="#fea60e"
+                    style={{ borderColor: '#fea60e', marginBottom: 8 }}
+                >
+                    {t('accounts.addAccount')}
+                </Button>
 
                 <Button
                     mode='outlined'

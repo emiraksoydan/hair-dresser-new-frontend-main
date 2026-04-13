@@ -5,6 +5,7 @@ import { BottomSheetModal, BottomSheetFlatList, BottomSheetBackdrop, type Bottom
 import { useLanguage } from '../../hook/useLanguage';
 import { useTheme } from '../../hook/useTheme';
 import SearchBar from './searchbar';
+import { useFabOverlayWhenSheetOpen } from '../../hook/usePanelMoreFab';
 
 interface ServiceOffering {
   id?: string;
@@ -67,9 +68,12 @@ export const ServiceOfferingsList: React.FC<ServiceOfferingsListProps> = ({
   const { t } = useLanguage();
   const { colors } = useTheme();
   const sheetRef = useRef<BottomSheetModal>(null);
+  const [sheetOpen, setSheetOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
   const currency = t('card.currency');
+
+  useFabOverlayWhenSheetOpen(sheetOpen);
 
   const filteredOfferings = useMemo(() => {
     if (!searchQuery.trim()) return offerings;
@@ -162,6 +166,8 @@ export const ServiceOfferingsList: React.FC<ServiceOfferingsListProps> = ({
           backdropComponent={renderBackdrop}
           backgroundStyle={{ backgroundColor: colors.cardBg }}
           handleIndicatorStyle={{ backgroundColor: colors.borderColor }}
+          onChange={(index) => setSheetOpen(index >= 0)}
+          onDismiss={() => setSheetOpen(false)}
         >
           <BottomSheetFlatList<ServiceOffering>
             data={filteredOfferings}

@@ -46,24 +46,6 @@ export const mapBarberType = (type: string): number => {
 };
 
 /**
- * Maps business type number to string label
- * @param type - Numeric business type
- * @returns Business type string label
- */
-export const mapTypeToLabel = (type: number): string => {
-  switch (type) {
-    case 0:
-      return "MaleHairdresser";
-    case 1:
-      return "FemaleHairdresser";
-    case 2:
-      return "BeautySalon";
-    default:
-      return "";
-  }
-};
-
-/**
  * Maps business type number to display name (Turkish)
  * @param type - Numeric business type
  * @returns Display name in Turkish

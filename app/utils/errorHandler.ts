@@ -588,12 +588,3 @@ export const getMessage = (message: string | null | undefined): string => {
   return translateMessage(message);
 };
 
-/**
- * Backend'den gelen success mesajını translate eder
- * getMessage ile aynı, sadece daha açıklayıcı isim
- * 
- * @param message - Backend'den gelen success mesaj string'i
- * @returns Translate edilmiş mesaj
- */
-export const getSuccessMessage = getMessage;
-
