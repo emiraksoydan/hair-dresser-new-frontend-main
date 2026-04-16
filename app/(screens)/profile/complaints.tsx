@@ -1,5 +1,5 @@
 import { Icon } from "react-native-paper";
-import React from "react";
+import React, { useState, useCallback } from "react";
 import { View, ActivityIndicator, TouchableOpacity, Image, RefreshControl } from "react-native";
 import { Text } from "../../components/common/Text";
 import Animated, { useAnimatedScrollHandler, useSharedValue } from "react-native-reanimated";
@@ -33,6 +33,7 @@ export default function ComplaintsPage() {
     const [deleteComplaint, { isLoading: isDeleting }] = useDeleteComplaintMutation();
 
     const safeComplaints = Array.isArray(complaints) ? complaints : [];
+    const [isPullRefreshing, setIsPullRefreshing] = useState(false);
 
     const scrollY = useSharedValue(0);
     const onScroll = useAnimatedScrollHandler({
@@ -84,6 +85,15 @@ export default function ComplaintsPage() {
                 }),
         );
     };
+
+    const handleRefresh = useCallback(async () => {
+        setIsPullRefreshing(true);
+        try {
+            await refetch();
+        } finally {
+            setIsPullRefreshing(false);
+        }
+    }, [refetch]);
 
     const renderComplaintItem = ({ item, index }: { item: ComplaintGetDto; index: number }) => {
         const displayName = item.targetUserName || "Bilinmeyen Kullanıcı";
@@ -239,8 +249,8 @@ export default function ComplaintsPage() {
                     showsVerticalScrollIndicator={false}
                     refreshControl={
                         <RefreshControl
-                            refreshing={isFetching && !isLoading}
-                            onRefresh={refetch}
+                            refreshing={isPullRefreshing}
+                            onRefresh={handleRefresh}
                             tintColor={ACCENT}
                         />
                     }

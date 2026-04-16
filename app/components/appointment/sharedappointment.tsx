@@ -132,10 +132,18 @@ export default function SharedAppointmentScreen() {
     data: appointments,
     isLoading,
     refetch,
-    isFetching,
     error,
     isError,
   } = useGetAllAppointmentByFilterQuery(activeFilter);
+  const [isPullRefreshing, setIsPullRefreshing] = useState(false);
+  const handleRefresh = useCallback(async () => {
+    setIsPullRefreshing(true);
+    try {
+      await refetch();
+    } finally {
+      setIsPullRefreshing(false);
+    }
+  }, [refetch]);
 
   const filteredAppointments = useMemo(() => {
     const items = appointments ?? [];
@@ -2072,8 +2080,8 @@ export default function SharedAppointmentScreen() {
           contentContainerStyle={{ flexGrow: 1 }}
           refreshControl={
             <RefreshControl
-              refreshing={isFetching && !isLoading}
-              onRefresh={refetch}
+              refreshing={isPullRefreshing}
+              onRefresh={handleRefresh}
               tintColor="#f05e23"
             />
           }
@@ -2111,8 +2119,8 @@ export default function SharedAppointmentScreen() {
             }}
             refreshControl={
               <RefreshControl
-                refreshing={isFetching && !isLoading}
-                onRefresh={refetch}
+                refreshing={isPullRefreshing}
+                onRefresh={handleRefresh}
                 tintColor="#f05e23"
                 progressViewOffset={0}
               />

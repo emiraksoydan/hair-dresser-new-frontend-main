@@ -20,13 +20,13 @@ module.exports = {
      * Google Play'de tableti tamamen dışlamak: Play Console → Üretim → Cihaz kataloğu / form faktörü (telefon seç, tablet hariç tut).
      * Değişiklikten sonra: npx expo prebuild --clean veya EAS yeni native build.
      */
-    owner: "emir.aksoydan",
+    owner: "emiraksoydann",
     scheme: "hairdresser",
     name: "Gümüş Makas",
     slug: "HairDresser",
     version: "1.0.0",
     orientation: "portrait",
-    icon: "./assets/adaptive-icon.png",
+    icon: "./assets/icon.png",
     userInterfaceStyle: "automatic",
     newArchEnabled: true,
     ios: {
@@ -37,7 +37,7 @@ module.exports = {
         NSLocationAlwaysAndWhenInUseUsageDescription: np.locationAlways,
         NSLocationAlwaysUsageDescription: np.locationAlways,
         NSMicrophoneUsageDescription: np.microphone,
-        UIBackgroundModes: ["location", "fetch"],
+        UIBackgroundModes: ["location", "fetch", "remote-notification"],
         /** App Store export compliance: yalnızca standart/muaf şifreleme (HTTPS vb.) — ITSAppUsesNonExemptEncryption = false */
         ITSAppUsesNonExemptEncryption: false,
       },
@@ -52,7 +52,7 @@ module.exports = {
       },
       edgeToEdgeEnabled: true,
       predictiveBackGestureEnabled: false,
-      permissions: ["ACCESS_FINE_LOCATION", "ACCESS_BACKGROUND_LOCATION", "RECORD_AUDIO"],
+      permissions: ["ACCESS_FINE_LOCATION", "ACCESS_BACKGROUND_LOCATION", "RECORD_AUDIO", "POST_NOTIFICATIONS"],
       config: {
         googleMaps: {
           apiKey: process.env.GOOGLE_MAPS_API_KEY,
@@ -121,10 +121,12 @@ module.exports = {
       "./assets/fonts/centurygothic.ttf",
       "./assets/fonts/centurygothic_bold.ttf",
     ],
+
     extra: {
       eas: {
-        projectId: "52f29e16-47ea-4f30-8271-0c88e10aa1b3",
+        projectId: "3fb82360-1dd9-43f5-9e45-a795bbc5b652",
       },
     },
+
   },
 };

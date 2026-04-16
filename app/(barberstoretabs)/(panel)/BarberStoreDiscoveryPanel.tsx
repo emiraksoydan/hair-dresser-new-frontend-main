@@ -1,7 +1,9 @@
 import React, { useCallback, useMemo, useRef, useState } from "react";
+import { useIsFocused } from "@react-navigation/native";
 import {
   Dimensions,
   FlatList,
+  Image,
   RefreshControl,
   StyleSheet,
   TouchableOpacity,
@@ -143,6 +145,7 @@ const Index = () => {
   const { data: settingData } = useGetSettingQuery();
 
   const panelTopCollapsedHint = t("panel.topSectionCollapsedHint");
+  const isFocused = useIsFocused();
 
   const [panelTopExpanded, setPanelTopExpanded] = useState(true);
 
@@ -150,6 +153,11 @@ const Index = () => {
   const [selectedMapItem, setSelectedMapItem] = useState<FreeBarGetDto | null>(
     null,
   );
+
+  React.useEffect(() => {
+    if (!isFocused || locationStatus !== "granted") return;
+    manualFetch();
+  }, [isFocused, locationStatus, manualFetch]);
 
   const panelMapFabItems = useMemo(
     () => [
@@ -193,8 +201,8 @@ const Index = () => {
     setRefreshing(true);
 
     try {
-      // Early return if error or location denied, but still hide indicator
-      if (storesError || freeBarbersError || locationStatus === "denied") {
+      // Konum reddedildiyse yenileme yapma; hata olsa bile pull-to-refresh ile tekrar dene
+      if (locationStatus === "denied") {
         return;
       }
 
@@ -207,8 +215,6 @@ const Index = () => {
   }, [
     manualFetch,
     refetchStores,
-    storesError,
-    freeBarbersError,
     locationStatus,
   ]);
 
@@ -511,6 +517,36 @@ const Index = () => {
           collapsedHint={panelTopCollapsedHint}
         >
           <View style={{ backgroundColor: colors.cardBg, borderRadius: 14, borderWidth: 1.5, borderColor: colors.cardBg, overflow: "hidden" }}>
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                paddingHorizontal: 10,
+                paddingTop: 10,
+                paddingBottom: 4,
+              }}
+            >
+              <Image
+                source={require("../../../assets/icon.png")}
+                style={{
+                  width: 32,
+                  height: 32,
+                  borderRadius: 16,
+                  marginRight: 8,
+                  resizeMode: "contain",
+                }}
+              />
+              <Text
+                className="font-century-gothic-bold"
+                style={{ fontSize: 18, color: colors.sectionHeaderText }}
+                numberOfLines={1}
+              >
+                Hoşgeldiniz{" "}
+                {currentUser?.data?.firstName
+                  ? currentUser.data.firstName
+                  : ""}
+              </Text>
+            </View>
             <SearchBar
               transparent
               compact

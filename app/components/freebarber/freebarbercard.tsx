@@ -29,6 +29,7 @@ type Props = {
   typeLabel?: string;
   typeLabelColor?: string;
   onPressUpdate?: (freeBarber: FreeBarGetDto) => void;
+  onPressAppointment?: (freeBarber: FreeBarGetDto) => void;
   mode?: "default" | "barbershop";
   onPressRatings?: (freeBarberId: string, freeBarberName: string) => void;
   onCallFreeBarber?: (freeBarberId: string) => void;
@@ -46,6 +47,7 @@ const FreeBarberCard: React.FC<Props> = ({
   typeLabel,
   typeLabelColor = "bg-green-500",
   onPressUpdate,
+  onPressAppointment,
   mode = "default",
   onPressRatings,
   onCallFreeBarber,
@@ -109,6 +111,14 @@ const FreeBarberCard: React.FC<Props> = ({
   const handlePressCard = useCallback(() => {
     onPressUpdate?.(freeBarber);
   }, [onPressUpdate, freeBarber]);
+
+  const handlePressAppointment = useCallback(() => {
+    if (onPressAppointment) {
+      onPressAppointment(freeBarber);
+      return;
+    }
+    handlePressCard();
+  }, [onPressAppointment, freeBarber, handlePressCard]);
 
   const handlePressRatings = useCallback(() => {
     onPressRatings?.(freeBarber.id, freeBarber.fullName);
@@ -215,6 +225,17 @@ const FreeBarberCard: React.FC<Props> = ({
                   </Text>
                 </TouchableOpacity>
               )}
+              {mode !== "barbershop" && (
+                <TouchableOpacity
+                  onPress={handlePressAppointment}
+                  activeOpacity={0.8}
+                  className="bg-[#fea60e] rounded-full px-2 py-0.5"
+                >
+                  <Text className="text-white font-century-gothic-sans-semibold text-sm">
+                    {t("card.bookAppointment")}
+                  </Text>
+                </TouchableOpacity>
+              )}
             </View>
           )}
           <View className={isList ? "" : "flex flex-row"}>
@@ -270,6 +291,17 @@ const FreeBarberCard: React.FC<Props> = ({
                     >
                       <Text className="text-white font-century-gothic-sans-semibold text-sm">
                         {isCalling ? t("card.calling") : t("card.callBarber")}
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+                  {mode !== "barbershop" && (
+                    <TouchableOpacity
+                      onPress={handlePressAppointment}
+                      activeOpacity={0.8}
+                      className="bg-[#fea60e] rounded-full px-2.5 py-1"
+                    >
+                      <Text className="text-white font-century-gothic-sans-semibold text-sm">
+                        {t("card.bookAppointment")}
                       </Text>
                     </TouchableOpacity>
                   )}
@@ -462,6 +494,7 @@ export const FreeBarberCardInner = React.memo(FreeBarberCard, (prev, next) => {
     prev.mode === next.mode &&
     prev.storeId === next.storeId &&
     prev.onPressUpdate === next.onPressUpdate &&
+    prev.onPressAppointment === next.onPressAppointment &&
     prev.onPressRatings === next.onPressRatings &&
     prev.onCallFreeBarber === next.onCallFreeBarber &&
     prev.showImageAnimation === next.showImageAnimation &&

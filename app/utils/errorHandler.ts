@@ -106,9 +106,9 @@ const messageToKeyMap: Record<string, string> = {
   'Serbest berber bulunamadı': 'errors.freebarberNotFound',
   'Serbest berber şu an müsait değil': 'errors.freebarberNotAvailable',
   'Serbest berber koordinatları geçersiz': 'errors.freebarberInvalidCoordinates',
-  'Serbest berber 1 km dışında. Yakın değilken randevu oluşturamazsın.': 'errors.freebarberDistanceExceeded',
-  'Serbest berber ile dükkan arası 1 km dışında. Bu eşleşmeyle randevu açılamaz.': 'errors.freebarberStoreDistanceExceeded',
-  'Dükkan ile serbest berber arası 1 km dışında. Bu eşleşmeyle randevu açılamaz.': 'errors.storeFreebarberDistanceExceeded',
+  'Serbest berber 10 km dışında. Yakın değilken randevu oluşturamazsın.': 'errors.freebarberDistanceExceeded',
+  'Serbest berber ile dükkan arası 10 km dışında. Bu eşleşmeyle randevu açılamaz.': 'errors.freebarberStoreDistanceExceeded',
+  'Dükkan ile serbest berber arası 10 km dışında. Bu eşleşmeyle randevu açılamaz.': 'errors.storeFreebarberDistanceExceeded',
   'Serbest berber seçimi gereklidir.': 'errors.freebarberUserIdRequired',
   'Serbest berber seçimi zorunludur.': 'errors.freebarberUserIdRequired',
   'Dükkan randevusunda serbest berber seçilemez.': 'errors.freebarberNotAllowedForStoreAppointment',
@@ -128,7 +128,7 @@ const messageToKeyMap: Record<string, string> = {
   'Müşterinin aktif (Bekleyen/Onaylanmış) randevusu var.': 'errors.customerHasActiveAppointment',
   'Müşterinin aktif (Pending/Approved) randevusu var.': 'errors.customerHasActiveAppointment',
   'Zaten aktif bir randevunuz var. Önce onu tamamlayın.': 'errors.customerHasActiveAppointment',
-  'Dükkan 1 km dışında. Yakın değilken randevu oluşturamazsın.': 'errors.customerDistanceExceeded',
+  'Dükkan 10 km dışında. Yakın değilken randevu oluşturamazsın.': 'errors.customerDistanceExceeded',
 
   // ============================================================================
   // VALIDATION MESSAGES

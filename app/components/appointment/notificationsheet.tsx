@@ -14,7 +14,7 @@ import {
 import { useAppDispatch } from "../../store/hook";
 import { useLanguage } from "../../hook/useLanguage";
 import { BottomSheetFlatList } from "@gorhom/bottom-sheet";
-import React, { useCallback, useRef } from "react";
+import React, { useCallback, useRef, useState } from "react";
 import {
   AppointmentStatus,
   DecisionStatus,
@@ -56,6 +56,7 @@ export function NotificationsSheet({
   const guard = useActionGuard();
   const dispatch = useAppDispatch();
   const { data, isFetching, isLoading, refetch } = useGetAllNotificationsQuery();
+  const [isPullRefreshing, setIsPullRefreshing] = useState(false);
   const [markRead] = useMarkNotificationReadMutation();
   const [deleteNotification, { isLoading: isDeletingNotification }] =
     useDeleteNotificationMutation();
@@ -417,6 +418,15 @@ export function NotificationsSheet({
     ],
   );
 
+  const handleRefresh = useCallback(async () => {
+    setIsPullRefreshing(true);
+    try {
+      await refetch();
+    } finally {
+      setIsPullRefreshing(false);
+    }
+  }, [refetch]);
+
   return (
     <View className="flex-1 px-3">
       <View className="flex-row justify-between items-center my-3">
@@ -458,8 +468,8 @@ export function NotificationsSheet({
         // CRITICAL: extraData must change when any notification's _updatedAt changes
         // This forces FlatList to re-render items when SignalR updates arrive
         extraData={data?.map(n => `${n.id}-${n._updatedAt || 0}`).join(',')}
-        refreshing={isFetching}
-        onRefresh={refetch}
+        refreshing={isPullRefreshing}
+        onRefresh={handleRefresh}
         style={{ flex: 1 }}
         contentContainerStyle={{
           flexGrow: 1, // Liste boş olsa bile kaydırma davranışını korur

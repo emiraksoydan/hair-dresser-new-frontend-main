@@ -52,6 +52,7 @@ import { useSafeNavigation } from "../hook/useSafeNavigation";
 import { persistHelpGuideOnboardingFromAuthPayload } from "../lib/helpGuideOnboarding";
 import { useActionGuard } from "../hook/useActionGuard";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 /** NetGsm:OtpValiditySeconds ile aynı tutun (appsettings / API). */
 const OTP_COUNTDOWN_SECONDS = 60;
@@ -78,6 +79,7 @@ const createSchemas = (t: (key: string) => string) => {
         required_error: t("auth.firstName") + " " + t("common.required"),
         invalid_type_error: t("auth.firstName") + " " + t("common.invalid"),
       })
+      .trim()
       .min(2, {
         message:
           t("auth.firstName") +
@@ -90,15 +92,13 @@ const createSchemas = (t: (key: string) => string) => {
           " " +
           t("common.maxLength").replace("{{max}}", "20"),
       })
-      .regex(/^\S+$/, {
-        message: t("auth.firstName") + " " + t("common.noSpaces"),
-      })
-      .transform((value) => value.replace(/\s+/g, "")),
+      .transform((value) => value.trim()),
     surname: z
       .string({
         required_error: t("auth.lastName") + " " + t("common.required"),
         invalid_type_error: t("auth.lastName") + " " + t("common.invalid"),
       })
+      .trim()
       .min(2, {
         message:
           t("auth.lastName") +
@@ -111,10 +111,7 @@ const createSchemas = (t: (key: string) => string) => {
           " " +
           t("common.maxLength").replace("{{max}}", "20"),
       })
-      .regex(/^\S+$/, {
-        message: t("auth.lastName") + " " + t("common.noSpaces"),
-      })
-      .transform((value) => value.replace(/\s+/g, "")),
+      .transform((value) => value.trim()),
     phone: z
       .string({
         required_error: t("auth.phoneNumber") + " " + t("common.required"),
@@ -185,6 +182,7 @@ const Index = () => {
   const isAddAccountMode = addAccount === 'true';
   const nativeRouter = useRouter();
   const { switchAccount } = useMultiAccount();
+  const insets = useSafeAreaInsets();
 
   const {
     control,
@@ -625,7 +623,7 @@ const Index = () => {
               onPress={() => nativeRouter.back()}
               style={{
                 position: 'absolute',
-                top: 16,
+                top: insets.top + 8,
                 left: 16,
                 zIndex: 10,
                 padding: 8,

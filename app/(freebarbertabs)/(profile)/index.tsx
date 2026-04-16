@@ -39,13 +39,13 @@ import { useMultiAccount } from '../../context/MultiAccountContext';
 
 const createProfileSchema = (t: (key: string) => string) => z.object({
     firstName: z.string({ required_error: t('auth.firstName') + ' ' + t('common.required') })
+        .trim()
         .min(2, { message: t('auth.firstName') + ' ' + t('common.minLength').replace('{{min}}', '2') })
-        .max(20, { message: t('auth.firstName') + ' ' + t('common.maxLength').replace('{{max}}', '20') })
-        .regex(/^[^\s]+$/, { message: t('auth.firstName') + ' ' + t('common.noSpaces') }),
+        .max(20, { message: t('auth.firstName') + ' ' + t('common.maxLength').replace('{{max}}', '20') }),
     lastName: z.string({ required_error: t('auth.lastName') + ' ' + t('common.required') })
+        .trim()
         .min(2, { message: t('auth.lastName') + ' ' + t('common.minLength').replace('{{min}}', '2') })
-        .max(20, { message: t('auth.lastName') + ' ' + t('common.maxLength').replace('{{max}}', '20') })
-        .regex(/^[^\s]+$/, { message: t('auth.lastName') + ' ' + t('common.noSpaces') }),
+        .max(20, { message: t('auth.lastName') + ' ' + t('common.maxLength').replace('{{max}}', '20') }),
     phoneNumber: z.string()
         .refine((val) => /^5\d{9}$/.test(val), { message: t('profile.phoneFormat') }),
 });
@@ -89,16 +89,19 @@ const Index = () => {
     const [otpCode, setOtpCode] = useState('');
     const [localShowImageAnimation, setLocalShowImageAnimation] = useState<boolean | null>(null);
     const [localShowPriceAnimation, setLocalShowPriceAnimation] = useState<boolean | null>(null);
+    const [localEnableNotificationSound, setLocalEnableNotificationSound] = useState<boolean | null>(null);
     const displayShowImageAnimation = localShowImageAnimation !== null ? localShowImageAnimation : (settingData?.data?.showImageAnimation ?? true);
     const displayShowPriceAnimation = localShowPriceAnimation !== null ? localShowPriceAnimation : (settingData?.data?.showPriceAnimation ?? true);
+    const displayEnableNotificationSound = localEnableNotificationSound !== null ? localEnableNotificationSound : (settingData?.data?.enableNotificationSound ?? true);
     const { switchAccount } = useMultiAccount();
 
     useEffect(() => {
         if (settingData?.data) {
             setLocalShowImageAnimation(settingData.data.showImageAnimation);
             setLocalShowPriceAnimation(settingData.data.showPriceAnimation);
+            setLocalEnableNotificationSound(settingData.data.enableNotificationSound);
         }
-    }, [settingData?.data?.showImageAnimation, settingData?.data?.showPriceAnimation]);
+    }, [settingData?.data?.showImageAnimation, settingData?.data?.showPriceAnimation, settingData?.data?.enableNotificationSound]);
 
     // Memoize theme objects
     const textInputTheme = useMemo(() => ({
@@ -731,6 +734,7 @@ const Index = () => {
                                     var result = await updateSetting({
                                         showImageAnimation: value,
                                         showPriceAnimation: displayShowPriceAnimation,
+                                        enableNotificationSound: displayEnableNotificationSound,
                                     }).unwrap();
                                     // refetchSetting çağrısını kaldırdık - RTK Query otomatik güncelliyor
                                     dispatch(showSnack({ message: result.message ?? t('settings.updateSuccess'), isError: false }));
@@ -760,6 +764,7 @@ const Index = () => {
                                     var result = await updateSetting({
                                         showImageAnimation: displayShowImageAnimation,
                                         showPriceAnimation: value,
+                                        enableNotificationSound: displayEnableNotificationSound,
                                     }).unwrap();
                                     dispatch(showSnack({ message: result.message ?? t('settings.updateSuccess'), isError: false }));
                                 } catch (error: any) {
@@ -788,6 +793,36 @@ const Index = () => {
                         <Switch
                             value={themeMode === 'dark'}
                             onValueChange={toggleTheme}
+                            {...getProfilePaperSwitchProps(isDark)}
+                        />
+                    </View>
+                    <View style={{ height: 1, backgroundColor: colors.borderColor, marginVertical: 8 }} />
+                    <View className='flex-row items-center justify-between'>
+                        <View className='flex-1 mr-4'>
+                            <Text className='text-base font-century-gothic-bold' style={{ color: colors.sectionHeaderText }}>Bildirim Sesleri</Text>
+                            <Text className='text-sm' style={{ color: colors.textSecondary }}>Randevu ve mesaj bildirim seslerini aç/kapat.</Text>
+                        </View>
+                        <Switch
+                            value={displayEnableNotificationSound}
+                            onValueChange={async (value) => {
+                                if (isUpdatingSettingRef.current) return;
+                                isUpdatingSettingRef.current = true;
+                                setLocalEnableNotificationSound(value);
+                                try {
+                                    var result = await updateSetting({
+                                        showImageAnimation: displayShowImageAnimation,
+                                        showPriceAnimation: displayShowPriceAnimation,
+                                        enableNotificationSound: value,
+                                    }).unwrap();
+                                    dispatch(showSnack({ message: result.message ?? t('settings.updateSuccess'), isError: false }));
+                                } catch (error: any) {
+                                    setLocalEnableNotificationSound(!value);
+                                    dispatch(showSnack({ message: error?.data?.message || t('profile.settingUpdateError'), isError: true }));
+                                } finally {
+                                    isUpdatingSettingRef.current = false;
+                                }
+                            }}
+                            disabled={isUpdatingSetting || isLoadingSetting}
                             {...getProfilePaperSwitchProps(isDark)}
                         />
                     </View>

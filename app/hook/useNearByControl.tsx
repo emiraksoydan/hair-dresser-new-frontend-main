@@ -102,9 +102,6 @@ export function useNearbyControl({
 
                 if (!shouldFetchByMoveOrAge(p.lat, p.lon)) return;
 
-                // Error varsa fetch yapma (sunucu çalışmıyor olabilir)
-                if (error) return;
-
                 // Hareket algılandı, güncel fonksiyonu çağır
                 if (savedFetchHandler.current) {
                     savedFetchHandler.current(p.lat, p.lon);
@@ -209,16 +206,10 @@ export function useNearbyControl({
     useEffect(() => {
         if (!enabled) return;
         if (locationStatus !== "granted") return;
-        // Error varsa hard refresh'i durdur (sunucu çalışmıyor olabilir)
-        if (error) return;
-
         // Bu fonksiyon her tetiklendiğinde ref içindeki EN GÜNCEL handleFetch'i bulur.
         const tick = () => {
             const pos = lastKnownPos.current;
             if (!pos) return;
-            // Error varsa fetch yapma (sunucu çalışmıyor olabilir)
-            if (error) return;
-
             // Ref üzerinden çağırdığımız için stale closure (eski veri) olmaz.
             savedFetchHandler.current?.(pos.lat, pos.lon);
         };
@@ -226,7 +217,7 @@ export function useNearbyControl({
         const id = setInterval(tick, hardRefreshMs);
 
         return () => clearInterval(id);
-    }, [enabled, locationStatus, hardRefreshMs, error]);
+    }, [enabled, locationStatus, hardRefreshMs]);
 
     // AppState listener: Uygulama foreground'a geldiğinde lokasyon iznini kontrol et ve hard refresh yap
     useEffect(() => {

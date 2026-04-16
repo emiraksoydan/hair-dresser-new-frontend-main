@@ -1,5 +1,5 @@
 import { Icon } from "react-native-paper";
-import React from "react";
+import React, { useState, useCallback } from "react";
 import { View, ActivityIndicator, Switch, Image, RefreshControl, TouchableOpacity } from "react-native";
 import Animated, { useAnimatedScrollHandler, useSharedValue } from "react-native-reanimated";
 import { Text } from "../../components/common/Text";
@@ -34,6 +34,7 @@ export default function BlockedUsersPage() {
     const [unblockUser, { isLoading: isUnblocking }] = useUnblockUserMutation();
 
     const safeBlockedUsers = Array.isArray(blockedUsers) ? blockedUsers : [];
+    const [isPullRefreshing, setIsPullRefreshing] = useState(false);
 
     const scrollY = useSharedValue(0);
     const onScroll = useAnimatedScrollHandler({
@@ -77,6 +78,15 @@ export default function BlockedUsersPage() {
                 showError(error?.data?.message || t("profile.unblockError"));
             }
         });
+
+    const handleRefresh = useCallback(async () => {
+        setIsPullRefreshing(true);
+        try {
+            await refetch();
+        } finally {
+            setIsPullRefreshing(false);
+        }
+    }, [refetch]);
 
     const renderBlockedItem = ({ item, index }: { item: BlockedGetDto; index: number }) => {
         const displayName = item.targetUserName || "Bilinmeyen Kullanıcı";
@@ -197,8 +207,8 @@ export default function BlockedUsersPage() {
                     showsVerticalScrollIndicator={false}
                     refreshControl={
                         <RefreshControl
-                            refreshing={isFetching && !isLoading}
-                            onRefresh={refetch}
+                            refreshing={isPullRefreshing}
+                            onRefresh={handleRefresh}
                             tintColor={ACCENT}
                         />
                     }

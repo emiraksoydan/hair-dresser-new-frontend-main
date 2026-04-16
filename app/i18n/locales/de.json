@@ -439,10 +439,10 @@
     "chairNotInStore": "Platz nicht im Geschäft gefunden.",
     "timeRequired": "Start- und Endzeit sind erforderlich.",
     "locationRequired": "Standortinformationen sind erforderlich.",
-    "customerDistanceExceeded": "Deine Entfernung zum Geschäft ist zu weit. Maximale Entfernung: 1 km.",
-    "freebarberDistanceExceeded": "Deine Entfernung zum freien Friseur ist zu weit. Maximale Entfernung: 1 km.",
-    "freebarberStoreDistanceExceeded": "Die Entfernung zwischen dem freien Friseur und dem Geschäft ist zu weit. Maximale Entfernung: 1 km.",
-    "storeFreebarberDistanceExceeded": "Die Entfernung zwischen dem Geschäft und dem freien Friseur ist zu weit. Maximale Entfernung: 1 km.",
+    "customerDistanceExceeded": "Deine Entfernung zum Geschäft ist zu weit. Maximale Entfernung: 10 km.",
+    "freebarberDistanceExceeded": "Deine Entfernung zum freien Friseur ist zu weit. Maximale Entfernung: 10 km.",
+    "freebarberStoreDistanceExceeded": "Die Entfernung zwischen dem freien Friseur und dem Geschäft ist zu weit. Maximale Entfernung: 10 km.",
+    "storeFreebarberDistanceExceeded": "Die Entfernung zwischen dem Geschäft und dem freien Friseur ist zu weit. Maximale Entfernung: 10 km.",
     "customerHasActiveAppointment": "Du hast bereits einen aktiven Termin. Du musst deinen aktuellen Termin abschließen oder stornieren, um einen neuen zu erstellen.",
     "freebarberHasActiveAppointment": "Der freie Friseur hat bereits einen aktiven Termin.",
     "storeHasActiveCall": "Das Geschäft hat bereits einen aktiven Anruf.",
@@ -1036,6 +1036,7 @@
     "currency": "TL",
     "currencySymbol": "₺",
     "beautyExpert": "Schönheitsexperte",
+    "bookAppointment": "Termin Buchen",
     "services": "Dienstleistungen"
   },
   "status": {

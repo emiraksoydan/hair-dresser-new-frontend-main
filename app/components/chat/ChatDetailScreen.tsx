@@ -83,8 +83,19 @@ async function transcribeWithWhisper(
 ): Promise<{ text: string | null; serverMessage?: string; isEmpty?: boolean }> {
   try {
     const filename = uri.split("/").pop() || "audio.m4a";
+    const lowered = filename.toLowerCase();
+    const contentType =
+      lowered.endsWith(".wav")
+        ? "audio/wav"
+        : lowered.endsWith(".mp3") || lowered.endsWith(".mpeg")
+          ? "audio/mpeg"
+          : lowered.endsWith(".ogg")
+            ? "audio/ogg"
+            : lowered.endsWith(".webm")
+              ? "audio/webm"
+              : "audio/mp4";
     const formData = new FormData();
-    formData.append("file", { uri, name: filename, type: "audio/mp4" } as any);
+    formData.append("file", { uri, name: filename, type: contentType } as any);
 
     const res = await fetch(`${baseUrl}AI/transcribe`, {
       method: "POST",

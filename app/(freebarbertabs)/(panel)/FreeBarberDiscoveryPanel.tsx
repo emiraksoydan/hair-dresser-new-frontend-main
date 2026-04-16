@@ -1,6 +1,7 @@
 import {
   Dimensions,
   FlatList,
+  Image,
   RefreshControl,
   StyleSheet,
   TouchableOpacity,
@@ -10,6 +11,7 @@ import { Icon } from "react-native-paper";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Text } from "../../components/common/Text";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useIsFocused } from "@react-navigation/native";
 import { useBottomSheet } from "../../hook/useBottomSheet";
 import SearchBar from "../../components/common/searchbar";
 import { SkeletonComponent } from "../../components/common/skeleton";
@@ -223,6 +225,7 @@ const Index = () => {
   // Ayarlar
   const { data: settingData } = useGetSettingQuery();
   const panelTopCollapsedHint = t("panel.topSectionCollapsedHint");
+  const isFocused = useIsFocused();
 
   const [panelTopExpanded, setPanelTopExpanded] = useState(true);
 
@@ -241,8 +244,8 @@ const Index = () => {
     setRefreshing(true);
 
     try {
-      // Early return if error or location denied, but still hide indicator
-      if (storeError || locationStatus === "denied") {
+      // Konum reddedildiyse yenileme yapma; hata olsa bile pull-to-refresh ile tekrar dene
+      if (locationStatus === "denied") {
         return;
       }
 
@@ -260,7 +263,6 @@ const Index = () => {
     manualFetch,
     refetchFreeBarber,
     refetchNotifications,
-    storeError,
     locationStatus,
   ]);
 
@@ -278,6 +280,11 @@ const Index = () => {
   const [isMapMode, setIsMapMode] = useState(false);
   const [selectedMapItem, setSelectedMapItem] =
     useState<BarberStoreGetDto | null>(null);
+
+  useEffect(() => {
+    if (!isFocused || !hasFreeBarberPanel || locationStatus !== "granted") return;
+    manualFetch();
+  }, [isFocused, hasFreeBarberPanel, locationStatus, manualFetch]);
 
   // Bildirimden gelen focusRegion varsa harita moduna geç
   useEffect(() => {
@@ -426,6 +433,7 @@ const Index = () => {
         compactMeta
         isViewerFromFreeBr={true}
         onPressUpdate={goStoreDetail}
+        onPressAppointment={goStoreDetail}
         onPressRatings={handlePressRatings}
         showImageAnimation={settingData?.data?.showImageAnimation ?? true}
         panelCompare={
@@ -607,6 +615,34 @@ const Index = () => {
         collapsedHint={panelTopCollapsedHint}
       >
         <View style={{ backgroundColor: colors.cardBg, borderRadius: 14, borderWidth: 1.5, borderColor: colors.cardBg, overflow: "hidden" }}>
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              paddingHorizontal: 10,
+              paddingTop: 10,
+              paddingBottom: 4,
+            }}
+          >
+            <Image
+              source={require("../../../assets/icon.png")}
+              style={{
+                width: 32,
+                height: 32,
+                borderRadius: 16,
+                marginRight: 8,
+                resizeMode: "contain",
+              }}
+            />
+            <Text
+              className="font-century-gothic-bold"
+              style={{ fontSize: 18, color: colors.sectionHeaderText }}
+              numberOfLines={1}
+            >
+              Hoşgeldiniz{" "}
+              {currentUser?.data?.firstName ? currentUser.data.firstName : ""}
+            </Text>
+          </View>
           <SearchBar
             transparent
             compact
@@ -792,6 +828,7 @@ const Index = () => {
                     compactMeta
                     isViewerFromFreeBr={true}
                     onPressUpdate={goStoreDetail}
+                    onPressAppointment={goStoreDetail}
                     onPressRatings={handlePressRatings}
                     showImageAnimation={
                       settingData?.data?.showImageAnimation ?? true

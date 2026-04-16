@@ -4,7 +4,7 @@
  */
 
 import { Icon } from "react-native-paper";
-import React, { useMemo, useCallback } from 'react';
+import React, { useMemo, useCallback, useState } from 'react';
 import { View, TouchableOpacity, RefreshControl, Alert } from 'react-native';
 import { Text } from '../common/Text';
 import { useAnimatedScrollHandler, useSharedValue } from 'react-native-reanimated';
@@ -45,6 +45,7 @@ export const MessageThreadList: React.FC<MessageThreadListProps> = ({ routePrefi
     const { data: threads, isLoading, refetch, isFetching, error, isError } = useGetChatThreadsQuery();
     const formatTime = useFormatTime();
     const { userType: currentUserType } = useAuth();
+    const [isPullRefreshing, setIsPullRefreshing] = useState(false);
     const mutedTextColor = isDark ? '#94a3b8' : '#64748b';
     const tertiaryTextColor = isDark ? '#64748b' : '#94a3b8';
     const unreadAccent = '#f05e23';
@@ -335,6 +336,14 @@ export const MessageThreadList: React.FC<MessageThreadListProps> = ({ routePrefi
     }
 
     const hasNoThreads = !threads || (Array.isArray(threads) && threads.length === 0);
+    const handleRefresh = useCallback(async () => {
+        setIsPullRefreshing(true);
+        try {
+            await refetch();
+        } finally {
+            setIsPullRefreshing(false);
+        }
+    }, [refetch]);
 
     return (
         <View className="flex-1" style={{ backgroundColor: colors.screenBg }}>
@@ -367,8 +376,8 @@ export const MessageThreadList: React.FC<MessageThreadListProps> = ({ routePrefi
                 }
                 refreshControl={
                     <RefreshControl
-                        refreshing={isFetching && !isLoading}
-                        onRefresh={refetch}
+                        refreshing={isPullRefreshing}
+                        onRefresh={handleRefresh}
                         tintColor="#f05e23"
                     />
                 }

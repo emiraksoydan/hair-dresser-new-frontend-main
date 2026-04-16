@@ -396,8 +396,8 @@ export type FormUpdateValues = z.input<ReturnType<typeof createSchema>>;
 
 const PreviewRow = ({ label, value, colors }: { label: string; value: string; colors: any }) => (
   <View className="py-1.5" style={{ borderBottomWidth: 1, borderBottomColor: colors.borderColor }}>
-    <Text className="text-gray-400 text-sm mb-0.5">{label}</Text>
-    <Text className="text-sm" style={{ color: colors.sectionHeaderText }}>{value || "—"}</Text>
+    <Text className="text-gray-400 text-base mb-0.5">{label}</Text>
+    <Text className="text-base" style={{ color: colors.sectionHeaderText }}>{value || "—"}</Text>
   </View>
 );
 
@@ -406,9 +406,9 @@ const PreviewRowList = ({ label, items, colors }: { label: string; items: string
   if (unique.length === 0) return null;
   return (
     <View className="py-1.5" style={{ borderBottomWidth: 1, borderBottomColor: colors.borderColor }}>
-      <Text className="text-gray-400 text-sm mb-1">{label}</Text>
+      <Text className="text-gray-400 text-base mb-1">{label}</Text>
       {unique.map((item, i) => (
-        <Text key={`${item}-${i}`} className="text-sm py-0.5" style={{ color: colors.sectionHeaderText }}>{item}</Text>
+        <Text key={`${item}-${i}`} className="text-base py-0.5" style={{ color: colors.sectionHeaderText }}>{item}</Text>
       ))}
     </View>
   );
@@ -1643,7 +1643,7 @@ const FormStoreUpdate = React.memo(({
       // Silinen paketler
       for (const existing of existingPackages) {
         if (!formIds.has(existing.id)) {
-          await deleteServicePackageMutation(existing.id).catch(() => {});
+          await deleteServicePackageMutation(existing.id).unwrap();
         }
       }
 
@@ -1659,7 +1659,7 @@ const FormStoreUpdate = React.memo(({
             packageName: pkg.packageName,
             totalPrice: totalPriceNum,
             serviceOfferingIds: pkg.serviceOfferingIds,
-          }).catch(() => {});
+          }).unwrap();
         } else {
           // Yeni ekle
           await addServicePackage({
@@ -1667,7 +1667,7 @@ const FormStoreUpdate = React.memo(({
             packageName: pkg.packageName,
             totalPrice: totalPriceNum,
             serviceOfferingIds: pkg.serviceOfferingIds,
-          }).catch(() => {});
+          }).unwrap();
         }
       }
     } catch {
@@ -2880,8 +2880,8 @@ const FormStoreUpdate = React.memo(({
                         {/* Vergi Levhası */}
                         {getValues("taxDocumentImage")?.uri && (
                           <View className="py-1.5" style={{ borderBottomWidth: 1, borderBottomColor: colors.borderColor }}>
-                            <Text className="text-gray-400 text-sm mb-1">{t("form.taxDocumentImage")}</Text>
-                            <Image source={{ uri: getValues("taxDocumentImage").uri }} style={{ width: 160, height: 110, borderRadius: 8 }} resizeMode="cover" />
+                            <Text className="text-base font-century-gothic-bold mb-2" style={{ color: colors.sectionHeaderText }}>{t("form.taxDocumentImage")}</Text>
+                            <Image source={{ uri: getValues("taxDocumentImage").uri }} style={{ width: "100%", height: 160, borderRadius: 10 }} resizeMode="cover" />
                           </View>
                         )}
                         <PreviewRow label={t("form.storeNameLabel")} value={getValues("storeName") ?? ""} colors={colors} />

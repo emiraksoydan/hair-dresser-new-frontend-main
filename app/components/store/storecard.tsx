@@ -28,6 +28,7 @@ type Props = {
     typeLabel?: string;
     typeLabelColor?: string;
     onPressUpdate?: (store: BarberStoreGetDto) => void;
+    onPressAppointment?: (store: BarberStoreGetDto) => void;
     onPressRatings?: (storeId: string, storeName: string) => void;
     showImageAnimation?: boolean;
     /** Panel: karşılaştırma seçimi (sol üst) */
@@ -36,7 +37,7 @@ type Props = {
     compactMeta?: boolean;
 };
 
-const StoreCard: React.FC<Props> = ({ store, isList, expanded, cardWidthStore, isViewerFromFreeBr = false, typeLabel, typeLabelColor = 'bg-blue-500', onPressUpdate, onPressRatings, showImageAnimation = true, panelCompare, compactMeta = false }) => {
+const StoreCard: React.FC<Props> = ({ store, isList, expanded, cardWidthStore, isViewerFromFreeBr = false, typeLabel, typeLabelColor = 'bg-blue-500', onPressUpdate, onPressAppointment, onPressRatings, showImageAnimation = true, panelCompare, compactMeta = false }) => {
     const { colors, isDark } = useTheme();
     const { t } = useLanguage();
     const [activeTab, setActiveTab] = useState<'services' | 'packages'>('services');
@@ -63,6 +64,14 @@ const StoreCard: React.FC<Props> = ({ store, isList, expanded, cardWidthStore, i
         onPressUpdate?.(store);
     }, [onPressUpdate, store]);
 
+    const handlePressAppointment = useCallback(() => {
+        if (onPressAppointment) {
+            onPressAppointment(store);
+            return;
+        }
+        handlePressCard();
+    }, [onPressAppointment, store, handlePressCard]);
+
     const handlePressRatings = useCallback(() => {
         onPressRatings?.(store.id, store.storeName);
     }, [onPressRatings, store.id, store.storeName]);
@@ -86,6 +95,15 @@ const StoreCard: React.FC<Props> = ({ store, isList, expanded, cardWidthStore, i
             >
                 {!isList && (
                     <View className='flex-row justify-end px-2 pb-0'>
+                        <TouchableOpacity
+                            onPress={handlePressAppointment}
+                            activeOpacity={0.8}
+                            className="bg-[#fea60e] rounded-full px-2 py-0.5 mr-1"
+                        >
+                            <Text className="text-white font-century-gothic-sans-semibold text-sm">
+                                {t("card.bookAppointment")}
+                            </Text>
+                        </TouchableOpacity>
                         <StatusBadge
                             type={store.isOpenNow ? 'open' : 'closed'}
                             isList={false}
@@ -111,6 +129,15 @@ const StoreCard: React.FC<Props> = ({ store, isList, expanded, cardWidthStore, i
                         )}
                         {isList && (
                             <View className="absolute top-3 right-3 flex-row gap-2 z-10">
+                                <TouchableOpacity
+                                    onPress={handlePressAppointment}
+                                    activeOpacity={0.8}
+                                    className="bg-[#fea60e] rounded-full px-2.5 py-1"
+                                >
+                                    <Text className="text-white font-century-gothic-sans-semibold text-sm">
+                                        {t("card.bookAppointment")}
+                                    </Text>
+                                </TouchableOpacity>
                                 <StatusBadge
                                     type="barber-type"
                                     barberType={store.type}
@@ -302,6 +329,7 @@ export const StoreCardInner = React.memo(
             prev.typeLabel === next.typeLabel &&
             prev.typeLabelColor === next.typeLabelColor &&
             prev.onPressUpdate === next.onPressUpdate &&
+            prev.onPressAppointment === next.onPressAppointment &&
             prev.onPressRatings === next.onPressRatings &&
             prev.showImageAnimation === next.showImageAnimation &&
             prev.panelCompare?.selected === next.panelCompare?.selected &&

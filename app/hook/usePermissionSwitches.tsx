@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Linking, NativeModules, Platform } from 'react-native';
+import { Linking, NativeModules, PermissionsAndroid, Platform } from 'react-native';
 import Constants from 'expo-constants';
 import * as Location from 'expo-location';
 
@@ -34,8 +34,27 @@ async function getLocationGranted(): Promise<boolean> {
 }
 
 async function getNotificationGranted(): Promise<boolean> {
+  // Android 13+ için önce POST_NOTIFICATIONS iznini kontrol et
+  if (Platform.OS === 'android' && Platform.Version >= 33) {
+    try {
+      const hasPostPermission = await PermissionsAndroid.check(
+        PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS,
+      );
+      if (!hasPostPermission) {
+        return false;
+      }
+    } catch {
+      // Sessizce devam et, Firebase tarafını kontrol etmeye çalış
+    }
+  }
+
   const messaging = tryLoadMessaging();
-  if (!messaging) return false;
+  if (!messaging) {
+    // Expo Go veya native Firebase olmayan ortamlarda sadece OS seviyesini baz al
+    // Android 13+ için yukarıdaki check zaten yapıldı; diğer durumlarda "açık" kabul etmiyoruz
+    return Platform.OS === 'android' && Platform.Version >= 33;
+  }
+
   try {
     const status = await messaging().hasPermission();
     // 1 = AUTHORIZED, 2 = PROVISIONAL
@@ -75,14 +94,38 @@ export function usePermissionSwitches() {
     if (value) {
       try {
         const messaging = tryLoadMessaging();
-        if (!messaging) {
-          Linking.openSettings();
-          return;
+        let granted = false;
+
+        // Android 13+ için önce POST_NOTIFICATIONS iznini iste
+        if (Platform.OS === 'android' && Platform.Version >= 33) {
+          try {
+            const permissionResult = await PermissionsAndroid.request(
+              PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS,
+            );
+            if (permissionResult !== PermissionsAndroid.RESULTS.GRANTED) {
+              setNotificationGranted(false);
+              return;
+            }
+          } catch {
+            setNotificationGranted(false);
+            return;
+          }
         }
-        const status = await messaging().requestPermission();
-        const granted = status === 1 || status === 2;
-        setNotificationGranted(granted);
-        if (!granted && Platform.OS === 'ios') Linking.openSettings();
+
+        if (messaging) {
+          const status = await messaging().requestPermission();
+          granted = status === 1 || status === 2;
+          setNotificationGranted(granted);
+          if (!granted && Platform.OS === 'ios') {
+            Linking.openSettings();
+          }
+        } else {
+          // Firebase yoksa, kullanıcıyı ayarlara yönlendir ve switch değerini
+          // yalnızca OS tarafında izin verilmişse true'ya çek
+          Linking.openSettings();
+          const osGranted = await getNotificationGranted();
+          setNotificationGranted(osGranted);
+        }
       } catch {
         setNotificationGranted(false);
       }

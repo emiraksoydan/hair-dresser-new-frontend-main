@@ -26,6 +26,17 @@ export interface AIAssistantState {
   cancelRecording: () => Promise<void>;
 }
 
+function resolveAudioUploadMeta(uri: string): { name: string; type: string } {
+  const rawName = uri.split("/").pop() || "audio.m4a";
+  const lower = rawName.toLowerCase();
+  if (lower.endsWith(".wav")) return { name: rawName, type: "audio/wav" };
+  if (lower.endsWith(".mp3") || lower.endsWith(".mpeg")) return { name: rawName, type: "audio/mpeg" };
+  if (lower.endsWith(".ogg")) return { name: rawName, type: "audio/ogg" };
+  if (lower.endsWith(".webm")) return { name: rawName, type: "audio/webm" };
+  // expo-av kaydı iOS/Android'de çoğunlukla .m4a/.mp4 olur
+  return { name: rawName, type: "audio/mp4" };
+}
+
 export function useAIAssistant(): AIAssistantState {
   const { currentLanguage } = useLanguage();
   const { token } = useAuth();
@@ -105,7 +116,8 @@ export function useAIAssistant(): AIAssistantState {
       if (!token) throw new Error("whisper_failed");
 
       const formData = new FormData();
-      formData.append("file", { uri, name: "audio.m4a", type: "audio/mp4" } as any);
+      const { name, type } = resolveAudioUploadMeta(uri);
+      formData.append("file", { uri, name, type } as any);
 
       const langParam = encodeURIComponent(currentLanguage ?? "tr");
       const whisperRes = await fetch(`${API_CONFIG.BASE_URL}AI/transcribe?language=${langParam}`, {

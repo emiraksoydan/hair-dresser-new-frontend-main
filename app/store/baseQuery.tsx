@@ -264,8 +264,9 @@ export async function rehydrateTokens() {
   const stored = await loadTokens();
   const norm = normalizeLoaded(stored);
   if (!norm) {
+    // Token yoksa sadece memory temizle; storage'ı zorla silme.
+    // Böylece geçici storage read problemleri kalıcı logout'a dönüşmez.
     tokenStore.clear?.();
-    await clearStoredTokens();
     return;
   }
   tokenStore.set({ accessToken: norm.access, refreshToken: norm.refresh });
@@ -276,13 +277,24 @@ export async function rehydrateTokens() {
         { type: 'rehydrate' } as any,
         {} as any
       );
-      if ((r as any).error) throw new Error('HTTP error');
+      const refreshError = (r as any).error;
+      if (refreshError) {
+        const status = refreshError.status;
+        const isAuthError =
+          status === 401 || status === 403 || status === 419 || status === 498;
+        if (isAuthError) {
+          tokenStore.clear?.();
+          await clearStoredTokens();
+        }
+        // Network/timeout gibi geçici hatalarda session'ı koru.
+        return;
+      }
       const { accessToken, refreshToken } = extractTokens((r as any).data);
       tokenStore.set({ accessToken, refreshToken });
       await saveTokens({ accessToken, refreshToken });
     } catch {
-      tokenStore.clear?.();
-      await clearStoredTokens();
+      // Boot anında geçici hatalarda (network, timeout, parse vb.) kullanıcıyı auth'a atma.
+      // Sonraki isteklerde refresh tekrar denenecek.
     }
   }
 }

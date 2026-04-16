@@ -81,7 +81,6 @@ export function useNearbyStoresControl({
 
     const fetchNearby = useCallback(async (showLoading: boolean = false, isRetry: boolean = false) => {
         if (!enabled || !stores.length) return;
-        if (error && !showLoading && !isRetry) return;
 
         if (isRetry) {
             setError(null);
@@ -142,7 +141,7 @@ export function useNearbyStoresControl({
                 setIsLoading(false);
             }
         }
-    }, [enabled, stores, radiusKm, trigger, error, filter, currentUserId]);
+    }, [enabled, stores, radiusKm, trigger, filter, currentUserId]);
 
     // 1. Durum: Store listesi veya koordinatı değişirse ANINDA çek
     useEffect(() => {
@@ -159,16 +158,13 @@ export function useNearbyStoresControl({
 
     // 3. Durum: Periyodik olarak arka planda yenile (Timer)
     // Background refresh'lerde loading gösterme
-    // ÖNEMLİ: Error veya location denied durumunda hard refresh'i durdur
     useEffect(() => {
         if (!enabled) return;
         if (locationStatus !== "granted") return;
-        // Error varsa hard refresh'i durdur (sunucu çalışmıyor olabilir)
-        if (error) return;
 
         const interval = setInterval(() => fetchNearby(false), hardRefreshMs);
         return () => clearInterval(interval);
-    }, [enabled, hardRefreshMs, fetchNearby, locationStatus, error]);
+    }, [enabled, hardRefreshMs, fetchNearby, locationStatus]);
 
     return {
         freeBarbers,

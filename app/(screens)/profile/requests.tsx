@@ -1,5 +1,5 @@
 import { Icon } from "react-native-paper";
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useCallback } from "react";
 import {
     View,
     ActivityIndicator,
@@ -77,6 +77,7 @@ export default function RequestsPage() {
     const [deleteRequest, { isLoading: isDeleting }] = useDeleteRequestMutation();
 
     const safeRequests = Array.isArray(requests) ? requests : [];
+    const [isPullRefreshing, setIsPullRefreshing] = useState(false);
 
     const scrollY = useSharedValue(0);
     const onScroll = useAnimatedScrollHandler({
@@ -162,6 +163,15 @@ export default function RequestsPage() {
             }),
         );
     };
+
+    const handleRefresh = useCallback(async () => {
+        setIsPullRefreshing(true);
+        try {
+            await refetch();
+        } finally {
+            setIsPullRefreshing(false);
+        }
+    }, [refetch]);
 
     const renderRequestItem = ({ item, index }: { item: RequestGetDto; index: number }) => {
         const processed = item.isProcessed;
@@ -454,8 +464,8 @@ export default function RequestsPage() {
                     showsVerticalScrollIndicator={false}
                     refreshControl={
                         <RefreshControl
-                            refreshing={isFetching && !isLoading}
-                            onRefresh={refetch}
+                            refreshing={isPullRefreshing}
+                            onRefresh={handleRefresh}
                             tintColor={ACCENT}
                         />
                     }

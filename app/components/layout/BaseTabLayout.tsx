@@ -193,7 +193,7 @@ export const BaseTabLayout: React.FC<BaseTabLayoutProps> = ({
   const unreadMsg = badgeCounts?.data?.chatUnreadCount || 0;
 
   // Play notification sound when badge count changes
-  useNotificationSound(unreadNoti);
+  useNotificationSound(unreadNoti, unreadMsg);
 
   // Ortak header actions callbacks
   const handleNotificationPress = useCallback(() => {

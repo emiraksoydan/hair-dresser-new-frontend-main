@@ -439,10 +439,10 @@
     "chairNotInStore": "لم يتم العثور على الكرسي في المتجر.",
     "timeRequired": "وقت البداية والنهاية مطلوب.",
     "locationRequired": "معلومات الموقع مطلوبة.",
-    "customerDistanceExceeded": "المسافة إلى المتجر بعيدة جداً. الحد الأقصى للمسافة: 1 كم.",
-    "freebarberDistanceExceeded": "المسافة إلى الحلاق المستقل بعيدة جداً. الحد الأقصى للمسافة: 1 كم.",
-    "freebarberStoreDistanceExceeded": "المسافة بين الحلاق المستقل والمتجر بعيدة جداً. الحد الأقصى للمسافة: 1 كم.",
-    "storeFreebarberDistanceExceeded": "المسافة بين المتجر والحلاق المستقل بعيدة جداً. الحد الأقصى للمسافة: 1 كم.",
+    "customerDistanceExceeded": "المسافة إلى المتجر بعيدة جداً. الحد الأقصى للمسافة: 10 كم.",
+    "freebarberDistanceExceeded": "المسافة إلى الحلاق المستقل بعيدة جداً. الحد الأقصى للمسافة: 10 كم.",
+    "freebarberStoreDistanceExceeded": "المسافة بين الحلاق المستقل والمتجر بعيدة جداً. الحد الأقصى للمسافة: 10 كم.",
+    "storeFreebarberDistanceExceeded": "المسافة بين المتجر والحلاق المستقل بعيدة جداً. الحد الأقصى للمسافة: 10 كم.",
     "customerHasActiveAppointment": "لديك بالفعل موعد نشط. تحتاج إلى إكمال أو إلغاء موعدك الحالي لإنشاء موعد جديد.",
     "freebarberHasActiveAppointment": "الحلاق المستقل لديه بالفعل موعد نشط.",
     "storeHasActiveCall": "المتجر لديه بالفعل مكالمة نشطة.",
@@ -1036,6 +1036,7 @@
     "currency": "ل.ت",
     "currencySymbol": "₺",
     "beautyExpert": "خبير تجميل",
+    "bookAppointment": "احجز موعد",
     "services": "الخدمات"
   },
   "status": {

@@ -2,9 +2,10 @@ import { useEffect, useRef } from 'react';
 import { Audio } from 'expo-av';
 import { AppState, AppStateStatus } from 'react-native';
 import { useAuth } from './useAuth';
+import { useGetSettingQuery } from '../store/api';
 
 // Local notification sound - no network dependency
-const NOTIFICATION_SOUND = require('../../assets/sounds/notification.mp3');
+const NOTIFICATION_SOUND = require('../../assets/sounds/notificationmessage.mp3');
 
 /**
  * Hook to play notification sound when badge count changes
@@ -21,8 +22,10 @@ const NOTIFICATION_SOUND = require('../../assets/sounds/notification.mp3');
  * Sound source: Local asset (assets/sounds/notification.mp3) - network bağımsız, anında çalar
  * Ses dosyasının kendi süresi var (3 saniye), otomatik biter - döngüye gerek yok
  */
-export const useNotificationSound = (badgeCount: number) => {
+export const useNotificationSound = (notificationBadgeCount: number, chatBadgeCount: number) => {
     const { isAuthenticated } = useAuth();
+    const { data: settingData } = useGetSettingQuery(undefined, { skip: !isAuthenticated });
+    const soundEnabled = settingData?.data?.enableNotificationSound ?? true;
 
     // CRITICAL FIX: Initialize with -1 to detect first real value
     // This ensures sound plays on manual refresh if there are new notifications
@@ -111,6 +114,7 @@ export const useNotificationSound = (badgeCount: number) => {
 
     // Play sound when badge count increases
     useEffect(() => {
+        const badgeCount = (notificationBadgeCount || 0) + (chatBadgeCount || 0);
         const previousCount = previousBadgeCountRef.current;
 
         // ÖNEMLİ: Okunmayan bildirim yoksa ses çalmamalı
@@ -183,7 +187,7 @@ export const useNotificationSound = (badgeCount: number) => {
         }
 
         previousBadgeCountRef.current = badgeCount;
-    }, [badgeCount]);
+    }, [notificationBadgeCount, chatBadgeCount, soundEnabled]);
 
     const playNotificationSound = async () => {
         // Only play if app is active
@@ -191,8 +195,13 @@ export const useNotificationSound = (badgeCount: number) => {
             return;
         }
 
+        if (!soundEnabled) {
+            return;
+        }
+
         // ÖNEMLİ: Okunmayan bildirim yoksa ses çalmamalı
-        if (badgeCount === 0) {
+        const totalBadgeCount = (notificationBadgeCount || 0) + (chatBadgeCount || 0);
+        if (totalBadgeCount === 0) {
             return;
         }
 

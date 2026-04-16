@@ -463,10 +463,10 @@
     "chairNotInStore": "Chair not found in store.",
     "timeRequired": "Start and end time are required.",
     "locationRequired": "Location information is required.",
-    "customerDistanceExceeded": "Your distance to the store is too far. Maximum distance: 1 km.",
-    "freebarberDistanceExceeded": "Your distance to the free barber is too far. Maximum distance: 1 km.",
-    "freebarberStoreDistanceExceeded": "The distance between the free barber and the store is too far. Maximum distance: 1 km.",
-    "storeFreebarberDistanceExceeded": "The distance between the store and the free barber is too far. Maximum distance: 1 km.",
+    "customerDistanceExceeded": "Your distance to the store is too far. Maximum distance: 10 km.",
+    "freebarberDistanceExceeded": "Your distance to the free barber is too far. Maximum distance: 10 km.",
+    "freebarberStoreDistanceExceeded": "The distance between the free barber and the store is too far. Maximum distance: 10 km.",
+    "storeFreebarberDistanceExceeded": "The distance between the store and the free barber is too far. Maximum distance: 10 km.",
     "customerHasActiveAppointment": "You already have an active appointment. You need to complete or cancel your current appointment to make a new one.",
     "freebarberHasActiveAppointment": "The free barber already has an active appointment.",
     "storeHasActiveCall": "The store already has an active call.",
@@ -1064,6 +1064,7 @@
     "currency": "TL",
     "currencySymbol": "₺",
     "beautyExpert": "Beauty Expert",
+    "bookAppointment": "Book Appointment",
     "services": "Services"
   },
   "status": {

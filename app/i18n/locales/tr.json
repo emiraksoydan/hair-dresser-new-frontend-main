@@ -442,10 +442,10 @@
     "chairNotInStore": "Koltuk dükkanda bulunamadı.",
     "timeRequired": "Başlangıç ve bitiş saati gereklidir.",
     "locationRequired": "Konum bilgisi gereklidir.",
-    "customerDistanceExceeded": "Dükkana olan mesafeniz çok uzak. Maksimum mesafe: 1 km.",
-    "freebarberDistanceExceeded": "Serbest berbere olan mesafeniz çok uzak. Maksimum mesafe: 1 km.",
-    "freebarberStoreDistanceExceeded": "Serbest berber ile dükkan arasındaki mesafe çok uzak. Maksimum mesafe: 1 km.",
-    "storeFreebarberDistanceExceeded": "Dükkan ile serbest berber arasındaki mesafe çok uzak. Maksimum mesafe: 1 km.",
+    "customerDistanceExceeded": "Dükkana olan mesafeniz çok uzak. Maksimum mesafe: 10 km.",
+    "freebarberDistanceExceeded": "Serbest berbere olan mesafeniz çok uzak. Maksimum mesafe: 10 km.",
+    "freebarberStoreDistanceExceeded": "Serbest berber ile dükkan arasındaki mesafe çok uzak. Maksimum mesafe: 10 km.",
+    "storeFreebarberDistanceExceeded": "Dükkan ile serbest berber arasındaki mesafe çok uzak. Maksimum mesafe: 10 km.",
     "customerHasActiveAppointment": "Zaten aktif bir randevunuz var. Yeni randevu almak için mevcut randevunuzu tamamlamanız veya iptal etmeniz gerekir.",
     "freebarberHasActiveAppointment": "Serbest berberin zaten aktif bir randevusu var.",
     "storeHasActiveCall": "Dükkanın zaten aktif bir çağrısı var.",
@@ -1043,6 +1043,7 @@
     "currency": "TL",
     "currencySymbol": "₺",
     "beautyExpert": "Güzellik Uzmanı",
+    "bookAppointment": "Randevu Al",
     "services": "Hizmetler"
   },
   "status": {

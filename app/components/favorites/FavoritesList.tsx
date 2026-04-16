@@ -152,6 +152,8 @@ const FavoritesList: React.FC<FavoritesListProps> = ({ mode = 'store' }) => {
         scheduleRatingsPresent(100);
     }, [scheduleRatingsPresent]);
 
+    const [isPullRefreshing, setIsPullRefreshing] = useState(false);
+
     const customerFavorites = useMemo(() => {
         return favorites?.filter(f => f.targetType === FavoriteTargetType.Customer && f.customer) || [];
     }, [favorites]);
@@ -270,6 +272,15 @@ const FavoritesList: React.FC<FavoritesListProps> = ({ mode = 'store' }) => {
         return null;
     }, [cardWidth, goStoreDetail, goFreeBarberDetail, getTargetTypeLabel, getTargetTypeColor, mode, handlePressRatings, settingData]);
 
+    const handleRefresh = useCallback(async () => {
+        setIsPullRefreshing(true);
+        try {
+            await refetch();
+        } finally {
+            setIsPullRefreshing(false);
+        }
+    }, [refetch]);
+
     if (isLoading) {
         return (
             <View className="flex-1  pt-4 px-4" style={{ backgroundColor: colors.screenBg }}>
@@ -286,8 +297,8 @@ const FavoritesList: React.FC<FavoritesListProps> = ({ mode = 'store' }) => {
                     contentContainerStyle={{ flexGrow: 1, paddingBottom: 32, paddingHorizontal: 8 }}
                     refreshControl={
                         <RefreshControl
-                            refreshing={isFetching && !isLoading}
-                            onRefresh={refetch}
+                            refreshing={isPullRefreshing}
+                            onRefresh={handleRefresh}
                             tintColor="#f05e23"
                         />
                     }
@@ -353,8 +364,8 @@ const FavoritesList: React.FC<FavoritesListProps> = ({ mode = 'store' }) => {
                 }}
                 refreshControl={
                     <RefreshControl
-                        refreshing={isFetching && !isLoading}
-                        onRefresh={refetch}
+                        refreshing={isPullRefreshing}
+                        onRefresh={handleRefresh}
                         tintColor="#f05e23"
                     />
                 }

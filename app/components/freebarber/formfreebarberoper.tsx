@@ -218,8 +218,8 @@ const stripBsPrefix = (key: string) => isBsPriceKey(key) ? key.slice(BS_PRICE_PR
 
 const Row = ({ label, value, colors }: { label: string; value: string; colors: any }) => (
   <View className="py-1.5" style={{ borderBottomWidth: 1, borderBottomColor: colors.borderColor }}>
-    <Text className="text-gray-400 text-sm mb-0.5">{label}</Text>
-    <Text className="text-sm" style={{ color: colors.sectionHeaderText }}>{value || "—"}</Text>
+    <Text className="text-gray-400 text-base mb-0.5">{label}</Text>
+    <Text className="text-base" style={{ color: colors.sectionHeaderText }}>{value || "—"}</Text>
   </View>
 );
 
@@ -228,9 +228,9 @@ const RowList = ({ label, items, colors }: { label: string; items: string[]; col
   if (unique.length === 0) return null;
   return (
     <View className="py-1.5" style={{ borderBottomWidth: 1, borderBottomColor: colors.borderColor }}>
-      <Text className="text-gray-400 text-sm mb-1">{label}</Text>
+      <Text className="text-gray-400 text-base mb-1">{label}</Text>
       {unique.map((item, i) => (
-        <Text key={`${item}-${i}`} className="text-sm py-0.5" style={{ color: colors.sectionHeaderText }}>{item}</Text>
+        <Text key={`${item}-${i}`} className="text-base py-0.5" style={{ color: colors.sectionHeaderText }}>{item}</Text>
       ))}
     </View>
   );
@@ -1322,17 +1322,18 @@ export const FormFreeBarberOperation = React.memo(
               names.map((n) => offeringNameToId.get(n)).filter((id): id is string => !!id);
 
             if (!isEdit) {
-              // Create modunda: tüm paketleri ekle
-              await Promise.allSettled(
-                fbFormPackages.map((pkg) =>
-                  addServicePackage({
-                    ownerId,
-                    packageName: pkg.packageName,
-                    totalPrice: parseFloat(pkg.totalPrice.replace(",", ".")) || 0,
-                    serviceOfferingIds: resolveIds(pkg.serviceOfferingIds),
-                  }),
-                ),
-              );
+              // Create modunda: paketleri sırayla ekle (yarış koşullarını azaltır)
+              for (const pkg of fbFormPackages) {
+                const totalPriceNum = parseFloat(pkg.totalPrice.replace(",", ".")) || 0;
+                const serviceOfferingIds = resolveIds(pkg.serviceOfferingIds);
+                if (!totalPriceNum || totalPriceNum <= 0 || serviceOfferingIds.length === 0) continue;
+                await addServicePackage({
+                  ownerId,
+                  packageName: pkg.packageName,
+                  totalPrice: totalPriceNum,
+                  serviceOfferingIds,
+                }).unwrap();
+              }
             } else {
               // Update modunda: ekle / güncelle / sil
               const existingPkgsRes = await triggerGetPackagesByOwner(ownerId);
@@ -1341,46 +1342,46 @@ export const FormFreeBarberOperation = React.memo(
               const formIds = new Set(fbFormPackages.filter((p) => p.id).map((p) => p.id!));
 
               // Silinecekler
-              await Promise.allSettled(
-                existingPkgs
-                  .filter((p: any) => !formIds.has(p.id))
-                  .map((p: any) => deleteServicePackageMutation(p.id)),
-              );
+              for (const p of existingPkgs.filter((x: any) => !formIds.has(x.id))) {
+                await deleteServicePackageMutation(p.id).unwrap();
+              }
 
               // Eklenecekler
               const toAdd = fbFormPackages.filter((p) => !p.id);
-              await Promise.allSettled(
-                toAdd.map((pkg) =>
-                  addServicePackage({
-                    ownerId,
-                    packageName: pkg.packageName,
-                    totalPrice: parseFloat(pkg.totalPrice.replace(",", ".")) || 0,
-                    serviceOfferingIds: resolveIds(pkg.serviceOfferingIds),
-                  }),
-                ),
-              );
+              for (const pkg of toAdd) {
+                const totalPriceNum = parseFloat(pkg.totalPrice.replace(",", ".")) || 0;
+                const serviceOfferingIds = resolveIds(pkg.serviceOfferingIds);
+                if (!totalPriceNum || totalPriceNum <= 0 || serviceOfferingIds.length === 0) continue;
+                await addServicePackage({
+                  ownerId,
+                  packageName: pkg.packageName,
+                  totalPrice: totalPriceNum,
+                  serviceOfferingIds,
+                }).unwrap();
+              }
 
               // Güncellenecekler
               const toUpdate = fbFormPackages.filter((p) => p.id && existingIds.has(p.id));
-              await Promise.allSettled(
-                toUpdate.map((pkg) =>
-                  updateServicePackageMutation({
-                    id: pkg.id!,
-                    ownerId,
-                    packageName: pkg.packageName,
-                    totalPrice: parseFloat(pkg.totalPrice.replace(",", ".")) || 0,
-                    serviceOfferingIds: resolveIds(pkg.serviceOfferingIds),
-                  }),
-                ),
-              );
+              for (const pkg of toUpdate) {
+                const totalPriceNum = parseFloat(pkg.totalPrice.replace(",", ".")) || 0;
+                const serviceOfferingIds = resolveIds(pkg.serviceOfferingIds);
+                if (!totalPriceNum || totalPriceNum <= 0 || serviceOfferingIds.length === 0) continue;
+                await updateServicePackageMutation({
+                  id: pkg.id!,
+                  ownerId,
+                  packageName: pkg.packageName,
+                  totalPrice: totalPriceNum,
+                  serviceOfferingIds,
+                }).unwrap();
+              }
             }
           } else if (ownerId && isEdit) {
             // Edit modunda paket listesi boşsa mevcut paketleri sil
             const existingPkgsRes = await triggerGetPackagesByOwner(ownerId);
             const existingPkgs = existingPkgsRes.data ?? [];
-            await Promise.allSettled(
-              existingPkgs.map((p: any) => deleteServicePackageMutation(p.id)),
-            );
+            for (const p of existingPkgs) {
+              await deleteServicePackageMutation(p.id).unwrap();
+            }
           }
 
           // Refresh panel data to show updated images

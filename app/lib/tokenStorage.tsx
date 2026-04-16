@@ -16,17 +16,19 @@ function getKeychain() {
 
 export async function saveTokens(tokens: any) {
     const Keychain = getKeychain();
+    const payload = JSON.stringify(tokens);
     if (Keychain?.setGenericPassword) {
         try {
             await Keychain.setGenericPassword(
                 'tokens',
-                JSON.stringify(tokens),
+                payload,
                 { service: SERVICE, accessible: Keychain.ACCESSIBLE.WHEN_UNLOCKED_THIS_DEVICE_ONLY }
             );
-            return;
         } catch {}
     }
-    await AsyncStorage.setItem(ASYNC_KEY, JSON.stringify(tokens));
+    // Android'de bazı cihazlarda Keychain read ara sıra null/throw dönebildiği için
+    // AsyncStorage'da da yedek kopya tutuyoruz.
+    await AsyncStorage.setItem(ASYNC_KEY, payload);
 }
 
 export async function loadTokens() {

@@ -1,7 +1,9 @@
 import React, { useCallback, useMemo, useRef, useState } from "react";
+import { useIsFocused } from "@react-navigation/native";
 import {
   Dimensions,
   FlatList,
+  Image,
   RefreshControl,
   TouchableOpacity,
   View,
@@ -66,6 +68,7 @@ const Index = () => {
   const cmpM = useCompareMetrics();
   const router = useSafeNavigation();
   const guard = useActionGuard();
+  const isFocused = useIsFocused();
 
   // Current user for favorites filter
   const { data: currentUser } = useGetMeQuery();
@@ -201,10 +204,14 @@ const Index = () => {
 
   // Unified location status and loading
   const isLoading = storesLoading || freeBarbersLoading;
-  const hasError = storesError || freeBarbersError;
   const fetchedOnce = storesFetchedOnce || freeBarbersFetchedOnce;
   const hasLocation = storesHasLocation || freeBarbersHasLocation;
   const locationStatus = storesLocationStatus || freeBarbersLocationStatus;
+
+  React.useEffect(() => {
+    if (!isFocused || locationStatus !== "granted") return;
+    Promise.all([manualFetchStores(), manualFetchFreeBarbers()]).catch(() => {});
+  }, [isFocused, locationStatus, manualFetchStores, manualFetchFreeBarbers]);
 
   // Refresh handler
   const onRefresh = useCallback(async () => {
@@ -215,8 +222,8 @@ const Index = () => {
     setRefreshing(true);
 
     try {
-      // Early return if error or location denied, but still hide indicator
-      if (hasError || locationStatus === "denied") {
+      // Konum reddedildiyse yenileme yapma; hata olsa bile pull-to-refresh ile tekrar dene
+      if (locationStatus === "denied") {
         return;
       }
 
@@ -226,7 +233,7 @@ const Index = () => {
       setRefreshing(false);
       isRefreshingRef.current = false;
     }
-  }, [manualFetchStores, manualFetchFreeBarbers, hasError, locationStatus]);
+  }, [manualFetchStores, manualFetchFreeBarbers, locationStatus]);
 
   // Rating handler
   const handlePressRatings = useCallback(
@@ -395,6 +402,7 @@ const Index = () => {
         cardWidthStore={cardWidthStore}
         compactMeta
         onPressUpdate={goStoreDetail}
+        onPressAppointment={goStoreDetail}
         onPressRatings={handlePressRatings}
         showImageAnimation={settingData?.data?.showImageAnimation ?? true}
         panelCompare={
@@ -430,6 +438,7 @@ const Index = () => {
         cardWidthFreeBarber={cardWidthFreeBarber}
         compactMeta
         onPressUpdate={goFreeBarberDetail}
+        onPressAppointment={goFreeBarberDetail}
         onPressRatings={handlePressRatings}
         showImageAnimation={settingData?.data?.showImageAnimation ?? true}
         panelCompare={
@@ -689,6 +698,36 @@ const Index = () => {
           collapsedHint={t("panel.topSectionCollapsedHint")}
         >
           <View style={{ backgroundColor: colors.cardBg, borderRadius: 12, borderWidth: 1.5, borderColor: colors.cardBg }}>
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                paddingHorizontal: 10,
+                paddingTop: 10,
+                paddingBottom: 4,
+              }}
+            >
+              <Image
+                source={require("../../../assets/icon.png")}
+                style={{
+                  width: 32,
+                  height: 32,
+                  borderRadius: 16,
+                  marginRight: 8,
+                  resizeMode: "contain",
+                }}
+              />
+              <Text
+                className="font-century-gothic-bold"
+                style={{ fontSize: 18, color: colors.sectionHeaderText }}
+                numberOfLines={1}
+              >
+                Hoşgeldiniz{" "}
+                {currentUser?.data?.firstName
+                  ? currentUser.data.firstName
+                  : ""}
+              </Text>
+            </View>
             <SearchBar
               transparent
               compact

@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Platform } from 'react-native';
+import { Platform, PermissionsAndroid } from 'react-native';
 import Constants from 'expo-constants';
 import { useAuth } from './useAuth';
 import { api } from '../store/api';
@@ -59,6 +59,15 @@ export const useFcmToken = () => {
       }
 
       try {
+        if (Platform.OS === 'android' && Platform.Version >= 33) {
+          const permissionResult = await PermissionsAndroid.request(
+            PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS,
+          );
+          if (permissionResult !== PermissionsAndroid.RESULTS.GRANTED) {
+            return null;
+          }
+        }
+
         // Request permission for Firebase
         const authStatus = await messaging().requestPermission();
         const enabled =
@@ -165,6 +174,26 @@ export const useFcmToken = () => {
 
     initializeFcm();
   }, [token, getFcmToken, registerToken, unregisterToken, fcmToken]);
+
+  // FCM token rotation: backend kaydı güncel kalsın (özellikle iOS).
+  useEffect(() => {
+    if (!token || isExpoGo) return;
+
+    let messagingModule: any;
+    try {
+      messagingModule = require('@react-native-firebase/messaging');
+      if (!messagingModule?.default) return;
+    } catch {
+      return;
+    }
+
+    const unsubscribe = messagingModule.default().onTokenRefresh(async (newToken: string) => {
+      if (!newToken) return;
+      await registerToken(newToken);
+    });
+
+    return unsubscribe;
+  }, [token, isExpoGo, registerToken]);
 
   return {
     fcmToken,
