@@ -1,6 +1,6 @@
 import { Icon } from "react-native-paper";
 import React, { memo } from "react";
-import { Image, StyleProp, View, ViewStyle } from "react-native";
+import { Image, ImageSourcePropType, StyleProp, View, ViewStyle } from "react-native";
 
 import { useGetImagesByOwnerQuery } from "../../store/api";
 import { ImageOwnerType } from "../../types";
@@ -19,6 +19,8 @@ type Props = {
     iconContainerClassName?: string;
     /** Sarı/turuncu halka veya dış boşluk için dış View */
     wrapperStyle?: StyleProp<ViewStyle>;
+    /** Sunucuda foto yokken (ör. sohbet) gösterilecek yerel görsel */
+    placeholderAsset?: ImageSourcePropType;
 };
 
 const OwnerAvatarInner: React.FC<Props> = ({
@@ -33,6 +35,7 @@ const OwnerAvatarInner: React.FC<Props> = ({
     iconColor = "#6b7280",
     iconContainerClassName,
     wrapperStyle,
+    placeholderAsset,
 }) => {
     const { colors } = useTheme();
 
@@ -55,6 +58,12 @@ const OwnerAvatarInner: React.FC<Props> = ({
         resolvedUrl ? (
             <Image
                 source={{ uri: resolvedUrl }}
+                className={imageClassName}
+                resizeMode={resizeMode}
+            />
+        ) : placeholderAsset ? (
+            <Image
+                source={placeholderAsset}
                 className={imageClassName}
                 resizeMode={resizeMode}
             />

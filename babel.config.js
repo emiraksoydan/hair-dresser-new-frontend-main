@@ -8,7 +8,11 @@ module.exports = function (api) {
     ],
     env: {
       production: {
-        plugins: ['react-native-paper/babel'],
+        plugins: [
+          'react-native-paper/babel',
+          // Üretimde console.log/debug/info kaldırılır (JS thread + Hermes)
+          ['transform-remove-console', { exclude: ['error', 'warn'] }],
+        ],
       },
     },
   };

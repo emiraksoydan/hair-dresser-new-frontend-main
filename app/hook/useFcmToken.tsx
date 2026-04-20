@@ -16,79 +16,59 @@ export const useFcmToken = () => {
   const [registerFcmToken] = api.useRegisterFcmTokenMutation();
   const [unregisterFcmToken] = api.useUnregisterFcmTokenMutation();
 
-  // Check if we're in Expo Go (where native modules don't work)
-  // Expo Go: executionEnvironment === 'storeClient'
-  // Native build: executionEnvironment === 'standalone' | 'bare' | undefined
-  const isExpoGo = Constants.executionEnvironment === 'storeClient';
+  // appOwnership === 'expo' = Expo Go; null/undefined = native build
+  const isExpoGo = Constants.appOwnership === 'expo';
 
   // Get FCM token using React Native Firebase
   const getFcmToken = useCallback(async (): Promise<string | null> => {
-    // Skip in Expo Go - native modules not available
     if (isExpoGo) {
-      // Silently skip - this is expected in Expo Go
+      console.log('[FCM] Expo Go detected, skipping');
+      return null;
+    }
+
+    let messaging;
+    try {
+      const messagingModule = require('@react-native-firebase/messaging');
+      if (!messagingModule || typeof messagingModule.default === 'undefined') {
+        console.warn('[FCM] messaging module not available');
+        return null;
+      }
+      messaging = messagingModule.default;
+    } catch (requireError: any) {
+      console.warn('[FCM] require failed:', requireError?.message);
       return null;
     }
 
     try {
-      // Safely check if module exists before requiring
-      let messaging;
-      try {
-        // Use dynamic import check - if module doesn't exist, this will throw
-        const messagingModule = require('@react-native-firebase/messaging');
-
-        // Check if module and default export exist
-        if (!messagingModule) {
+      if (Platform.OS === 'android' && Platform.Version >= 33) {
+        const permissionResult = await PermissionsAndroid.request(
+          PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS,
+        );
+        if (permissionResult !== PermissionsAndroid.RESULTS.GRANTED) {
+          console.warn('[FCM] Android POST_NOTIFICATIONS denied:', permissionResult);
           return null;
         }
+      }
 
-        // Check if default export exists (it might be undefined in Expo Go)
-        if (typeof messagingModule.default === 'undefined') {
-          return null;
-        }
+      const authStatus = await messaging().requestPermission();
+      const enabled =
+        authStatus === messaging.AuthorizationStatus.AUTHORIZED ||
+        authStatus === messaging.AuthorizationStatus.PROVISIONAL;
 
-        messaging = messagingModule.default;
-      } catch (requireError: any) {
-        // Module doesn't exist or can't be loaded (expected in Expo Go)
-        // Silently return null - this is not an error condition
+      if (!enabled) {
+        console.warn('[FCM] Permission not granted, authStatus:', authStatus);
         return null;
       }
 
-      // If we get here, messaging should be available
-      if (!messaging) {
+      const fcmTok = await messaging().getToken();
+      if (!fcmTok) {
+        console.warn('[FCM] getToken() returned empty');
         return null;
       }
-
-      try {
-        if (Platform.OS === 'android' && Platform.Version >= 33) {
-          const permissionResult = await PermissionsAndroid.request(
-            PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS,
-          );
-          if (permissionResult !== PermissionsAndroid.RESULTS.GRANTED) {
-            return null;
-          }
-        }
-
-        // Request permission for Firebase
-        const authStatus = await messaging().requestPermission();
-        const enabled =
-          authStatus === messaging.AuthorizationStatus.AUTHORIZED ||
-          authStatus === messaging.AuthorizationStatus.PROVISIONAL;
-
-        if (!enabled) {
-          // Firebase messaging permission not granted
-          return null;
-        }
-
-        // Get FCM token
-        const token = await messaging().getToken();
-        return token || null;
-      } catch (firebaseError) {
-        // Firebase messaging error - log but don't throw
-        // Firebase messaging error - silently fail
-        return null;
-      }
-    } catch (error) {
-      // Any other error - silently return null
+      console.log('[FCM] Token obtained successfully');
+      return fcmTok;
+    } catch (firebaseError: any) {
+      console.error('[FCM] Firebase error:', firebaseError?.message ?? firebaseError);
       return null;
     }
   }, [isExpoGo]);
@@ -177,7 +157,7 @@ export const useFcmToken = () => {
 
   // FCM token rotation: backend kaydı güncel kalsın (özellikle iOS).
   useEffect(() => {
-    if (!token || isExpoGo) return;
+    if (!token || isExpoGo) return; // isExpoGo = appOwnership === 'expo'
 
     let messagingModule: any;
     try {

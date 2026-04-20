@@ -136,12 +136,21 @@ export default function SharedAppointmentScreen() {
     isError,
   } = useGetAllAppointmentByFilterQuery(activeFilter);
   const [isPullRefreshing, setIsPullRefreshing] = useState(false);
+  const [appointmentsRetryBusy, setAppointmentsRetryBusy] = useState(false);
   const handleRefresh = useCallback(async () => {
     setIsPullRefreshing(true);
     try {
       await refetch();
     } finally {
       setIsPullRefreshing(false);
+    }
+  }, [refetch]);
+  const handleAppointmentsRetry = useCallback(async () => {
+    setAppointmentsRetryBusy(true);
+    try {
+      await refetch();
+    } finally {
+      setAppointmentsRetryBusy(false);
     }
   }, [refetch]);
 
@@ -2091,7 +2100,8 @@ export default function SharedAppointmentScreen() {
             error={error}
             data={filteredAppointments}
             fetchedOnce={true}
-            onRetry={refetch}
+            onRetry={handleAppointmentsRetry}
+            refetching={!!isError && appointmentsRetryBusy}
             customMessages={{
               empty: t("appointment.labels.noAppointmentsInCategory"),
             }}

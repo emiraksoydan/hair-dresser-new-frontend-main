@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useCallback, useRef, useEffect } from "react";
-import { View, Pressable, ActivityIndicator, TouchableOpacity, StyleSheet } from "react-native";
+import { View, Pressable, ActivityIndicator, TouchableOpacity, StyleSheet, Image } from "react-native";
 import { AIAssistantSheet } from "../ai/AIAssistantSheet";
 import { useSegments } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -461,6 +461,35 @@ export const BaseTabLayout: React.FC<BaseTabLayoutProps> = ({
                       </Text>
                       <Icon source="chevron-down" size={22} color={colors.headerText} />
                     </TouchableOpacity>
+                  </View>
+                ) : tabOpt.name === "(panel)" && userName != null && userName !== "" ? (
+                  <View
+                    style={{
+                      flex: 1,
+                      flexDirection: "row",
+                      alignItems: "center",
+                      minWidth: 0,
+                      paddingVertical: 2,
+                      marginRight: 4,
+                    }}
+                  >
+                    <Image
+                      source={require("../../../assets/icon.png")}
+                      style={{
+                        width: 28,
+                        height: 28,
+                        borderRadius: 14,
+                        marginRight: 8,
+                        resizeMode: "contain",
+                      }}
+                    />
+                    <Text
+                      className="text-lg font-century-gothic-bold"
+                      numberOfLines={1}
+                      style={{ color: colors.headerText, flexShrink: 1 }}
+                    >
+                      {t("navigation.welcomeWithName", { name: userName })}
+                    </Text>
                   </View>
                 ) : (
                   <View className="flex-1 justify-center">

@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useIsFocused } from "@react-navigation/native";
 import {
   Dimensions,
   FlatList,
@@ -29,6 +30,10 @@ import {
 import { useAppDispatch } from "../../store/hook";
 import { showSnack } from "../../store/snackbarSlice";
 import { getErrorMessage, getMessage } from "../../utils/errorHandler";
+import {
+  isPanelConnectivityError,
+  shouldShowDiscoveryConnectivityError,
+} from "../../utils/panelDiscoveryErrors";
 import { SavedFilterChips } from "../../components/common/savedfilterchips";
 import { FilterDrawer } from "../../components/common/filterdrawer";
 import FormStoreUpdate from "../../components/store/formstoreupdate";
@@ -75,6 +80,7 @@ const Index = () => {
   const { t } = useLanguage();
   const cmpM = useCompareMetrics();
   const guard = useActionGuard();
+  const isFocused = useIsFocused();
 
   // Current user for filters
   const { data: currentUser } = useGetMeQuery();
@@ -129,12 +135,13 @@ const Index = () => {
     error: storesError,
     isError: isStoresError,
   } = useGetMineStoresQuery(undefined, {
-    pollingInterval: 30_000,
+    pollingInterval: isFocused ? 30_000 : 0,
     refetchOnMountOrArgChange: true,
   });
   const {
     freeBarbers,
     isLoading: isFreeLoading,
+    retryInProgress: freeBarbersRetryInProgress,
     hasLocation,
     locationStatus,
     location,
@@ -149,6 +156,16 @@ const Index = () => {
     filter: freeBarberFilterDto,
     currentUserId,
   });
+
+  const [storesRetryBusy, setStoresRetryBusy] = useState(false);
+  const onRetryStoresQuery = useCallback(async () => {
+    setStoresRetryBusy(true);
+    try {
+      await refetchStores();
+    } finally {
+      setStoresRetryBusy(false);
+    }
+  }, [refetchStores]);
 
   // Ayarlar
   const { data: settingData } = useGetSettingQuery();
@@ -185,12 +202,14 @@ const Index = () => {
     enablePanDownToClose: false,
     enableOverDrag: false,
     enableHandlePanningGesture: false,
+    pressBehavior: "none",
   });
   const updateStoreSheet = useBottomSheet({
     snapPoints: ["100%"],
     enablePanDownToClose: false,
     enableOverDrag: false,
     enableHandlePanningGesture: false,
+    pressBehavior: "none",
   });
   const ratingsSheet = useBottomSheet({
     snapPoints: ["50%", "85%"],
@@ -263,6 +282,19 @@ const Index = () => {
 
   const hasStores = displayStores.length > 0;
   const hasFreeBarbers = displayFreeBarbers.length > 0;
+
+  const showStoresConnectivityError = shouldShowDiscoveryConnectivityError(
+    storesError,
+    { mode: "storeAnchor", locationStatus },
+  );
+  const showFreeBarbersConnectivityError = shouldShowDiscoveryConnectivityError(
+    freeBarbersError,
+    { mode: "storeAnchor", locationStatus },
+  );
+  const storesSoftErrorMessage =
+    storesError && !isPanelConnectivityError(storesError)
+      ? getErrorMessage(storesError)
+      : undefined;
 
   const { present: presentUpdateStore } = updateStoreSheet;
   const { schedulePresent: scheduleUpdateStorePresent, cancelScheduledPresent: cancelUpdateStorePresent } =
@@ -586,7 +618,7 @@ const Index = () => {
       push({ id: "stores-header", type: "stores-header" }, H.storesHeader);
       if (isStoresLoading) {
         push({ id: "stores-loading", type: "stores-loading" }, H.storesLoading);
-      } else if (isStoresError && storesError) {
+      } else if (showStoresConnectivityError) {
         push({ id: "stores-error", type: "stores-error" }, H.storesError);
       } else {
         const storesToDisplay = filteredStores;
@@ -623,8 +655,7 @@ const Index = () => {
     return rows;
   }, [
     isStoresLoading,
-    isStoresError,
-    storesError,
+    showStoresConnectivityError,
     filteredStores,
     expandedStores,
     filterCriteria.userType,
@@ -798,7 +829,12 @@ const Index = () => {
                     data={[]}
                     locationStatus={locationStatus}
                     fetchedOnce={true}
-                    onRetry={refetchStores}
+                    onRetry={onRetryStoresQuery}
+                    refetching={
+                      showStoresConnectivityError &&
+                      !!storesError &&
+                      storesRetryBusy
+                    }
                   >
                     <View />
                   </UnifiedStateWrapper>
@@ -830,7 +866,11 @@ const Index = () => {
                     fetchedOnce={true}
                     onRetry={refetchStores}
                     customMessages={{
-                      empty: searchQuery || hasActiveFilters ? t("empty.noStoresFound") : t("empty.noStoresAdded"),
+                      empty:
+                        storesSoftErrorMessage ??
+                        (searchQuery || hasActiveFilters
+                          ? t("empty.noStoresFound")
+                          : t("empty.noStoresAdded")),
                     }}
                   >
                     <View />
@@ -900,6 +940,11 @@ const Index = () => {
                     locationStatus={locationStatus}
                     fetchedOnce={true}
                     onRetry={manualFetch}
+                    refetching={
+                      showFreeBarbersConnectivityError &&
+                      !!freeBarbersError &&
+                      freeBarbersRetryInProgress
+                    }
                   >
                     <View />
                   </UnifiedStateWrapper>

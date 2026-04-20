@@ -19,6 +19,11 @@ import { ChairNamePlateField } from "./ChairNamePlateField";
 import { ChairModeSegmentedControl } from "./ChairModeSegmentedControl";
 import { useTheme } from "../../hook/useTheme";
 import { useActionGuard } from "../../hook/useActionGuard";
+import {
+  primaryConfirmButtonColors,
+  softCancelSurface,
+  SOFT_CANCEL_TEXT,
+} from "../../theme/confirmDialogStyles";
 
 type ChairModalBarber = {
   id: string;
@@ -66,6 +71,8 @@ export const ChairEditModal: React.FC<Props> = ({
   const barberOptions = barbers.map((b) => ({ label: b.name, value: b.id }));
   const { t } = useLanguage();
   const { colors, isDark } = useTheme();
+  const confirmBtn = primaryConfirmButtonColors(isDark);
+  const cancelBtn = softCancelSurface(isDark);
   const dispatch = useAppDispatch();
   const guard = useActionGuard();
 
@@ -308,8 +315,8 @@ export const ChairEditModal: React.FC<Props> = ({
             loading={isAdding || isUpdating}
             disabled={isAdding || isUpdating}
             onPress={handleSubmit(submit)}
-            buttonColor="#10B981"
-            textColor="white"
+            buttonColor={confirmBtn.backgroundColor}
+            textColor={confirmBtn.color}
             style={{ borderRadius: 10 }}
             labelStyle={{ fontFamily: "CenturyGothic" }}
           >
@@ -318,8 +325,9 @@ export const ChairEditModal: React.FC<Props> = ({
           <Button
             mode="outlined"
             onPress={onClose}
-            textColor={colors.textSecondary}
-            style={{ borderRadius: 10, borderColor: colors.borderColor2 }}
+            textColor={SOFT_CANCEL_TEXT}
+            buttonColor={cancelBtn.borderColor}
+            style={{ borderRadius: 10, borderColor: cancelBtn.borderColor, backgroundColor: cancelBtn.backgroundColor }}
             labelStyle={{ fontFamily: "CenturyGothic" }}
           >
             {t("common.cancel")}

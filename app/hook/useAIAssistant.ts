@@ -5,6 +5,8 @@ import { useAiAssistantMutation } from "../store/api";
 import { useLanguage } from "./useLanguage";
 import { useAuth } from "./useAuth";
 import { API_CONFIG } from "../constants/api";
+import { tokenStore } from "../lib/tokenStore";
+import { isExpired, attemptTokenRefresh } from "../store/baseQuery";
 import type { AIAssistantResponseDto } from "../types";
 
 type Phase =
@@ -24,6 +26,44 @@ export interface AIAssistantState {
   stopAndProcess: () => Promise<void>;
   reset: () => void;
   cancelRecording: () => Promise<void>;
+}
+
+/**
+ * Backend artık Türkçe düz metin yerine sabit error code dönüyor
+ * (ör. "ai_rate_limit", "whisper_failed", "transcription_empty").
+ * Bu fonksiyon, i18n altında `ai.error_<kod>` key'i varsa kodu aynen döner,
+ * yoksa serbest metin geldiyse heuristik ile uygun koda eşler; ikisi de tutmazsa
+ * "unknown" dönerek `ai.error_unknown` fallback'ini tetikler.
+ */
+const KNOWN_ERROR_CODES = new Set<string>([
+  "recording_permission_denied",
+  "recording_failed",
+  "transcription_empty",
+  "whisper_failed",
+  "whisper_rate_limit",
+  "whisper_timeout",
+  "whisper_unavailable",
+  "ai_error",
+  "ai_rate_limit",
+  "ai_unavailable",
+  "ai_invalid_response",
+  "empty_message",
+  "unknown",
+]);
+
+function normalizeAIErrorCode(raw: unknown): string {
+  if (!raw) return "unknown";
+  const s = String(raw).trim();
+  if (!s) return "unknown";
+  if (KNOWN_ERROR_CODES.has(s)) return s;
+  // Serbest metin geldiyse heuristik eşleme
+  if (/kotası|yoğun|quota|rate.?limit|exceeded|rate limit|RESOURCE_EXHAUSTED/i.test(s))
+    return /whisper|ses|transcrib/i.test(s) ? "whisper_rate_limit" : "ai_rate_limit";
+  if (/algılanamadı|algilan|no.?speech|empty|boş/i.test(s)) return "transcription_empty";
+  if (/whisper|ses.*metne|metne çevir/i.test(s)) return "whisper_failed";
+  if (/timeout|zaman aşımı|zaman asim/i.test(s)) return "whisper_timeout";
+  if (/kullanılamıyor|kullanilam|unavailable/i.test(s)) return "ai_unavailable";
+  return "unknown";
 }
 
 function resolveAudioUploadMeta(uri: string): { name: string; type: string } {
@@ -94,9 +134,6 @@ export function useAIAssistant(): AIAssistantState {
     if (!recordingRef.current) return;
 
     try {
-      const status = await recordingRef.current.getStatusAsync();
-      const durationMs = (status as any).durationMillis ?? 0;
-
       setPhase("transcribing");
       await recordingRef.current.stopAndUnloadAsync();
       const uri = recordingRef.current.getURI();
@@ -104,16 +141,13 @@ export function useAIAssistant(): AIAssistantState {
 
       if (!uri) throw new Error("recording_failed");
 
-      // durationMillis bazı cihazlarda 0 / undefined dönebilir; ancak gerçekten kısa
-      // kayıtları (< 500ms) reddet — kota harcamamak için.
-      if (durationMs > 0 && durationMs < 500) {
-        setPhase("error");
-        setErrorMessage("transcription_empty");
-        return;
-      }
-
       // --- Whisper transcription (backend proxy — API key backend'de tutulur) ---
-      if (!token) throw new Error("whisper_failed");
+      let activeToken = tokenStore.access ?? token;
+      if (!activeToken) throw new Error("whisper_failed");
+      if (isExpired(activeToken) && tokenStore.refresh) {
+        const refreshed = await attemptTokenRefresh(tokenStore.refresh);
+        if (refreshed) activeToken = refreshed.accessToken;
+      }
 
       const formData = new FormData();
       const { name, type } = resolveAudioUploadMeta(uri);
@@ -122,20 +156,37 @@ export function useAIAssistant(): AIAssistantState {
       const langParam = encodeURIComponent(currentLanguage ?? "tr");
       const whisperRes = await fetch(`${API_CONFIG.BASE_URL}AI/transcribe?language=${langParam}`, {
         method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
+        headers: { Authorization: `Bearer ${activeToken}` },
         body: formData,
       });
-      const whisperJson = (await whisperRes.json().catch(() => ({}))) as Record<string, unknown>;
+      const rawBody = await whisperRes.text();
+      let whisperJson: Record<string, unknown> = {};
+      try {
+        whisperJson = rawBody ? JSON.parse(rawBody) : {};
+      } catch (parseErr) {
+        console.warn("[useAIAssistant] whisper JSON parse failed", {
+          status: whisperRes.status,
+          bodyLen: rawBody.length,
+          bodySample: rawBody.slice(0, 200),
+          contentType: whisperRes.headers.get("content-type"),
+          contentEncoding: whisperRes.headers.get("content-encoding"),
+          parseErr: (parseErr as Error)?.message,
+        });
+      }
+      console.log("[useAIAssistant] whisper response", {
+        status: whisperRes.status,
+        ok: whisperRes.ok,
+        contentType: whisperRes.headers.get("content-type"),
+        contentEncoding: whisperRes.headers.get("content-encoding"),
+        bodyLen: rawBody.length,
+        bodySample: rawBody.slice(0, 200),
+        jsonKeys: Object.keys(whisperJson),
+      });
       if (!whisperRes.ok) {
+        // Backend artık error code döndüğü için önce message (kod) alanına bak
         const serverMsg = typeof whisperJson?.message === "string" ? whisperJson.message : "";
         setPhase("error");
-        setErrorMessage(
-          /kotası|yoğun|quota|rate.?limit|limit|exceeded|dolmuş|ücretsiz/i.test(serverMsg)
-            ? "whisper_rate_limit"
-            : /algılanamadı|algilan|no.?speech|empty|boş/i.test(serverMsg)
-              ? "transcription_empty"
-              : "whisper_failed",
-        );
+        setErrorMessage(normalizeAIErrorCode(serverMsg || `whisper_failed`));
         return;
       }
       const rawData = whisperJson.data ?? (whisperJson as { Data?: unknown }).Data;
@@ -148,6 +199,10 @@ export function useAIAssistant(): AIAssistantState {
       text = text.trim();
 
       if (!text) {
+        console.warn("[useAIAssistant] transcription_empty", {
+          rawDataType: typeof rawData,
+          rawDataSample: typeof rawData === "string" ? rawData.slice(0, 120) : JSON.stringify(rawData)?.slice(0, 120),
+        });
         setPhase("error");
         setErrorMessage("transcription_empty");
         return;
@@ -177,12 +232,22 @@ export function useAIAssistant(): AIAssistantState {
         setPhase("done");
       } else {
         setPhase("error");
-        setErrorMessage(result.message ?? "ai_error");
+        setErrorMessage(normalizeAIErrorCode(result.message));
       }
     } catch (err: any) {
-      const msg: string = err?.message ?? "unknown_error";
+      // RTK Query FetchBaseQueryError: { status, data: { message, success, data } }
+      // Backend bundan böyle message alanında kararlı kod dönüyor.
+      const apiMsg =
+        err?.data?.message ??
+        err?.error?.data?.message ??
+        err?.message ??
+        undefined;
+      console.warn("[useAIAssistant] mutation error", {
+        status: err?.status ?? err?.originalStatus,
+        apiMsg,
+      });
       setPhase("error");
-      setErrorMessage(msg);
+      setErrorMessage(normalizeAIErrorCode(apiMsg));
     }
   }, [currentLanguage, token, sendToAI]);
 

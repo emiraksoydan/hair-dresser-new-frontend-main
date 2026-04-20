@@ -3,7 +3,6 @@ import { useIsFocused } from "@react-navigation/native";
 import {
   Dimensions,
   FlatList,
-  Image,
   RefreshControl,
   StyleSheet,
   TouchableOpacity,
@@ -32,6 +31,10 @@ import {
 import { useAppDispatch } from "../../store/hook";
 import { showSnack } from "../../store/snackbarSlice";
 import { getErrorMessage, getMessage } from "../../utils/errorHandler";
+import {
+  isPanelConnectivityError,
+  shouldShowDiscoveryConnectivityError,
+} from "../../utils/panelDiscoveryErrors";
 import { SavedFilterChips } from "../../components/common/savedfilterchips";
 import { FilterDrawer } from "../../components/common/filterdrawer";
 import { FreeBarberCardInner } from "../../components/freebarber/freebarbercard";
@@ -77,6 +80,7 @@ const Index = () => {
   const guard = useActionGuard();
   const { withSubscription } = useSubscriptionGuard();
   const barberStoreSheet = useBarberStoreSheet();
+  const isFocused = useIsFocused();
 
   // Current user for filters
   const { data: currentUser } = useGetMeQuery();
@@ -121,12 +125,14 @@ const Index = () => {
     error: storesError,
     isError: isStoresError,
   } = useGetMineStoresQuery(undefined, {
-    pollingInterval: 30_000,
+    // Sekme arka plandayken 30 sn'de bir istek atma (düşük RAM cihazlar)
+    pollingInterval: isFocused ? 30_000 : 0,
     refetchOnMountOrArgChange: true,
   });
   const {
     freeBarbers,
     isLoading: isFreeLoading,
+    retryInProgress: freeBarbersRetryInProgress,
     hasLocation,
     locationStatus,
     location,
@@ -145,7 +151,6 @@ const Index = () => {
   const { data: settingData } = useGetSettingQuery();
 
   const panelTopCollapsedHint = t("panel.topSectionCollapsedHint");
-  const isFocused = useIsFocused();
 
   const [panelTopExpanded, setPanelTopExpanded] = useState(true);
 
@@ -154,10 +159,12 @@ const Index = () => {
     null,
   );
 
+  const manualFetchRef = React.useRef(manualFetch);
+  manualFetchRef.current = manualFetch;
   React.useEffect(() => {
     if (!isFocused || locationStatus !== "granted") return;
-    manualFetch();
-  }, [isFocused, locationStatus, manualFetch]);
+    manualFetchRef.current();
+  }, [isFocused, locationStatus]);
 
   const panelMapFabItems = useMemo(
     () => [
@@ -239,6 +246,15 @@ const Index = () => {
   const isFreeBarbersLoading = isFreeLoading;
 
   const hasFreeBarbers = displayFreeBarbers.length > 0;
+
+  const showFreeBarbersConnectivityError = shouldShowDiscoveryConnectivityError(
+    freeBarbersError,
+    { mode: "storeAnchor", locationStatus },
+  );
+  const freeBarberSoftErrorMessage =
+    freeBarbersError && !isPanelConnectivityError(freeBarbersError)
+      ? getErrorMessage(freeBarbersError)
+      : undefined;
 
   const { present: presentMapDetail } = mapDetailSheet;
   const handleMarkerPress = useCallback(
@@ -421,7 +437,7 @@ const Index = () => {
 
     if (isFreeBarbersLoading) {
       push({ id: "freebarbers-loading", type: "freebarbers-loading" }, H.loading);
-    } else if (freeBarbersError) {
+    } else if (showFreeBarbersConnectivityError) {
       push({ id: "freebarbers-error", type: "freebarbers-error" }, H.error);
     } else {
       const freeBarbersToDisplay = filteredFreeBarbers;
@@ -458,7 +474,7 @@ const Index = () => {
     filteredFreeBarbers,
     expandedFreeBarbers,
     filterCriteria.userType,
-    freeBarbersError,
+    showFreeBarbersConnectivityError,
     isList,
   ]);
 
@@ -517,36 +533,7 @@ const Index = () => {
           collapsedHint={panelTopCollapsedHint}
         >
           <View style={{ backgroundColor: colors.cardBg, borderRadius: 14, borderWidth: 1.5, borderColor: colors.cardBg, overflow: "hidden" }}>
-            <View
-              style={{
-                flexDirection: "row",
-                alignItems: "center",
-                paddingHorizontal: 10,
-                paddingTop: 10,
-                paddingBottom: 4,
-              }}
-            >
-              <Image
-                source={require("../../../assets/icon.png")}
-                style={{
-                  width: 32,
-                  height: 32,
-                  borderRadius: 16,
-                  marginRight: 8,
-                  resizeMode: "contain",
-                }}
-              />
-              <Text
-                className="font-century-gothic-bold"
-                style={{ fontSize: 18, color: colors.sectionHeaderText }}
-                numberOfLines={1}
-              >
-                Hoşgeldiniz{" "}
-                {currentUser?.data?.firstName
-                  ? currentUser.data.firstName
-                  : ""}
-              </Text>
-            </View>
+            <View style={{ paddingHorizontal: 10, paddingTop: 10 }}>
             <SearchBar
               transparent
               compact
@@ -556,6 +543,7 @@ const Index = () => {
               setIsList={setIsList}
               onFilterPress={() => setFilterDrawerVisible(true)}
             />
+            </View>
             <TouchableOpacity
               activeOpacity={0.7}
               onPress={handleViewMyBusinessesPress}
@@ -669,6 +657,11 @@ const Index = () => {
                     locationStatus={locationStatus}
                     fetchedOnce={true}
                     onRetry={manualFetch}
+                    refetching={
+                      showFreeBarbersConnectivityError &&
+                      !!freeBarbersError &&
+                      freeBarbersRetryInProgress
+                    }
                   >
                     <View />
                   </UnifiedStateWrapper>
@@ -701,9 +694,10 @@ const Index = () => {
                     onRetry={manualFetch}
                     customMessages={{
                       empty:
-                        searchQuery || hasActiveFilters
+                        freeBarberSoftErrorMessage ??
+                        (searchQuery || hasActiveFilters
                           ? t("empty.noResultsFound")
-                          : t("empty.noNearbyFreeBarbers"),
+                          : t("empty.noNearbyFreeBarbers")),
                     }}
                   >
                     <View />

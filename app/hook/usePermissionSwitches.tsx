@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Linking, NativeModules, PermissionsAndroid, Platform } from 'react-native';
+import { Alert, AppState, Linking, NativeModules, PermissionsAndroid, Platform, type AppStateStatus } from 'react-native';
 import Constants from 'expo-constants';
 import * as Location from 'expo-location';
+import { useLanguage } from './useLanguage';
 
 /** Expo Go'da @react-native-firebase yok; require() bile paketi yüklerken patlayabilir. */
 function isExpoGo(): boolean {
@@ -65,6 +66,7 @@ async function getNotificationGranted(): Promise<boolean> {
 }
 
 export function usePermissionSwitches() {
+  const { t } = useLanguage();
   const [locationGranted, setLocationGranted] = useState(false);
   const [notificationGranted, setNotificationGranted] = useState(false);
 
@@ -77,62 +79,107 @@ export function usePermissionSwitches() {
     setNotificationGranted(notif);
   }, []);
 
+  /** Expo Go: Linking.openSettings() Expo Go uygulamasını açar; kullanıcıya uyarı + isteğe bağlı açma. */
+  const openSystemSettings = useCallback(
+    (_kind: 'notification' | 'location') => {
+      if (isExpoGo()) {
+        Alert.alert(t('profile.expoGoSettingsTitle'), t('profile.expoGoSettingsBody'), [
+          { text: t('common.cancel'), style: 'cancel' },
+          { text: t('profile.openAppSettingsAnyway'), onPress: () => void Linking.openSettings() },
+        ]);
+        return;
+      }
+      void Linking.openSettings();
+    },
+    [t],
+  );
+
   useEffect(() => {
     refresh();
   }, [refresh]);
 
-  const handleLocationToggle = useCallback(async (value: boolean) => {
-    if (value) {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      setLocationGranted(status === 'granted');
-    } else {
-      Linking.openSettings();
-    }
-  }, []);
+  // Ayarlar ekranından dönünce (konum/bildirim değişmiş olabilir) switch'leri yenile
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (next: AppStateStatus) => {
+      if (next === 'active') {
+        refresh();
+      }
+    });
+    return () => sub.remove();
+  }, [refresh]);
 
-  const handleNotificationToggle = useCallback(async (value: boolean) => {
-    if (value) {
-      try {
-        const messaging = tryLoadMessaging();
-        let granted = false;
+  const handleLocationToggle = useCallback(
+    async (value: boolean) => {
+      if (value) {
+        const before = await Location.getForegroundPermissionsAsync();
+        if (before.status === 'granted') {
+          setLocationGranted(true);
+          return;
+        }
+        // iOS: bir kez reddedildiyse tekrar prompt çıkmaz — doğrudan Ayarlar
+        if (before.status === 'denied' && before.canAskAgain === false) {
+          openSystemSettings('location');
+          return;
+        }
+        const req = await Location.requestForegroundPermissionsAsync();
+        if (req.status === 'granted') {
+          setLocationGranted(true);
+          return;
+        }
+        setLocationGranted(false);
+        openSystemSettings('location');
+      } else {
+        openSystemSettings('location');
+      }
+    },
+    [openSystemSettings],
+  );
 
-        // Android 13+ için önce POST_NOTIFICATIONS iznini iste
-        if (Platform.OS === 'android' && Platform.Version >= 33) {
-          try {
-            const permissionResult = await PermissionsAndroid.request(
-              PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS,
-            );
-            if (permissionResult !== PermissionsAndroid.RESULTS.GRANTED) {
+  const handleNotificationToggle = useCallback(
+    async (value: boolean) => {
+      if (value) {
+        try {
+          const messaging = tryLoadMessaging();
+          let granted = false;
+
+          // Android 13+ için önce POST_NOTIFICATIONS iznini iste
+          if (Platform.OS === 'android' && Platform.Version >= 33) {
+            try {
+              const permissionResult = await PermissionsAndroid.request(
+                PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS,
+              );
+              if (permissionResult !== PermissionsAndroid.RESULTS.GRANTED) {
+                setNotificationGranted(false);
+                return;
+              }
+            } catch {
               setNotificationGranted(false);
               return;
             }
-          } catch {
-            setNotificationGranted(false);
-            return;
           }
-        }
 
-        if (messaging) {
-          const status = await messaging().requestPermission();
-          granted = status === 1 || status === 2;
-          setNotificationGranted(granted);
-          if (!granted && Platform.OS === 'ios') {
-            Linking.openSettings();
+          if (messaging) {
+            const status = await messaging().requestPermission();
+            granted = status === 1 || status === 2;
+            setNotificationGranted(granted);
+            if (!granted && Platform.OS === 'ios') {
+              openSystemSettings('notification');
+            }
+          } else {
+            // Firebase yoksa (ör. Expo Go): ayarlara yönlendir + uyarı
+            openSystemSettings('notification');
+            const osGranted = await getNotificationGranted();
+            setNotificationGranted(osGranted);
           }
-        } else {
-          // Firebase yoksa, kullanıcıyı ayarlara yönlendir ve switch değerini
-          // yalnızca OS tarafında izin verilmişse true'ya çek
-          Linking.openSettings();
-          const osGranted = await getNotificationGranted();
-          setNotificationGranted(osGranted);
+        } catch {
+          setNotificationGranted(false);
         }
-      } catch {
-        setNotificationGranted(false);
+      } else {
+        openSystemSettings('notification');
       }
-    } else {
-      Linking.openSettings();
-    }
-  }, []);
+    },
+    [openSystemSettings],
+  );
 
   return {
     locationGranted,

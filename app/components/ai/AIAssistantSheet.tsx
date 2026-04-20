@@ -238,14 +238,22 @@ export function AIAssistantSheet({ sheetRef, accentColor, onClose }: Props) {
           )}
 
           {/* Error */}
-          {phase === "error" && (
-            <View style={[styles.errorBox, { borderColor: "#ef4444" }]}>
-              <Ionicons name="warning-outline" size={18} color="#ef4444" />
-              <Text style={[styles.errorText, { color: "#ef4444" }]}>
-                {t(`ai.error_${errorMessage}`) || t("ai.error_unknown")}
-              </Text>
-            </View>
-          )}
+          {phase === "error" && (() => {
+            // i18next "key yoksa key'in kendisini döndürür" şeklinde çalıştığı için
+            // `||` fallback çalışmaz. Elle bakıp yoksa ai.error_unknown'a düşüyoruz.
+            const code = (errorMessage || "unknown").trim();
+            const key = `ai.error_${code}`;
+            const resolved = t(key);
+            const errorText = resolved === key ? t("ai.error_unknown") : resolved;
+            return (
+              <View style={[styles.errorBox, { borderColor: "#ef4444" }]}>
+                <Ionicons name="warning-outline" size={18} color="#ef4444" />
+                <Text style={[styles.errorText, { color: "#ef4444" }]}>
+                  {errorText}
+                </Text>
+              </View>
+            );
+          })()}
         </ScrollView>
 
         {/* Mic button */}

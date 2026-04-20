@@ -28,16 +28,26 @@ export function useNearbyStoresControl({
     const [locationStatus, setLocationStatus] = useState<LocationStatus>("unknown");
     const [freeBarbers, setFreeBarbers] = useState<FreeBarGetDto[]>([]);
     const [isLoading, setIsLoading] = useState(false);
+    /** Yalnızca kullanıcı retry / açık yenileme — interval arka planında yanmaz */
+    const [retryInProgress, setRetryInProgress] = useState(false);
     const [error, setError] = useState<any>(null);
     // location ve isInitialLoad ref olarak tutulur — fetchNearby döngüsünü önlemek için
     const locationRef = useRef<{ latitude: number; longitude: number } | undefined>(undefined);
     const isInitialLoadRef = useRef(true);
+    /** filter / stores her render'da yeni referans alabilir; callback deps'ine koymamak için ref */
+    const filterRef = useRef(filter);
+    filterRef.current = filter;
+    const storesRef = useRef(stores);
+    storesRef.current = stores;
+    const errorRef = useRef(error);
+    errorRef.current = error;
 
     /** Bağımsız “sadece benim işletmelerim” ekranında keşif kapalıyken yükleme bayrağını sıfırla */
     useEffect(() => {
         if (!enabled) {
             isInitialLoadRef.current = false;
             setIsLoading(false);
+            setRetryInProgress(false);
             setFreeBarbers([]);
             setError(null);
         }
@@ -80,13 +90,19 @@ export function useNearbyStoresControl({
     const prevFilterFingerprint = useRef(filterFingerprint);
 
     const fetchNearby = useCallback(async (showLoading: boolean = false, isRetry: boolean = false) => {
+        const stores = storesRef.current;
+        const filter = filterRef.current;
         if (!enabled || !stores.length) return;
 
+        const isInitialLoad = isInitialLoadRef.current;
+        const showRetryUi = isRetry || (showLoading && !isInitialLoad);
+        if (showRetryUi) {
+            setRetryInProgress(true);
+        }
         if (isRetry) {
             setError(null);
         }
 
-        const isInitialLoad = isInitialLoadRef.current;
         if (showLoading || isInitialLoad) {
             setIsLoading(true);
         }
@@ -137,11 +153,19 @@ export function useNearbyStoresControl({
         } catch (err) {
             setError(err);
         } finally {
+            if (showRetryUi) {
+                setRetryInProgress(false);
+            }
             if (showLoading || isInitialLoad) {
                 setIsLoading(false);
             }
         }
-    }, [enabled, stores, radiusKm, trigger, filter, currentUserId]);
+    }, [enabled, radiusKm, trigger, currentUserId]);
+
+    const manualFetch = useCallback(() => {
+        if (!enabled || !storesRef.current.length) return;
+        fetchNearby(true, !!errorRef.current);
+    }, [enabled, fetchNearby]);
 
     // 1. Durum: Store listesi veya koordinatı değişirse ANINDA çek
     useEffect(() => {
@@ -169,13 +193,11 @@ export function useNearbyStoresControl({
     return {
         freeBarbers,
         isLoading,
+        retryInProgress,
         locationStatus,
         hasLocation: locationStatus === "granted",
         location: locationRef.current,
         error,
-        manualFetch: () => {
-            if (locationStatus !== "granted") return;
-            fetchNearby(true, !!error);
-        },
+        manualFetch,
     };
 }

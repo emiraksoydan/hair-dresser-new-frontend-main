@@ -19,11 +19,16 @@ import {
   Animated,
   Image,
   Linking,
+  StyleSheet,
+  Text as RNText,
+  InteractionManager,
 } from "react-native";
 import * as Clipboard from "expo-clipboard";
 import { BlurView } from "expo-blur";
 import { MotiView } from "moti";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { Text } from "../common/Text";
+import { ChatBubbleAudio } from "./ChatBubbleAudio";
 import { useSafeNavigation } from "../../hook/useSafeNavigation";
 import { useActionGuard } from "../../hook/useActionGuard";
 
@@ -38,10 +43,12 @@ import {
   useSendChatMessageByThreadMutation,
   useSendChatMediaMessageMutation,
   useDeleteChatMessageMutation,
+  useUpdateChatMessageMutation,
   useDeleteChatThreadMutation,
   useMarkChatThreadReadMutation,
   useGetChatThreadsQuery,
   useNotifyTypingMutation,
+  useToggleFavoriteMutation,
 } from "../../store/api";
 import {
   ChatMessageItemDto,
@@ -63,6 +70,7 @@ import {
 import { setActiveThreadId } from "../../lib/activeChatThread";
 import { OwnerAvatar } from "../common/owneravatar";
 import { useAlert } from "../../hook/useAlert";
+import { useChatThreadAudio } from "../../hook/useChatThreadAudio";
 import { useTheme } from "../../hook/useTheme";
 import * as ImagePicker from "expo-image-picker";
 import * as Location from "expo-location";
@@ -70,16 +78,42 @@ import { ensureJpegForUpload, normalizeImageFile } from "../../utils/form/pick-d
 import * as DocumentPicker from "expo-document-picker";
 import { Audio } from "expo-av";
 import { API_CONFIG } from "../../constants/api";
+import { tokenStore } from "../../lib/tokenStore";
+import { isExpired, attemptTokenRefresh } from "../../store/baseQuery";
+import { downsampleWaveformPeaks, meteringDbToNorm } from "../../utils/audioWaveform";
+import { File as ExpoFsFile, Paths } from "expo-file-system";
+import { parseChatClipboardPayload } from "../../utils/chat/clipboardPayload";
+import {
+  primaryConfirmButtonColors,
+  softCancelSurface,
+  SOFT_CANCEL_TEXT,
+} from "../../theme/confirmDialogStyles";
+
+/** Sohbette karşı tarafta profil fotoğrafı yokken */
+const CHAT_AVATAR_PLACEHOLDER = require("../../../assets/images/profileempty.webp");
+
+const VOICE_RECORD_OPTIONS: Audio.RecordingOptions = {
+  ...Audio.RecordingOptionsPresets.HIGH_QUALITY,
+  isMeteringEnabled: true,
+};
 
 interface ChatDetailScreenProps {
   threadId: string;
 }
 
-/** Whisper transcription — backend proxy; hata mesajı sunucudan iletilir (limit vb.). */
+/** API base sonuna tek slash ile birleştirir (api + AI/transcribe). */
+function joinApiUrl(baseUrl: string, path: string): string {
+  const base = baseUrl.replace(/\/+$/, "");
+  const p = path.startsWith("/") ? path : `/${path}`;
+  return `${base}${p}`;
+}
+
+/** Whisper transcription — backend proxy; yanıt gövdesi camelCase / PascalCase / düz string olabilir. */
 async function transcribeWithWhisper(
   uri: string,
   authToken: string,
   baseUrl: string,
+  language?: string,
 ): Promise<{ text: string | null; serverMessage?: string; isEmpty?: boolean }> {
   try {
     const filename = uri.split("/").pop() || "audio.m4a";
@@ -97,29 +131,78 @@ async function transcribeWithWhisper(
     const formData = new FormData();
     formData.append("file", { uri, name: filename, type: contentType } as any);
 
-    const res = await fetch(`${baseUrl}AI/transcribe`, {
+    const langQ =
+      language && language.trim().length > 0
+        ? `?language=${encodeURIComponent(language)}`
+        : "";
+    const res = await fetch(joinApiUrl(baseUrl, `AI/transcribe${langQ}`), {
       method: "POST",
       headers: { Authorization: `Bearer ${authToken}` },
       body: formData,
     });
-    const json = (await res.json().catch(() => ({}))) as Record<string, unknown>;
-    if (!res.ok) {
-      const msg = typeof json?.message === "string" ? json.message : undefined;
-      return { text: null, serverMessage: msg };
+    const rawBody = await res.text();
+    let json: Record<string, unknown> = {};
+    try {
+      json = rawBody ? JSON.parse(rawBody) : {};
+    } catch (parseErr) {
+      console.warn("[transcribeWithWhisper] JSON parse failed", {
+        status: res.status,
+        bodyLen: rawBody.length,
+        bodySample: rawBody.slice(0, 200),
+        contentType: res.headers.get("content-type"),
+        contentEncoding: res.headers.get("content-encoding"),
+        parseErr: (parseErr as Error)?.message,
+      });
     }
+    console.log("[transcribeWithWhisper] response", {
+      status: res.status,
+      ok: res.ok,
+      contentType: res.headers.get("content-type"),
+      contentEncoding: res.headers.get("content-encoding"),
+      bodyLen: rawBody.length,
+      bodySample: rawBody.slice(0, 200),
+      jsonKeys: Object.keys(json),
+    });
+    const serverMessage =
+      (typeof json.message === "string" && json.message) ||
+      (typeof json.Message === "string" && json.Message) ||
+      undefined;
+    const successFlag = json.success ?? json.Success;
+
+    if (!res.ok) {
+      return { text: null, serverMessage };
+    }
+    if (successFlag === false) {
+      return { text: null, serverMessage };
+    }
+
     const rawData = json.data ?? json.Data;
-    const text =
-      typeof rawData === "string"
-        ? rawData
-        : rawData && typeof rawData === "object" && rawData !== null && "text" in rawData && typeof (rawData as { text?: string }).text === "string"
-          ? (rawData as { text: string }).text
-          : null;
-    if (typeof text === "string" && text.trim() === "") {
+    let extracted: string | null = null;
+    if (typeof rawData === "string") {
+      extracted = rawData.trim();
+    } else if (rawData && typeof rawData === "object") {
+      const o = rawData as Record<string, unknown>;
+      const inner = o.text ?? o.Text;
+      if (typeof inner === "string") extracted = inner.trim();
+    }
+    if (!extracted) {
+      const root = json.text ?? json.Text;
+      if (typeof root === "string") extracted = root.trim();
+    }
+
+    if (extracted === "") {
       return { text: "", isEmpty: true };
     }
-    return { text: typeof text === "string" ? text.trim() : null };
-  } catch {
-    return { text: null };
+    if (!extracted) {
+      return { text: null, serverMessage };
+    }
+    return { text: extracted };
+  } catch (err) {
+    console.warn("[transcribeWithWhisper] network/catch", {
+      name: (err as Error)?.name,
+      message: (err as Error)?.message,
+    });
+    return { text: null, serverMessage: "__network__" };
   }
 }
 
@@ -215,6 +298,94 @@ async function uploadFileToBackend(uri: string, name: string, mimeType: string, 
   }
 }
 
+type ChatBubbleImageProps = {
+  mediaUrl: string;
+  brandColor: string;
+  mutedTextColor: string;
+  isDark: boolean;
+  cardBg2: string;
+  onOpen: (url: string) => void;
+  t: (key: string) => string;
+};
+
+/** Chat görseli: yükleme göstergesi, hata + yeniden dene. */
+const ChatBubbleImage: React.FC<ChatBubbleImageProps> = ({
+  mediaUrl,
+  brandColor,
+  mutedTextColor,
+  isDark,
+  cardBg2,
+  onOpen,
+  t,
+}) => {
+  const uri = mediaUrl.trim();
+  const [loading, setLoading] = useState(true);
+  const [failed, setFailed] = useState(false);
+  const [retryKey, setRetryKey] = useState(0);
+
+  const handleRetry = useCallback(() => {
+    setFailed(false);
+    setLoading(true);
+    setRetryKey((k) => k + 1);
+  }, []);
+
+  if (!uri) {
+    return (
+      <View
+        style={{
+          width: 220,
+          height: 120,
+          borderRadius: 12,
+          backgroundColor: cardBg2,
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        <Text style={{ color: mutedTextColor, fontSize: 12 }}>{t("chat.photo")}</Text>
+      </View>
+    );
+  }
+
+  return (
+    <TouchableOpacity activeOpacity={0.85} onPress={() => onOpen(uri)}>
+      <View style={{ width: 220, height: 160, borderRadius: 12, overflow: "hidden", backgroundColor: cardBg2 }}>
+        <Image
+          key={retryKey}
+          source={{ uri }}
+          style={{ width: 220, height: 160 }}
+          resizeMode="cover"
+          onLoadStart={() => {
+            setLoading(true);
+            setFailed(false);
+          }}
+          onLoad={() => setLoading(false)}
+          onError={() => {
+            setLoading(false);
+            setFailed(true);
+          }}
+        />
+        {/* Loading indicator removed — cardBg2 background acts as placeholder */}
+        {failed ? (
+          <Pressable
+            onPress={handleRetry}
+            style={[
+              StyleSheet.absoluteFillObject,
+              {
+                alignItems: "center",
+                justifyContent: "center",
+                backgroundColor: isDark ? "rgba(0,0,0,0.42)" : "rgba(255,255,255,0.94)",
+              },
+            ]}
+          >
+            <Icon source="image-off-outline" size={28} color={brandColor} />
+            <Text style={{ color: mutedTextColor, fontSize: 12, marginTop: 6 }}>{t("chat.retry")}</Text>
+          </Pressable>
+        ) : null}
+      </View>
+    </TouchableOpacity>
+  );
+};
+
 export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({
   threadId,
 }) => {
@@ -222,18 +393,36 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({
   const brandColor = "#f05e23";
   const mutedTextColor = isDark ? "#94a3b8" : "#64748b";
   const softBrandBg = isDark ? "rgba(240,94,35,0.18)" : "rgba(240,94,35,0.10)";
+  /** Ses kaydı modalı: tema ile aynı renk kart üstünde kaybolabiliyor; sabit kontrast */
+  const voiceModalTitleColor = isDark ? "#f8fafc" : "#0f172a";
+  const voiceModalBodyColor = isDark ? "#94a3b8" : "#475569";
+  const voiceModalCaptionOrange = brandColor;
+  const voiceModalCaptionIndigo = isDark ? "#a5b4fc" : "#4338ca";
   const bubbleMeBg = isDark ? "rgba(240,94,35,0.52)" : "rgba(251, 146, 60, 0.78)";
   const bubbleOtherBg = isDark ? "rgba(71,85,105,0.48)" : "rgba(241, 245, 249, 0.94)";
   const bubbleOtherBorder = isDark ? "rgba(148,163,184,0.22)" : "rgba(148,163,184,0.38)";
   const replyBg = isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)";
+  const confirmDialogPrimary = primaryConfirmButtonColors(isDark);
+  const cancelDialogSurface = softCancelSurface(isDark);
 
   const router = useSafeNavigation();
   const [messageText, setMessageText] = useState("");
   const flatListRef = useRef<FlatList>(null);
+  /** RN FlatList + Gesture.Native: waveform pan ile dikey kaydırmayı aynı jest sisteminde tanır */
+  const chatListScrollGesture = useMemo(() => Gesture.Native(), []);
   const { userId: currentUserId, userType: currentUserType, token } = useAuth();
   const [typingUsers, setTypingUsers] = useState<Set<string>>(new Set());
   const { t, currentLanguage } = useLanguage();
   const { alertError, alertWarning, confirm } = useAlert();
+  const {
+    playingAudioId,
+    audioPlayback,
+    scrubbingMessageId,
+    handlePlayAudio,
+    handleSeekAudio,
+    handleScrubbingBegin,
+    handleScrubbingCancel,
+  } = useChatThreadAudio(alertError, t);
   const participantsSheetRef = useRef<BottomSheetModal>(null);
   type OptimisticMessage = ChatMessageItemDto & { isPending: true };
   const [optimisticMessages, setOptimisticMessages] = useState<OptimisticMessage[]>([]);
@@ -250,17 +439,38 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({
   const [isTranscribing, setIsTranscribing] = useState(false);
   /** Kayıt bitince ses gönder / metne çevir seçim kartı */
   const [pendingVoiceUri, setPendingVoiceUri] = useState<string | null>(null);
+  /** Kayıt boyunca toplanan metering → indirgenmiş tepe değerleri (gönderimde medya URL ile eşlenir) */
+  const [pendingWaveformPeaks, setPendingWaveformPeaks] = useState<number[] | null>(null);
+  const [waveformByMediaUrl, setWaveformByMediaUrl] = useState<Record<string, number[]>>({});
   const recordingRef = useRef<Audio.Recording | null>(null);
-
-  // Audio playback state
-  const [playingAudioId, setPlayingAudioId] = useState<string | null>(null);
-  const soundRef = useRef<Audio.Sound | null>(null);
+  const recordingMeteringRef = useRef<number[]>([]);
 
   // Media sending state
   const [isSendingMedia, setIsSendingMedia] = useState(false);
 
   // Attachment dots menu
   const [showAttachMenu, setShowAttachMenu] = useState(false);
+
+  // In-app rich clipboard — stores full message data for copy/paste within chat
+  type AppClipboard = {
+    messageType: ChatMessageType;
+    text?: string | null;
+    mediaUrl?: string | null;
+    fileName?: string | null;
+    waveformPeaks?: number[] | null;
+    /** Panodan yapıştırılan görsel: önce yükleme, sonra gönderim */
+    localPastedFileUri?: string | null;
+  };
+  const [appClipboard, setAppClipboard] = useState<AppClipboard | null>(null);
+  // What's pending in the input preview card (after user pastes)
+  const [pendingPaste, setPendingPaste] = useState<AppClipboard | null>(null);
+  const prevMessageCountRef = useRef(0);
+  const prevOptimisticLenRef = useRef(0);
+
+  // Edit state
+  const [editingMessage, setEditingMessage] = useState<ChatMessageItemDto | null>(null);
+  const [editText, setEditText] = useState("");
+  const editInputRef = useRef<TextInput>(null);
 
   // Track which message IDs have already been animated (to avoid re-animating on re-render)
   const animatedMessageIds = useRef<Set<string>>(new Set());
@@ -271,13 +481,18 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({
     data: threads,
     isLoading: isLoadingThreads,
     refetch: refetchThreads,
-  } = useGetChatThreadsQuery();
+  } = useGetChatThreadsQuery(undefined, { skip: !token });
   const currentThread = useMemo(() => {
     return threads?.find((t) => t.threadId === threadId);
   }, [threads, threadId]);
 
+  const participants = currentThread?.participants ?? [];
+
   // Kısıtlı thread: bu kullanıcı karşı tarafı favoriye almamışsa erişim kısıtlı
   const isRestrictedThread = !!currentThread?.isRestrictedForCurrentUser;
+
+  // Mesajlar thread listesiyle paralel yüklensin; liste gecikse bile geçmiş mesajlar çekilir.
+  const skipChatMessages = !threadId;
 
   useEffect(() => {
     if (!isLoadingThreads && threads && !currentThread && threadId) {
@@ -289,7 +504,24 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({
     data: messages,
     isLoading,
     refetch,
-  } = useGetChatMessagesByThreadQuery({ threadId }, { skip: !threadId || isRestrictedThread });
+  } = useGetChatMessagesByThreadQuery(
+    { threadId },
+    { skip: skipChatMessages },
+  );
+
+  const [messagesRefreshing, setMessagesRefreshing] = useState(false);
+  const onMessagesRefresh = useCallback(async () => {
+    setMessagesRefreshing(true);
+    try {
+      await Promise.all([refetch(), refetchThreads()]);
+    } catch {
+      /* ignore */
+    } finally {
+      setMessagesRefreshing(false);
+    }
+  }, [refetch, refetchThreads]);
+
+  const [toggleFavorite, { isLoading: isTogglingFavorite }] = useToggleFavoriteMutation();
 
   const canSendMessage = useMemo(() => {
     if (!currentThread) return false;
@@ -308,6 +540,7 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({
   const [sendMessageByThread, { isLoading: isSendingByThread }] = useSendChatMessageByThreadMutation();
   const [sendChatMedia] = useSendChatMediaMessageMutation();
   const [deleteChatMessage] = useDeleteChatMessageMutation();
+  const [updateChatMessage] = useUpdateChatMessageMutation();
   const [deleteChatThread] = useDeleteChatThreadMutation();
   const [showHeaderMenu, setShowHeaderMenu] = useState(false);
   const isSending = isSendingByAppt || isSendingByThread;
@@ -315,12 +548,12 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({
   const [markRead] = useMarkChatThreadReadMutation();
   const [notifyTyping] = useNotifyTypingMutation();
   const markReadInFlightRef = useRef(false);
-  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastTypingNotificationRef = useRef(false);
-  const autoReadTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const autoReadTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const markThreadRead = useCallback(async () => {
-    // Kısıtlı thread: kullanıcı favoriye almamışsa read yapamaz, badge düşmesin
+    // Kısıtlı thread: kullanıcı favoriye almamışsa  read yapamaz, badge düşmesin
     if (!threadId || markReadInFlightRef.current || isRestrictedThread) return;
     markReadInFlightRef.current = true;
     await markRead(threadId);
@@ -348,23 +581,16 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({
       if (dto.senderUserId !== currentUserId) {
         if (autoReadTimeoutRef.current) clearTimeout(autoReadTimeoutRef.current);
         autoReadTimeoutRef.current = setTimeout(() => {
-          markThreadRead().catch(() => {});
+          markThreadRead().catch(() => { });
         }, 500);
       }
     };
 
-    const handleMessageRemoved = (data: { threadId: string; messageId: string }) => {
-      if (data.threadId !== threadId) return;
-      refetch();
-    };
-
     connection.on("chat.message", handleNewMessage);
-    connection.on("chat.messageRemoved", handleMessageRemoved);
 
     return () => {
       if (connection) {
         connection.off("chat.message", handleNewMessage);
-        connection.off("chat.messageRemoved", handleMessageRemoved);
       }
       if (autoReadTimeoutRef.current) {
         clearTimeout(autoReadTimeoutRef.current);
@@ -372,6 +598,13 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({
       }
     };
   }, [threadId, currentUserId, markThreadRead, connectionRef]);
+
+  useEffect(() => {
+    if (!editingMessage) return;
+    const delay = Platform.OS === "android" ? 320 : 100;
+    const id = setTimeout(() => editInputRef.current?.focus(), delay);
+    return () => clearTimeout(id);
+  }, [editingMessage]);
 
   useEffect(() => {
     if (typingUsers.size > 0) {
@@ -399,9 +632,28 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({
   const insets = useSafeAreaInsets();
 
   const handleTextChange = useCallback((text: string) => {
-    setMessageText(text);
+    let nextText = text;
+    const trimmed = text.trim();
+    if (trimmed.startsWith("{")) {
+      const parsed = parseChatClipboardPayload(trimmed);
+      if (parsed) {
+        if (parsed.messageType === ChatMessageType.Text) {
+          nextText = parsed.text ?? "";
+        } else {
+          setPendingPaste({
+            messageType: parsed.messageType,
+            text: parsed.text ?? null,
+            mediaUrl: parsed.mediaUrl ?? null,
+            fileName: parsed.fileName ?? null,
+            waveformPeaks: parsed.waveformPeaks ?? null,
+          });
+          nextText = "";
+        }
+      }
+    }
+    setMessageText(nextText);
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
-    const shouldNotify = text.trim().length > 0 && canSendMessage && isConnected;
+    const shouldNotify = nextText.trim().length > 0 && canSendMessage && isConnected;
     if (shouldNotify && !lastTypingNotificationRef.current) {
       notifyTyping({ threadId, isTyping: true });
       lastTypingNotificationRef.current = true;
@@ -427,7 +679,6 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({
 
   const handleSend = useCallback(() => guard(async () => {
     setShowAttachMenu(false);
-    if (!messageText.trim() || !threadId || isSending) return;
     if (!canSendMessage) {
       if (!isConnected) {
         alertError(t("chat.connectionError"), t("chat.connectionErrorMessage"));
@@ -436,15 +687,88 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({
       }
       return;
     }
-    stopTyping();
 
-    const text = messageText.trim();
+    // Medya yapıştırma: önizleme kartı, uzun basma veya girişe düz yapıştırılan _chatClip JSON
+    const parsedFromInput = parseChatClipboardPayload(messageText.trim());
+    const effectiveMediaPaste: AppClipboard | null =
+      pendingPaste && pendingPaste.messageType !== ChatMessageType.Text
+        ? pendingPaste
+        : parsedFromInput && parsedFromInput.messageType !== ChatMessageType.Text
+          ? {
+              messageType: parsedFromInput.messageType,
+              text: parsedFromInput.text ?? null,
+              mediaUrl: parsedFromInput.mediaUrl ?? null,
+              fileName: parsedFromInput.fileName ?? null,
+              waveformPeaks: parsedFromInput.waveformPeaks ?? null,
+              localPastedFileUri: null,
+            }
+          : null;
+
+    if (effectiveMediaPaste) {
+      const paste = effectiveMediaPaste;
+      setPendingPaste(null);
+      setAppClipboard(null);
+      setMessageText("");
+      let mediaUrl = paste.mediaUrl;
+      if (!mediaUrl && paste.localPastedFileUri && token && currentUserId) {
+        try {
+          setIsSendingMedia(true);
+          const uploaded = await uploadImageToBackend(
+            paste.localPastedFileUri,
+            token,
+            API_CONFIG.BASE_URL,
+            currentUserId,
+            "image/jpeg",
+            paste.fileName ?? "clipboard.jpg",
+          );
+          mediaUrl = uploaded;
+        } catch {
+          mediaUrl = null;
+        } finally {
+          setIsSendingMedia(false);
+        }
+      }
+      if (mediaUrl) {
+        try {
+          setIsSendingMedia(true);
+          await sendChatMedia({
+            threadId,
+            messageType: paste.messageType,
+            mediaUrl,
+            fileName: paste.fileName ?? undefined,
+            replyToMessageId: replyingTo?.messageId ?? null,
+          });
+          setReplyingTo(null);
+        } catch {
+          alertError(t("common.error"), t("chat.messageSendFailed"));
+        } finally {
+          setIsSendingMedia(false);
+        }
+      } else {
+        alertError(t("common.error"), paste.localPastedFileUri ? t("chat.imageUploadFailed") : t("chat.messageSendFailed"));
+      }
+      return;
+    }
+
+    let textToSend = pendingPaste?.text?.trim() || messageText.trim();
+    const parsedLine = parseChatClipboardPayload(messageText.trim());
+    if (parsedLine && parsedLine.messageType === ChatMessageType.Text && (parsedLine.text ?? "").trim()) {
+      textToSend = (parsedLine.text ?? "").trim();
+    }
+    if (!textToSend || !threadId || isSending) return;
+
+    if (pendingPaste) {
+      setPendingPaste(null);
+      setAppClipboard(null);
+    }
+
+    stopTyping();
     const replyToId = replyingTo?.messageId ?? null;
     const tempId = `opt-${Date.now()}`;
     const optimisticMsg: OptimisticMessage = {
       messageId: tempId,
       senderUserId: currentUserId!,
-      text,
+      text: textToSend,
       createdAt: new Date().toISOString(),
       isPending: true,
       replyToMessageId: replyToId,
@@ -456,22 +780,24 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({
 
     let sendResult;
     if (currentThread?.appointmentId) {
-      sendResult = await sendMessageByAppointment({ appointmentId: currentThread.appointmentId, text, replyToMessageId: replyToId });
+      sendResult = await sendMessageByAppointment({ appointmentId: currentThread.appointmentId, text: textToSend, replyToMessageId: replyToId });
     } else {
-      sendResult = await sendMessageByThread({ threadId, text, replyToMessageId: replyToId });
+      sendResult = await sendMessageByThread({ threadId, text: textToSend, replyToMessageId: replyToId });
     }
 
     setOptimisticMessages((prev) => prev.filter((m) => m.messageId !== tempId));
 
     if ("error" in sendResult) {
-      setMessageText(text);
+      setMessageText(textToSend);
       const errorMessage = (sendResult.error as any)?.data?.message || t("chat.messageSendFailed");
       alertError(t("common.error"), errorMessage);
+    } else {
+      setTimeout(() => refetch(), 300);
     }
   }), [
-    guard, messageText, threadId, isSending, canSendMessage, isConnected, currentUserId,
+    guard, messageText, pendingPaste, threadId, isSending, canSendMessage, isConnected, currentUserId, token,
     currentThread, replyingTo, sendMessageByThread, sendMessageByAppointment,
-    stopTyping, t, alertError,
+    sendChatMedia, stopTyping, t, alertError, refetch,
   ]);
 
   // --- Image picker ---
@@ -560,38 +886,6 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({
     }
   }, [canSendMessage, threadId, token, currentUserId, replyingTo, sendChatMedia, t, alertError]);
 
-  // --- Audio playback ---
-  const stopCurrentAudio = useCallback(async () => {
-    if (soundRef.current) {
-      await soundRef.current.unloadAsync().catch(() => {});
-      soundRef.current = null;
-    }
-    setPlayingAudioId(null);
-  }, []);
-
-  const handlePlayAudio = useCallback(async (messageId: string, url: string) => {
-    if (playingAudioId === messageId) {
-      await stopCurrentAudio();
-      return;
-    }
-    await stopCurrentAudio();
-    try {
-      await Audio.setAudioModeAsync({ allowsRecordingIOS: false, playsInSilentModeIOS: true });
-      const { sound } = await Audio.Sound.createAsync({ uri: url });
-      soundRef.current = sound;
-      setPlayingAudioId(messageId);
-      await sound.playAsync();
-      sound.setOnPlaybackStatusUpdate((status) => {
-        if (status.isLoaded && status.didJustFinish) {
-          soundRef.current = null;
-          setPlayingAudioId(null);
-        }
-      });
-    } catch {
-      alertError(t("common.error"), t("chat.audioPlayFailed"));
-    }
-  }, [playingAudioId, stopCurrentAudio, alertError, t]);
-
   const openChatAttachmentUrl = useCallback(
     async (url: string | null | undefined) => {
       if (!url?.trim()) return;
@@ -610,32 +904,50 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({
   );
 
   // --- Audio upload + send ---
-  const handleSendAudioMessage = useCallback(async (uri: string) => {
-    if (!currentUserId || !token) return;
-    setIsSendingMedia(true);
-    try {
-      const filename = uri.split("/").pop() || "audio.m4a";
-      const url = await uploadFileToBackend(uri, filename, "audio/mp4", token, API_CONFIG.BASE_URL, currentUserId);
-      if (!url) { alertError(t("common.error"), t("chat.audioUploadFailed")); return; }
-      await sendChatMedia({ threadId, messageType: ChatMessageType.Audio, mediaUrl: url, fileName: filename, replyToMessageId: replyingTo?.messageId ?? null });
-      setReplyingTo(null);
-    } catch {
-      alertError(t("common.error"), t("chat.audioUploadFailed"));
-    } finally {
-      setIsSendingMedia(false);
-    }
-  }, [currentUserId, token, threadId, replyingTo, sendChatMedia, alertError, t]);
+  const handleSendAudioMessage = useCallback(
+    async (uri: string, waveformPeaks?: number[] | null) => {
+      if (!currentUserId || !token) return;
+      setIsSendingMedia(true);
+      try {
+        const filename = uri.split("/").pop() || "audio.m4a";
+        const url = await uploadFileToBackend(uri, filename, "audio/mp4", token, API_CONFIG.BASE_URL, currentUserId);
+        if (!url) {
+          alertError(t("common.error"), t("chat.audioUploadFailed"));
+          return;
+        }
+        await sendChatMedia({
+          threadId,
+          messageType: ChatMessageType.Audio,
+          mediaUrl: url,
+          fileName: filename,
+          replyToMessageId: replyingTo?.messageId ?? null,
+        });
+        if (waveformPeaks && waveformPeaks.length > 0) {
+          setWaveformByMediaUrl((prev) => ({ ...prev, [url]: waveformPeaks }));
+        }
+        setReplyingTo(null);
+      } catch {
+        alertError(t("common.error"), t("chat.audioUploadFailed"));
+      } finally {
+        setIsSendingMedia(false);
+      }
+    },
+    [currentUserId, token, threadId, replyingTo, sendChatMedia, alertError, t],
+  );
 
   // --- Microphone recording ---
   const handleMicPress = useCallback(async () => {
     if (isRecording) {
-      // Stop recording
       setIsRecording(false);
       try {
         await recordingRef.current?.stopAndUnloadAsync();
         const uri = recordingRef.current?.getURI();
         recordingRef.current = null;
+        const raw = recordingMeteringRef.current;
+        recordingMeteringRef.current = [];
+        const peaks = downsampleWaveformPeaks(raw, 48);
         if (!uri) return;
+        setPendingWaveformPeaks(peaks);
         setPendingVoiceUri(uri);
       } catch {
         alertError(t("common.error"), t("chat.recordingFailed"));
@@ -643,7 +955,6 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({
       return;
     }
 
-    // Start recording
     try {
       const mic = await Audio.requestPermissionsAsync();
       if (mic.status !== "granted") {
@@ -651,44 +962,136 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({
         return;
       }
       await Audio.setAudioModeAsync({ allowsRecordingIOS: true, playsInSilentModeIOS: true });
-      const { recording } = await Audio.Recording.createAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
+      recordingMeteringRef.current = [];
+      const { recording } = await Audio.Recording.createAsync(
+        VOICE_RECORD_OPTIONS,
+        (status) => {
+          if (status.isRecording && typeof status.metering === "number") {
+            recordingMeteringRef.current.push(meteringDbToNorm(status.metering));
+          }
+        },
+        50,
+      );
       recordingRef.current = recording;
       setIsRecording(true);
     } catch {
       alertError(t("common.error"), t("chat.recordingFailed"));
     }
-  }, [isRecording, token, t, alertError, handleSendAudioMessage]);
+  }, [isRecording, t, alertError]);
 
-  const closeVoiceActionSheet = useCallback(() => setPendingVoiceUri(null), []);
+  const closeVoiceActionSheet = useCallback(() => {
+    setPendingVoiceUri(null);
+    setPendingWaveformPeaks(null);
+  }, []);
+
+  const handleInputLongPress = useCallback(async () => {
+    if (!canSendMessage) return;
+    if (appClipboard) {
+      setPendingPaste(appClipboard);
+      return;
+    }
+    try {
+      if (await Clipboard.hasImageAsync()) {
+        const img = await Clipboard.getImageAsync({ format: "jpeg", jpegQuality: 0.92 });
+        if (img?.data) {
+          const raw = img.data;
+          const base64Payload = raw.includes(",") ? raw.split(",")[1]! : raw;
+          const clipFile = new ExpoFsFile(Paths.cache, `clipboard-paste-${Date.now()}.jpg`);
+          const bin = globalThis.atob(base64Payload);
+          const bytes = new Uint8Array(bin.length);
+          for (let i = 0; i < bin.length; i += 1) bytes[i] = bin.charCodeAt(i);
+          clipFile.write(bytes);
+          setPendingPaste({
+            messageType: ChatMessageType.Image,
+            text: null,
+            mediaUrl: null,
+            fileName: "clipboard.jpg",
+            localPastedFileUri: clipFile.uri,
+          });
+          return;
+        }
+      }
+      if (await Clipboard.hasStringAsync()) {
+        const text = await Clipboard.getStringAsync();
+        const trimmed = (text ?? "").trim();
+        if (trimmed.startsWith("{")) {
+          try {
+            const j = JSON.parse(trimmed) as {
+              _chatClip?: boolean;
+              messageType?: number;
+              text?: string | null;
+              mediaUrl?: string | null;
+              fileName?: string | null;
+              waveformPeaks?: number[] | null;
+            };
+            if (j && j._chatClip === true && typeof j.messageType === "number") {
+              setPendingPaste({
+                messageType: j.messageType as ChatMessageType,
+                text: j.text ?? null,
+                mediaUrl: j.mediaUrl ?? null,
+                fileName: j.fileName ?? null,
+                waveformPeaks: j.waveformPeaks ?? null,
+              });
+              return;
+            }
+          } catch {
+            /* düz metin */
+          }
+        }
+        if (trimmed) {
+          setPendingPaste({ messageType: ChatMessageType.Text, text: trimmed });
+        }
+      }
+    } catch {
+      /* ignore */
+    }
+  }, [canSendMessage, appClipboard]);
 
   const onVoiceSendAsAudio = useCallback(() => {
     if (!pendingVoiceUri) return;
     const u = pendingVoiceUri;
+    const peaks = pendingWaveformPeaks;
     setPendingVoiceUri(null);
-    void handleSendAudioMessage(u);
-  }, [pendingVoiceUri, handleSendAudioMessage]);
+    setPendingWaveformPeaks(null);
+    void handleSendAudioMessage(u, peaks);
+  }, [pendingVoiceUri, pendingWaveformPeaks, handleSendAudioMessage]);
 
   const onVoiceTranscribe = useCallback(async () => {
     if (!pendingVoiceUri || !token) return;
     const u = pendingVoiceUri;
-    setPendingVoiceUri(null);
     setIsTranscribing(true);
     try {
-      const { text, serverMessage, isEmpty } = await transcribeWithWhisper(u, token, API_CONFIG.BASE_URL);
+      let activeToken = tokenStore.access ?? token;
+      if (activeToken && isExpired(activeToken) && tokenStore.refresh) {
+        const refreshed = await attemptTokenRefresh(tokenStore.refresh);
+        if (refreshed) activeToken = refreshed.accessToken;
+      }
+      const { text, serverMessage, isEmpty } = await transcribeWithWhisper(
+        u,
+        activeToken,
+        API_CONFIG.BASE_URL,
+        currentLanguage,
+      );
       if (text?.trim()) {
         setMessageText((prev) => (prev ? `${prev} ${text}` : text));
       } else if (isEmpty) {
         alertWarning(t("chat.transcriptionUnavailableTitle"), t("chat.transcriptionEmpty"));
       } else {
+        const isNetwork = serverMessage === "__network__";
         alertWarning(
           t("chat.transcriptionUnavailableTitle"),
-          serverMessage?.trim() ? serverMessage : t("chat.transcriptionUnavailableBody"),
+          isNetwork
+            ? t("chat.transcriptionNetworkBody")
+            : serverMessage?.trim()
+              ? serverMessage
+              : t("chat.transcriptionUnavailableBody"),
         );
       }
     } finally {
       setIsTranscribing(false);
+      setPendingVoiceUri(null);
     }
-  }, [pendingVoiceUri, token, t, alertWarning]);
+  }, [pendingVoiceUri, token, t, alertWarning, currentLanguage]);
 
   // --- Context menu ---
   const showContextMenu = useCallback((msg: ChatMessageItemDto) => {
@@ -715,7 +1118,9 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({
     confirm(
       t("chat.deleteMessage"),
       t("chat.deleteMessageConfirm"),
-      async () => { await deleteChatMessage({ messageId: msgId, threadId }); },
+      async () => {
+        await deleteChatMessage({ messageId: msgId, threadId });
+      },
       undefined,
       t("common.delete"),
       t("common.cancel"),
@@ -723,10 +1128,62 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({
   }, [contextMenuMessage, threadId, hideContextMenu, deleteChatMessage, confirm, t]);
 
   const handleCopyFromMenu = useCallback(async () => {
-    if (!contextMenuMessage?.text) return;
+    if (!contextMenuMessage) return;
     hideContextMenu();
-    await Clipboard.setStringAsync(contextMenuMessage.text);
+    const type = contextMenuMessage.messageType ?? ChatMessageType.Text;
+    // Uygulama içi clipboard'a kaydet (zengin yapıştırma için)
+    setAppClipboard({
+      messageType: type,
+      text: contextMenuMessage.text ?? null,
+      mediaUrl: contextMenuMessage.mediaUrl ?? null,
+      fileName: (contextMenuMessage as any).fileName ?? null,
+      waveformPeaks: contextMenuMessage.waveformPeaks ?? null,
+    });
+    if (type === ChatMessageType.Text && contextMenuMessage.text) {
+      await Clipboard.setStringAsync(contextMenuMessage.text);
+    } else {
+      // Konum/medya: sistem panosuna JSON (girişe uzun basınca veya yapıştır ile aynı tipte açılır)
+      await Clipboard.setStringAsync(
+        JSON.stringify({
+          _chatClip: true,
+          messageType: type,
+          text: contextMenuMessage.text ?? null,
+          mediaUrl: contextMenuMessage.mediaUrl ?? null,
+          fileName: (contextMenuMessage as any).fileName ?? null,
+          waveformPeaks: contextMenuMessage.waveformPeaks ?? null,
+        }),
+      );
+    }
   }, [contextMenuMessage, hideContextMenu]);
+
+  const copyAvailable = !!contextMenuMessage;
+  const editAvailable = !!contextMenuMessage
+    && (contextMenuMessage.messageType ?? ChatMessageType.Text) === ChatMessageType.Text
+    && contextMenuMessage.senderUserId === currentUserId;
+
+  const handleEditFromMenu = useCallback(() => {
+    if (!contextMenuMessage) return;
+    const msg = contextMenuMessage;
+    Animated.timing(contextMenuAnim, { toValue: 0, duration: 150, useNativeDriver: true }).start(() => {
+      setContextMenuMessage(null);
+      InteractionManager.runAfterInteractions(() => {
+        setEditingMessage(msg);
+        setEditText(msg.text ?? "");
+      });
+    });
+  }, [contextMenuMessage, contextMenuAnim]);
+
+  const handleSaveEdit = useCallback(async () => {
+    if (!editingMessage || !editText.trim()) return;
+    const trimmed = editText.trim();
+    try {
+      await updateChatMessage({ messageId: editingMessage.messageId, threadId, text: trimmed });
+    } catch {
+      alertError(t("common.error"), t("chat.messageSendFailed"));
+    }
+    setEditingMessage(null);
+    setEditText("");
+  }, [editingMessage, editText, threadId, updateChatMessage, alertError, t]);
 
   const handleDeleteThread = useCallback(() => {
     setShowHeaderMenu(false);
@@ -769,6 +1226,7 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({
     try { return [...messages].reverse(); } catch { return []; }
   }, [messages]);
 
+  /** inverted FlatList: dizi başı = ekranın altı (en yeni); optimistic üstte */
   const displayMessages = useMemo<Array<ChatMessageItemDto | OptimisticMessage>>(() => {
     if (optimisticMessages.length === 0) return sortedMessages;
     const confirmedTexts = new Set(
@@ -802,56 +1260,56 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({
 
   const participantsMap = useMemo(() => {
     const map = new Map<string, ChatThreadParticipantDto>();
-    if (!currentThread?.participants || !Array.isArray(currentThread.participants)) return map;
-    currentThread.participants.forEach((p) => {
+    if (!participants.length) return map;
+    participants.forEach((p) => {
       if (p.userId) {
         map.set(p.userId.trim().toLowerCase(), p);
         map.set(p.userId, p);
       }
     });
     return map;
-  }, [currentThread?.participants]);
+  }, [participants]);
 
   const [hasRefetched, setHasRefetched] = useState(false);
+
+  useEffect(() => {
+    prevMessageCountRef.current = 0;
+    prevOptimisticLenRef.current = 0;
+  }, [threadId]);
+
   useEffect(() => {
     if (messages && messages.length > 0 && currentThread && !hasRefetched) {
       const messageSenderIds = new Set<string>(messages.map((m) => m.senderUserId));
-      const participantIds = new Set(currentThread.participants.map((p) => p.userId));
+      const participantIds = new Set(participants.map((p) => p.userId));
       const missing = Array.from(messageSenderIds).filter((id) => !participantIds.has(id));
       if (missing.length > 0) {
         setHasRefetched(true);
         refetchThreads().catch(() => setHasRefetched(false));
       }
     }
-  }, [messages, currentThread?.participants, refetchThreads, hasRefetched]);
+  }, [messages, currentThread, participants, refetchThreads, hasRefetched]);
 
   useEffect(() => {
-    if (sortedMessages && sortedMessages.length > 0) {
-      setTimeout(() => flatListRef.current?.scrollToOffset({ offset: 0, animated: true }), 100);
+    const count = sortedMessages.length;
+    if (count > prevMessageCountRef.current) {
+      setTimeout(() => flatListRef.current?.scrollToOffset({ offset: 0, animated: true }), 80);
     }
+    prevMessageCountRef.current = count;
   }, [sortedMessages]);
 
   useEffect(() => {
-    if (optimisticMessages.length > 0) {
+    const n = optimisticMessages.length;
+    if (n > prevOptimisticLenRef.current) {
       flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
     }
+    prevOptimisticLenRef.current = n;
   }, [optimisticMessages]);
 
-  if (isLoading) {
+  const hasLoadedMessages = Array.isArray(messages) && messages.length > 0;
+  if (isLoading && !hasLoadedMessages) {
     return (
       <View className="flex-1 items-center justify-center" style={{ backgroundColor: colors.screenBg }}>
         <ActivityIndicator size="large" color={brandColor} />
-      </View>
-    );
-  }
-
-  if (!currentThread) {
-    return (
-      <View className="flex-1 items-center justify-center" style={{ backgroundColor: colors.screenBg }}>
-        <Text style={{ color: mutedTextColor }}>{t("chat.threadNotFound")}</Text>
-        <TouchableOpacity onPress={() => router.back()} className="mt-4">
-          <Text style={{ color: brandColor }}>{t("common.goBack")}</Text>
-        </TouchableOpacity>
       </View>
     );
   }
@@ -872,10 +1330,10 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({
           >
             <Icon source="chevron-left" size={28} color={colors.sectionHeaderText} />
           </TouchableOpacity>
-          {currentThread.participants.length > 0 ? (
+          {participants.length > 0 ? (
             <View className="flex-1 ml-2 flex-row items-center" pointerEvents="box-none">
               <View className="flex-row items-center" style={{ flexShrink: 0 }}>
-                {currentThread.participants.slice(0, 2).map((participant, idx) => (
+                {participants.slice(0, 2).map((participant, idx) => (
                   <View
                     key={participant.userId}
                     className="w-10 h-10 rounded-full overflow-hidden items-center justify-center"
@@ -885,6 +1343,7 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({
                       ownerId={participant.userId}
                       ownerType={ImageOwnerType.User}
                       fallbackUrl={participant.imageUrl}
+                      placeholderAsset={CHAT_AVATAR_PLACEHOLDER}
                       imageClassName="w-full h-full"
                       iconSource={participant.userType === UserType.BarberStore ? "store" : participant.userType === UserType.FreeBarber ? "account-supervisor" : "account"}
                       iconSize={20}
@@ -893,28 +1352,28 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({
                     />
                   </View>
                 ))}
-                {currentThread.participants.length > 2 && (
+                {participants.length > 2 && (
                   <View className="w-10 h-10 rounded-full items-center justify-center" style={{ marginLeft: -12, zIndex: 0, borderWidth: 2, borderColor: colors.borderColor, backgroundColor: colors.cardBg2 }}>
                     <Text className="text-xs font-century-gothic-sans-bold" style={{ color: colors.sectionHeaderText }}>
-                      +{currentThread.participants.length - 2}
+                      +{participants.length - 2}
                     </Text>
                   </View>
                 )}
               </View>
               <View className="ml-3 flex-1" style={{ minWidth: 0 }}>
                 <Text className="text-base font-century-gothic" numberOfLines={1} style={{ color: colors.sectionHeaderText }}>
-                  {currentThread.participants.map((p) => p.displayName).join(", ")}
+                  {participants.map((p) => p.displayName).join(", ")}
                 </Text>
-                {currentThread.status !== null && currentThread.status !== undefined && (
+                {currentThread != null && currentThread.status != null && currentThread.status !== undefined && (
                   <View className="self-start mt-1 px-2 py-0.5 rounded-full" style={{ backgroundColor: softBrandBg, borderWidth: 1, borderColor: "rgba(240,94,35,0.35)" }}>
                     <Text className="text-[10px] font-century-gothic-sans-medium" style={{ color: brandColor }}>
                       {currentThread.status === AppointmentStatus.Approved ? t("appointment.status.approved")
                         : currentThread.status === AppointmentStatus.Pending ? t("appointment.status.pending")
-                        : currentThread.status === AppointmentStatus.Completed ? t("appointment.status.completed")
-                        : currentThread.status === AppointmentStatus.Cancelled ? t("appointment.status.cancelled")
-                        : currentThread.status === AppointmentStatus.Rejected ? t("appointment.status.rejected")
-                        : currentThread.status === AppointmentStatus.Unanswered ? t("appointment.status.unanswered")
-                        : ""}
+                          : currentThread.status === AppointmentStatus.Completed ? t("appointment.status.completed")
+                            : currentThread.status === AppointmentStatus.Cancelled ? t("appointment.status.cancelled")
+                              : currentThread.status === AppointmentStatus.Rejected ? t("appointment.status.rejected")
+                                : currentThread.status === AppointmentStatus.Unanswered ? t("appointment.status.unanswered")
+                                  : ""}
                     </Text>
                   </View>
                 )}
@@ -927,11 +1386,25 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({
               </Text>
             </View>
           )}
+          <TouchableOpacity
+            onPress={onMessagesRefresh}
+            disabled={messagesRefreshing}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            className="ml-1 w-9 h-9 items-center justify-center rounded-full"
+            accessibilityRole="button"
+            accessibilityLabel={t("common.refresh")}
+          >
+            {messagesRefreshing ? (
+              <ActivityIndicator size="small" color={brandColor} />
+            ) : (
+              <Icon source="refresh" size={22} color={brandColor} />
+            )}
+          </TouchableOpacity>
           {/* Three-dot header menu */}
           <TouchableOpacity
             onPress={() => setShowHeaderMenu(true)}
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            className="ml-2 w-9 h-9 items-center justify-center rounded-full"
+            className="ml-1 w-9 h-9 items-center justify-center rounded-full"
           >
             <Icon source="dots-vertical" size={22} color={colors.textSecondary} />
           </TouchableOpacity>
@@ -958,7 +1431,7 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({
                 elevation: 8,
               }}
             >
-              {currentThread.participants.length > 0 && (
+              {participants.length > 0 && (
                 <TouchableOpacity
                   onPress={() => {
                     setShowHeaderMenu(false);
@@ -985,16 +1458,18 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({
         </Modal>
       )}
 
-      {/* Messages */}
-      <FlatList
-        ref={flatListRef}
-        data={messageRows}
+      {/* Messages — Gesture.Native ile sarılı: ses dalgası pan jesti eşzamanlı tanınır */}
+      <GestureDetector gesture={chatListScrollGesture}>
+        <FlatList
+          ref={flatListRef}
+          data={messageRows}
         keyExtractor={(item) => item.key}
-        contentContainerStyle={{ padding: 16, gap: 12, backgroundColor: colors.screenBg }}
+        contentContainerStyle={{ flexGrow: 1, padding: 16, gap: 12, backgroundColor: colors.screenBg }}
         inverted
-        maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
+        scrollEventThrottle={16}
+        keyboardShouldPersistTaps="handled"
         onScrollToIndexFailed={() => {
-          setTimeout(() => flatListRef.current?.scrollToOffset({ offset: 0, animated: false }), 100);
+          /* offset: 0 tüm listeyi alta sıçratıyordu; sessiz bırak */
         }}
         renderItem={({ item }: { item: DisplayRow }) => {
           if (item.rowType === "separator") {
@@ -1045,6 +1520,7 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({
                       ownerId={displayInfo.userId}
                       ownerType={ImageOwnerType.User}
                       fallbackUrl={displayInfo.imageUrl}
+                      placeholderAsset={CHAT_AVATAR_PLACEHOLDER}
                       imageClassName="w-full h-full"
                       iconSource={displayInfo.userType === UserType.BarberStore ? "store" : displayInfo.userType === UserType.FreeBarber ? "account-supervisor" : "account"}
                       iconSize={20}
@@ -1054,15 +1530,39 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({
                   </View>
                 )}
 
-                <View className={`max-w-[82%] ${isMe ? "items-end" : "items-start"}`} style={{ flexShrink: 1, minWidth: 0 }}>
+                <View
+                  className={`${msgType === ChatMessageType.Audio ? "max-w-[72%]" : "max-w-[82%]"} ${isMe ? "items-end" : "items-start"}`}
+                  style={{
+                    flexShrink: 1,
+                    /** Ses: kenarlara yapışmayı azalt; dar ekranda yine okunur kalsın */
+                    minWidth: msgType === ChatMessageType.Audio ? 240 : 0,
+                  }}
+                >
                   <View
-                    className={`rounded-2xl px-4 py-2.5 ${isMe ? "rounded-tr-sm" : "rounded-tl-sm"}`}
+                    className={`rounded-2xl ${msgType === ChatMessageType.Audio ? "px-3 py-2" : msgType === ChatMessageType.File ? "px-3 py-1.5" : "px-4 py-2.5"} ${isMe ? "rounded-tr-sm" : "rounded-tl-sm"}`}
                     style={[{
                       flexShrink: 1,
                       backgroundColor: isMe ? bubbleMeBg : bubbleOtherBg,
-                      borderWidth: isMe ? 0 : 1,
-                      borderColor: isMe ? "transparent" : bubbleOtherBorder,
-                      ...(isMe ? Platform.select({ ios: { shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.12, shadowRadius: 6 }, android: { elevation: 2 } }) : {}),
+                      borderWidth: isMe
+                        ? (msgType === ChatMessageType.Audio ? 1 : 0)
+                        : 1,
+                      borderColor: isMe
+                        ? (msgType === ChatMessageType.Audio ? "rgba(255,255,255,0.28)" : "transparent")
+                        : bubbleOtherBorder,
+                      ...(msgType === ChatMessageType.Audio
+                        ? { minWidth: 240, maxWidth: "100%", flexShrink: 0 }
+                        : {}),
+                      ...(isMe
+                        ? Platform.select({
+                          ios: {
+                            shadowColor: "#000",
+                            shadowOffset: { width: 0, height: 2 },
+                            shadowOpacity: msgType === ChatMessageType.Audio ? 0.16 : 0.12,
+                            shadowRadius: msgType === ChatMessageType.Audio ? 8 : 6,
+                          },
+                          android: { elevation: 2 },
+                        })
+                        : {}),
                     }]}
                   >
                     {/* Sender name (others only) */}
@@ -1097,13 +1597,15 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({
 
                     {/* Image message */}
                     {msgType === ChatMessageType.Image && message.mediaUrl ? (
-                      <TouchableOpacity activeOpacity={0.85} onPress={() => openChatAttachmentUrl(message.mediaUrl)}>
-                        <Image
-                          source={{ uri: message.mediaUrl }}
-                          style={{ width: 220, height: 160, borderRadius: 12 }}
-                          resizeMode="cover"
-                        />
-                      </TouchableOpacity>
+                      <ChatBubbleImage
+                        mediaUrl={message.mediaUrl}
+                        brandColor={brandColor}
+                        mutedTextColor={mutedTextColor}
+                        isDark={isDark}
+                        cardBg2={colors.cardBg2}
+                        onOpen={openChatAttachmentUrl}
+                        t={t}
+                      />
                     ) : msgType === ChatMessageType.Location && message.mediaUrl ? (
                       /* Location message */
                       <TouchableOpacity
@@ -1134,83 +1636,135 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({
                         </View>
                       </TouchableOpacity>
                     ) : msgType === ChatMessageType.File && message.mediaUrl ? (
-                      /* File message — compact row (WhatsApp benzeri) */
+                      /* File message — compact WhatsApp-style row */
                       <TouchableOpacity
                         activeOpacity={0.85}
                         onPress={() => openChatAttachmentUrl(message.mediaUrl)}
                       >
-                        <View
-                          className="flex-row items-center gap-2 px-2 py-1.5 rounded-full"
-                          style={{
-                            maxWidth: 216,
-                            backgroundColor: isMe ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.04)",
-                          }}
-                        >
+                        <View style={{ flexDirection: "row", alignItems: "center", columnGap: 10 }}>
                           <View
-                            className="w-9 h-9 rounded-full items-center justify-center"
-                            style={{ backgroundColor: isMe ? "rgba(255,255,255,0.22)" : softBrandBg, flexShrink: 0 }}
+                            style={{
+                              width: 38,
+                              height: 38,
+                              borderRadius: 10,
+                              alignItems: "center",
+                              justifyContent: "center",
+                              backgroundColor: isMe ? "rgba(255,255,255,0.22)" : softBrandBg,
+                              flexShrink: 0,
+                            }}
                           >
                             <Icon source="file-document-outline" size={20} color={isMe ? "white" : brandColor} />
                           </View>
-                          <View style={{ flex: 1, minWidth: 0 }}>
-                            <Text
-                              className="text-xs font-century-gothic-sans-medium"
-                              style={{ color: isMe ? "white" : colors.sectionHeaderText }}
+                          <View style={{ flexShrink: 1, minWidth: 0 }}>
+                            <RNText
+                              style={{
+                                fontSize: 12,
+                                fontWeight: "600",
+                                color: isMe ? "white" : colors.sectionHeaderText,
+                                ...(Platform.OS === "android" ? { includeFontPadding: false } : {}),
+                              }}
                               numberOfLines={1}
+                              ellipsizeMode="middle"
                             >
-                              {message.text || t("chat.file")}
-                            </Text>
-                            <Text className="text-[10px] font-century-gothic mt-0.5" style={{ color: isMe ? "rgba(255,255,255,0.65)" : mutedTextColor }}>
+                              {(() => {
+                                const raw = message.fileName || message.text || t("chat.file");
+                                return raw.length > 30 ? raw.slice(0, 14) + "…" + raw.slice(-12) : raw;
+                              })()}
+                            </RNText>
+                            <RNText
+                              style={{
+                                fontSize: 10,
+                                marginTop: 2,
+                                color: isMe ? "rgba(255,255,255,0.65)" : mutedTextColor,
+                                ...(Platform.OS === "android" ? { includeFontPadding: false } : {}),
+                              }}
+                            >
                               {t("chat.tapToOpen")}
-                            </Text>
+                            </RNText>
                           </View>
                         </View>
                       </TouchableOpacity>
                     ) : msgType === ChatMessageType.Audio && message.mediaUrl ? (
-                      /* Audio message */
-                      <TouchableOpacity
-                        activeOpacity={0.85}
-                        onPress={() => message.mediaUrl && handlePlayAudio(message.messageId, message.mediaUrl)}
-                      >
-                        <View
-                          className="flex-row items-center gap-2 px-2 py-1.5 rounded-full"
-                          style={{
-                            minWidth: 168,
-                            maxWidth: 216,
-                            backgroundColor: isMe ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.04)",
-                          }}
-                        >
+                      <ChatBubbleAudio
+                        messageId={message.messageId}
+                        isMe={isMe}
+                        isPlaying={
+                          playingAudioId === message.messageId &&
+                          scrubbingMessageId !== message.messageId
+                        }
+                        positionMillis={
+                          audioPlayback?.messageId === message.messageId ? audioPlayback.positionMillis : 0
+                        }
+                        durationMillis={
+                          audioPlayback?.messageId === message.messageId ? audioPlayback.durationMillis : 0
+                        }
+                        onTogglePlay={() => {
+                          if (message.mediaUrl) handlePlayAudio(message.messageId, message.mediaUrl);
+                        }}
+                        onSeek={(ratio) => {
+                          if (message.mediaUrl) handleSeekAudio(message.messageId, message.mediaUrl, ratio);
+                        }}
+                        onScrubbingBegin={() => handleScrubbingBegin(message.messageId)}
+                        onScrubbingCancel={() => handleScrubbingCancel(message.messageId)}
+                        bubbleBackgroundColor={isMe ? bubbleMeBg : bubbleOtherBg}
+                        brandColor={brandColor}
+                        mutedTextColor={mutedTextColor}
+                        sectionHeaderText={colors.sectionHeaderText}
+                        softBrandBg={softBrandBg}
+                        waveformSurface={
+                          isMe && msgType === ChatMessageType.Audio ? "outgoingOrange" : "incoming"
+                        }
+                        waveformPeaks={
+                          (message.mediaUrl ? waveformByMediaUrl[message.mediaUrl] : undefined) ??
+                          (message as ChatMessageItemDto).waveformPeaks ??
+                          null
+                        }
+                        listScrollGesture={chatListScrollGesture}
+                        avatarSlot={
                           <View
-                            className="w-9 h-9 rounded-full items-center justify-center"
-                            style={{ backgroundColor: isMe ? "rgba(255,255,255,0.22)" : softBrandBg, flexShrink: 0 }}
+                            style={{
+                              width: 40,
+                              height: 40,
+                              borderRadius: 20,
+                              overflow: "hidden",
+                              backgroundColor: colors.cardBg2,
+                            }}
                           >
-                            <Icon
-                              source={playingAudioId === message.messageId ? "pause-circle-outline" : "play-circle-outline"}
-                              size={24}
-                              color={isMe ? "white" : brandColor}
+                            <OwnerAvatar
+                              ownerId={isMe ? (currentUserId ?? "") : displayInfo.userId}
+                              ownerType={ImageOwnerType.User}
+                              fallbackUrl={isMe ? currentThread?.currentUserImageUrl : displayInfo.imageUrl}
+                              placeholderAsset={CHAT_AVATAR_PLACEHOLDER}
+                              imageClassName="w-full h-full"
+                              iconSource={
+                                (isMe ? currentUserType : displayInfo.userType) === UserType.BarberStore
+                                  ? "store"
+                                  : (isMe ? currentUserType : displayInfo.userType) === UserType.FreeBarber
+                                    ? "account-supervisor"
+                                    : "account"
+                              }
+                              iconSize={18}
+                              iconColor={isDark ? "white" : colors.sectionHeaderText}
+                              iconContainerClassName="bg-transparent"
                             />
                           </View>
-                          <View style={{ flex: 1, minWidth: 0 }}>
-                            <Text
-                              className="text-xs font-century-gothic-sans-medium"
-                              style={{ color: isMe ? "white" : colors.sectionHeaderText }}
-                            >
-                              {t("chat.audioMessage")}
-                            </Text>
-                            <Text className="text-[10px] font-century-gothic mt-0.5" style={{ color: isMe ? "rgba(255,255,255,0.65)" : mutedTextColor }}>
-                              {playingAudioId === message.messageId ? t("chat.playing") : t("chat.tapToPlay")}
-                            </Text>
-                          </View>
-                        </View>
-                      </TouchableOpacity>
+                        }
+                      />
                     ) : (
                       /* Text message */
-                      <Text
-                        className={`text-sm ${isMe ? "text-right" : "text-left"} font-century-gothic`}
-                        style={{ flexWrap: "wrap", flexShrink: 1, color: isMe ? "#ffffff" : colors.sectionHeaderText }}
-                      >
-                        {message.text}
-                      </Text>
+                      <View>
+                        <Text
+                          className={`text-sm ${isMe ? "text-right" : "text-left"} font-century-gothic`}
+                          style={{ flexWrap: "wrap", flexShrink: 1, color: isMe ? "#ffffff" : colors.sectionHeaderText }}
+                        >
+                          {message.text}
+                        </Text>
+                        {(message as ChatMessageItemDto).isEdited && (
+                          <Text style={{ fontSize: 10, color: isMe ? "rgba(255,255,255,0.55)" : mutedTextColor, marginTop: 2, textAlign: isMe ? "right" : "left" }}>
+                            {t("chat.edited")}
+                          </Text>
+                        )}
+                      </View>
                     )}
                   </View>
 
@@ -1236,6 +1790,7 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({
                       ownerId={currentUserId}
                       ownerType={ImageOwnerType.User}
                       fallbackUrl={currentThread?.currentUserImageUrl}
+                      placeholderAsset={CHAT_AVATAR_PLACEHOLDER}
                       imageClassName="w-full h-full"
                       iconSource={currentUserType === UserType.BarberStore ? "store" : currentUserType === UserType.FreeBarber ? "account-supervisor" : "account"}
                       iconSize={20}
@@ -1258,13 +1813,14 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({
           typingUsers.size > 0 ? (
             <View className="flex-row items-center px-4 py-2">
               <Text className="text-xs italic" style={{ color: mutedTextColor }}>
-                {Array.from(typingUsers).map((uid) => currentThread.participants.find((p) => p.userId === uid)?.displayName || t("chat.someone")).join(", ")}{" "}
+                {Array.from(typingUsers).map((uid) => participants.find((p) => p.userId === uid)?.displayName || t("chat.someone")).join(", ")}{" "}
                 {t("chat.typing")}
               </Text>
             </View>
           ) : null
         }
-      />
+        />
+      </GestureDetector>
 
       {/* Input area */}
       <View
@@ -1277,9 +1833,43 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({
           </View>
         )}
         {isRestrictedThread && (
-          <View className="mx-4 mt-3 rounded-lg px-3 py-2.5 flex-row items-center gap-2" style={{ backgroundColor: isDark ? "rgba(99,102,241,0.18)" : "rgba(99,102,241,0.10)", borderWidth: 1, borderColor: "rgba(99,102,241,0.35)" }}>
-            <Icon source="lock" size={14} color={isDark ? "#a5b4fc" : "#4338ca"} />
-            <Text className="text-xs flex-1" style={{ color: isDark ? "#a5b4fc" : "#4338ca" }}>{t("chat.restrictedThreadBanner")}</Text>
+          <View
+            className="mx-4 mt-3 rounded-xl px-3 py-2.5 flex-row items-center gap-2 flex-wrap"
+            style={{
+              backgroundColor: isDark ? "rgba(254,202,202,0.14)" : "rgba(254,226,226,0.95)",
+              borderWidth: 1,
+              borderColor: isDark ? "rgba(248,113,113,0.4)" : "rgba(252,165,165,0.9)",
+            }}
+          >
+            <Icon source="heart-outline" size={20} color={isDark ? "#fca5a5" : "#e11d48"} />
+            <Text className="text-sm flex-1 min-w-[60%]" style={{ color: isDark ? "#fecaca" : "#9f1239" }}>{t("chat.restrictedThreadBanner")}</Text>
+            {participants[0]?.userId ? (
+              <TouchableOpacity
+                onPress={() => {
+                  const otherParticipant = participants.find((p) => p.userId !== currentUserId) ?? participants[0]!;
+                  // Sadece karşı taraf BarberStore ise mağaza id'si ile favorile (çoklu mağaza bağlamı).
+                  // Diğer durumlarda (Customer/FreeBarber) her zaman userId ile favorile.
+                  const targetId =
+                    otherParticipant.userType === UserType.BarberStore
+                      ? currentThread?.favoriteStoreId ?? otherParticipant.userId
+                      : otherParticipant.userId;
+                  toggleFavorite({ targetId })
+                    .unwrap()
+                    .then(() => {
+                      refetchThreads();
+                      // Kısıtlıyken boş cache kalmış olabilir; favori sonrası mesajları hemen çek
+                      refetch();
+                    })
+                    .catch(() => {});
+                }}
+                disabled={isTogglingFavorite}
+                className="px-3 py-1.5 rounded-full flex-row items-center gap-1"
+                style={{ backgroundColor: isDark ? "#be123c" : "#f43f5e", opacity: isTogglingFavorite ? 0.75 : 1 }}
+              >
+                {isTogglingFavorite ? <ActivityIndicator size="small" color="white" /> : <Icon source="heart" size={16} color="white" />}
+                <Text className="text-white text-xs font-century-gothic-sans-bold" numberOfLines={1}>{t("chat.addToFavoritesToOpenChat")}</Text>
+              </TouchableOpacity>
+            ) : null}
           </View>
         )}
         {!canSendMessage && !isRestrictedThread && isConnected && (
@@ -1306,10 +1896,68 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({
           </View>
         )}
 
+        {/* Yapıştırma — yanıt önizlemesi ile aynı çizgi (URL ham görünmez) */}
+        {pendingPaste && (
+          <View
+            className="mx-4 mt-3 px-3 py-2 rounded-xl flex-row items-center"
+            style={{
+              backgroundColor: isDark ? "rgba(240,94,35,0.12)" : "rgba(240,94,35,0.08)",
+              borderWidth: 1,
+              borderColor: "rgba(240,94,35,0.3)",
+              borderLeftWidth: 3,
+              borderLeftColor: brandColor,
+            }}
+          >
+            {pendingPaste.messageType === ChatMessageType.Image && (pendingPaste.mediaUrl || pendingPaste.localPastedFileUri) ? (
+              <Image
+                source={{ uri: pendingPaste.mediaUrl ?? pendingPaste.localPastedFileUri ?? "" }}
+                style={{ width: 44, height: 44, borderRadius: 10, marginRight: 10 }}
+                resizeMode="cover"
+              />
+            ) : pendingPaste.messageType === ChatMessageType.Audio ? (
+              <View style={{ width: 44, height: 44, borderRadius: 10, marginRight: 10, backgroundColor: isDark ? "rgba(240,94,35,0.22)" : "rgba(240,94,35,0.14)", alignItems: "center", justifyContent: "center" }}>
+                <Icon source="microphone" size={22} color={brandColor} />
+              </View>
+            ) : pendingPaste.messageType === ChatMessageType.File ? (
+              <View style={{ width: 44, height: 44, borderRadius: 10, marginRight: 10, backgroundColor: isDark ? "rgba(240,94,35,0.22)" : "rgba(240,94,35,0.14)", alignItems: "center", justifyContent: "center" }}>
+                <Icon source="file-document-outline" size={22} color={brandColor} />
+              </View>
+            ) : pendingPaste.messageType === ChatMessageType.Location ? (
+              <View style={{ width: 44, height: 44, borderRadius: 10, marginRight: 10, backgroundColor: isDark ? "rgba(240,94,35,0.22)" : "rgba(240,94,35,0.14)", alignItems: "center", justifyContent: "center" }}>
+                <Icon source="map-marker" size={22} color={brandColor} />
+              </View>
+            ) : null}
+            <View className="flex-1 mr-2" style={{ minWidth: 0 }}>
+              <Text className="text-xs font-century-gothic-sans-medium" style={{ color: brandColor }}>
+                {t("chat.clipboardTitle")}
+              </Text>
+              <Text className="text-xs font-century-gothic mt-0.5" style={{ color: mutedTextColor }} numberOfLines={3}>
+                {pendingPaste.messageType === ChatMessageType.Text
+                  ? (pendingPaste.text ?? "").slice(0, 220)
+                  : pendingPaste.messageType === ChatMessageType.Image
+                    ? t("chat.photo")
+                    : pendingPaste.messageType === ChatMessageType.Location
+                      ? t("chat.locationShared")
+                      : pendingPaste.messageType === ChatMessageType.File
+                        ? (pendingPaste.fileName || t("chat.file"))
+                        : pendingPaste.messageType === ChatMessageType.Audio
+                          ? t("chat.audioMessage")
+                          : ""}
+              </Text>
+            </View>
+            <TouchableOpacity onPress={() => { setPendingPaste(null); setAppClipboard(null); }} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <Icon source="close" size={18} color={mutedTextColor} />
+            </TouchableOpacity>
+          </View>
+        )}
+
         {/* Main input row */}
         <View className="flex-row items-end gap-2 px-4 pt-3">
           {/* Text input */}
-          <View
+          <TouchableOpacity
+            activeOpacity={1}
+            onLongPress={handleInputLongPress}
+            delayLongPress={500}
             className="flex-1 flex-row items-end rounded-3xl px-4 py-1"
             style={{
               backgroundColor: colors.cardBg2,
@@ -1340,10 +1988,10 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({
                 color: colors.sectionHeaderText,
               }}
             />
-          </View>
+          </TouchableOpacity>
 
           {/* Mic or Send button */}
-          {messageText.trim() ? (
+          {(messageText.trim() || pendingPaste) ? (
             <Pressable
               onPress={handleSend}
               disabled={isSending || !canSendMessage}
@@ -1584,8 +2232,8 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({
                   <Text className="text-sm font-century-gothic-sans-medium" style={{ color: colors.sectionHeaderText, flex: 1 }}>{t("chat.reply")}</Text>
                 </TouchableOpacity>
 
-                {/* Copy (only for text messages) */}
-                {contextMenuMessage.text && contextMenuMessage.messageType !== 3 /* not location */ && (
+                {/* Kopyala — tüm mesaj tipleri (Konum hariç) */}
+                {copyAvailable && (
                   <TouchableOpacity
                     onPress={handleCopyFromMenu}
                     activeOpacity={0.72}
@@ -1602,7 +2250,31 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({
                     <View style={{ width: 26, height: 26, borderRadius: 8, backgroundColor: isDark ? "rgba(99,102,241,0.14)" : "rgba(99,102,241,0.08)", alignItems: "center", justifyContent: "center" }}>
                       <Icon source="content-copy" size={15} color={isDark ? "#818cf8" : "#6366f1"} />
                     </View>
-                    <Text className="text-sm font-century-gothic-sans-medium" style={{ color: colors.sectionHeaderText, flex: 1 }}>{t("common.copy")}</Text>
+                    <Text className="text-sm font-century-gothic-sans-medium" style={{ color: colors.sectionHeaderText, flex: 1 }}>
+                      {t("common.copy")}
+                    </Text>
+                  </TouchableOpacity>
+                )}
+
+                {/* Düzenle — yalnızca kendi metin mesajlarında */}
+                {editAvailable && (
+                  <TouchableOpacity
+                    onPress={handleEditFromMenu}
+                    activeOpacity={0.72}
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      paddingHorizontal: 12,
+                      paddingVertical: 9,
+                      borderBottomWidth: 0.5,
+                      borderBottomColor: isDark ? "rgba(148,163,184,0.14)" : "rgba(226,232,240,0.85)",
+                      gap: 10,
+                    }}
+                  >
+                    <View style={{ width: 26, height: 26, borderRadius: 8, backgroundColor: isDark ? "rgba(34,197,94,0.14)" : "rgba(34,197,94,0.09)", alignItems: "center", justifyContent: "center" }}>
+                      <Icon source="pencil-outline" size={15} color={isDark ? "#4ade80" : "#16a34a"} />
+                    </View>
+                    <Text className="text-sm font-century-gothic-sans-medium" style={{ color: colors.sectionHeaderText, flex: 1 }}>{t("chat.editMessage")}</Text>
                   </TouchableOpacity>
                 )}
 
@@ -1629,15 +2301,114 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({
         </Modal>
       )}
 
+      {/* Mesaj düzenleme modalı */}
+      {editingMessage && (
+        <Modal transparent animationType="fade" statusBarTranslucent onRequestClose={() => { setEditingMessage(null); setEditText(""); }}>
+          <Pressable
+            style={{ flex: 1, backgroundColor: isDark ? "rgba(0,0,0,0.6)" : "rgba(0,0,0,0.35)", justifyContent: "center", paddingHorizontal: 24 }}
+            onPress={() => { setEditingMessage(null); setEditText(""); }}
+          >
+            <Pressable onPress={() => {}}>
+              <View
+                style={{
+                  borderRadius: 18,
+                  padding: 20,
+                  backgroundColor: colors.cardBg,
+                  borderWidth: 1,
+                  borderColor: isDark ? "rgba(148,163,184,0.2)" : "rgba(226,232,240,0.95)",
+                  ...(Platform.OS === "android" ? { elevation: 12 } : {}),
+                }}
+              >
+                <RNText style={{ fontSize: 16, fontWeight: "700", color: colors.sectionHeaderText, marginBottom: 12 }}>
+                  {t("chat.editMessage")}
+                </RNText>
+                <View
+                  style={{
+                    borderRadius: 12,
+                    borderWidth: 1.5,
+                    borderColor: brandColor,
+                    backgroundColor: colors.cardBg2,
+                    paddingHorizontal: 12,
+                    paddingVertical: 8,
+                    marginBottom: 16,
+                  }}
+                >
+                  <TextInput
+                    ref={editInputRef}
+                    value={editText}
+                    onChangeText={setEditText}
+                    multiline
+                    maxLength={500}
+                    style={{
+                      fontSize: 14,
+                      color: colors.sectionHeaderText,
+                      minHeight: 60,
+                      maxHeight: 140,
+                    }}
+                    placeholderTextColor={colors.textSecondary}
+                  />
+                </View>
+                <View style={{ flexDirection: "row", gap: 10 }}>
+                  <TouchableOpacity
+                    onPress={() => { setEditingMessage(null); setEditText(""); }}
+                    style={{
+                      flex: 1,
+                      borderRadius: 12,
+                      borderWidth: 1.5,
+                      borderColor: cancelDialogSurface.borderColor,
+                      backgroundColor: cancelDialogSurface.backgroundColor,
+                      paddingVertical: 12,
+                      alignItems: "center",
+                    }}
+                    activeOpacity={0.75}
+                  >
+                    <RNText style={{ fontSize: 14, fontWeight: "600", color: SOFT_CANCEL_TEXT }}>{t("common.cancel")}</RNText>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={handleSaveEdit}
+                    disabled={!editText.trim() || editText.trim() === editingMessage.text}
+                    style={{
+                      flex: 1,
+                      borderRadius: 12,
+                      backgroundColor: (!editText.trim() || editText.trim() === editingMessage.text)
+                        ? colors.cardBg2
+                        : confirmDialogPrimary.backgroundColor,
+                      paddingVertical: 12,
+                      alignItems: "center",
+                      borderWidth: (!editText.trim() || editText.trim() === editingMessage.text) ? 0 : 1,
+                      borderColor: (!editText.trim() || editText.trim() === editingMessage.text) ? "transparent" : "rgba(4,120,87,0.35)",
+                    }}
+                    activeOpacity={0.8}
+                  >
+                    <RNText
+                      style={{
+                        fontSize: 14,
+                        fontWeight: "700",
+                        color: (!editText.trim() || editText.trim() === editingMessage.text)
+                          ? colors.textSecondary
+                          : confirmDialogPrimary.color,
+                      }}
+                    >
+                      {t("common.save")}
+                    </RNText>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </Pressable>
+          </Pressable>
+        </Modal>
+      )}
+
       {/* Ses kaydı: gönder / metne çevir — dikey kart, taşan buton yok */}
       {pendingVoiceUri ? (
         <Modal
           transparent
           animationType="fade"
           statusBarTranslucent
-          onRequestClose={closeVoiceActionSheet}
+          /** Yalnızca İptal ile kapanır; dışarı tıklama ve Android geri tuşu kapatmaz */
+          onRequestClose={() => {}}
         >
-          <Pressable
+          <View
             style={{
               flex: 1,
               backgroundColor: isDark ? "rgba(0,0,0,0.62)" : "rgba(15,23,42,0.45)",
@@ -1645,14 +2416,13 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({
               paddingHorizontal: 24,
               paddingBottom: insets.bottom + 16,
             }}
-            onPress={closeVoiceActionSheet}
           >
-            <Pressable
-              onPress={(e) => e.stopPropagation()}
+            <View
               style={{
                 alignSelf: "center",
                 width: "100%",
                 maxWidth: 360,
+                zIndex: 1000,
                 borderRadius: 18,
                 paddingTop: 20,
                 paddingHorizontal: 18,
@@ -1660,92 +2430,218 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({
                 backgroundColor: colors.cardBg,
                 borderWidth: 1,
                 borderColor: isDark ? "rgba(148,163,184,0.2)" : "rgba(226,232,240,0.95)",
+                ...(Platform.OS === "android" ? { elevation: 12 } : {}),
               }}
             >
-              <View className="items-center mb-3">
+              <View style={{ alignItems: "center", marginBottom: 16 }}>
                 <View
                   style={{
-                    width: 48,
-                    height: 48,
-                    borderRadius: 24,
-                    backgroundColor: isDark ? "rgba(240,94,35,0.2)" : "rgba(240,94,35,0.14)",
+                    width: 56,
+                    height: 56,
+                    borderRadius: 28,
+                    backgroundColor: isDark ? "rgba(240,94,35,0.22)" : "rgba(240,94,35,0.16)",
                     alignItems: "center",
                     justifyContent: "center",
+                    borderWidth: 1,
+                    borderColor: isDark ? "rgba(240,94,35,0.35)" : "rgba(240,94,35,0.25)",
                   }}
                 >
-                  <Icon source="microphone" size={26} color={brandColor} />
+                  <Icon source="microphone" size={28} color={brandColor} />
                 </View>
-                <Text
-                  className="text-center font-century-gothic-sans-bold mt-3 text-lg"
-                  style={{ color: colors.sectionHeaderText }}
+                <RNText
+                  style={{
+                    marginTop: 12,
+                    paddingHorizontal: 8,
+                    textAlign: "center",
+                    fontSize: 18,
+                    fontWeight: "700",
+                    color: voiceModalTitleColor,
+                    ...(Platform.OS === "android" ? { includeFontPadding: false } : {}),
+                  }}
                 >
                   {t("chat.audioRecordedTitle")}
-                </Text>
-                <Text
-                  className="text-center font-century-gothic text-sm mt-1.5 px-1"
-                  style={{ color: mutedTextColor, lineHeight: 20 }}
+                </RNText>
+                <RNText
+                  style={{
+                    marginTop: 6,
+                    paddingHorizontal: 8,
+                    textAlign: "center",
+                    fontSize: 14,
+                    lineHeight: 20,
+                    color: voiceModalBodyColor,
+                    ...(Platform.OS === "android" ? { includeFontPadding: false } : {}),
+                  }}
                 >
                   {t("chat.audioRecordedBody")}
-                </Text>
+                </RNText>
               </View>
 
-              <Pressable
-                onPress={onVoiceSendAsAudio}
-                style={({ pressed }) => ({
-                  flexDirection: "row",
-                  alignItems: "center",
-                  paddingVertical: 14,
-                  paddingHorizontal: 14,
-                  borderRadius: 14,
-                  marginBottom: 10,
-                  backgroundColor: pressed ? softBrandBg : isDark ? "rgba(240,94,35,0.12)" : "rgba(240,94,35,0.08)",
-                  borderWidth: 1,
-                  borderColor: isDark ? "rgba(240,94,35,0.35)" : "rgba(240,94,35,0.28)",
-                })}
-              >
-                <Icon source="send" size={22} color={brandColor} />
-                <View className="ml-3 flex-1">
-                  <Text className="font-century-gothic-sans-medium text-base" style={{ color: colors.sectionHeaderText }}>
-                    {t("chat.sendAsAudio")}
-                  </Text>
-                  <Text className="font-century-gothic text-xs mt-0.5" style={{ color: mutedTextColor }}>
-                    {t("chat.sendAsAudioHint")}
-                  </Text>
-                </View>
-              </Pressable>
+              <View style={{ gap: 12 }}>
+                {/* Sesli mesaj olarak gönder — Android: TouchableOpacity satırında flex:1 metin sütunu 0 genişlik alabiliyor; width:100% + minWidth:0 */}
+                <Pressable
+                  onPress={onVoiceSendAsAudio}
+                  style={{
+                    borderRadius: 16,
+                    borderWidth: 1.5,
+                    borderColor: isDark ? "rgba(240,94,35,0.35)" : "rgba(240,94,35,0.3)",
+                    backgroundColor: isDark ? "rgba(240,94,35,0.1)" : "rgba(240,94,35,0.08)",
+                    overflow: "hidden",
+                    alignSelf: "stretch",
+                    width: "100%",
+                  }}
+                >
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      paddingVertical: 16,
+                      paddingHorizontal: 14,
+                      width: "100%",
+                    }}
+                  >
+                    <View
+                      style={{
+                        width: 52,
+                        height: 52,
+                        borderRadius: 14,
+                        backgroundColor: isDark ? "rgba(240,94,35,0.2)" : "rgba(240,94,35,0.14)",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        flexShrink: 0,
+                      }}
+                    >
+                      <Icon source="send" size={26} color={brandColor} />
+                    </View>
+                    <View style={{ flex: 1, marginLeft: 14, minWidth: 0, justifyContent: "center" }}>
+                      <RNText
+                        style={{
+                          fontSize: 12,
+                          marginBottom: 4,
+                          color: voiceModalCaptionOrange,
+                          fontWeight: "600",
+                          ...(Platform.OS === "android" ? { includeFontPadding: false } : {}),
+                        }}
+                      >
+                        {t("chat.voiceModalSendCaption")}
+                      </RNText>
+                      <RNText
+                        style={{
+                          fontSize: 16,
+                          fontWeight: "700",
+                          color: voiceModalTitleColor,
+                          ...(Platform.OS === "android" ? { includeFontPadding: false } : {}),
+                        }}
+                      >
+                        {t("chat.voiceModalSendTitle")}
+                      </RNText>
+                      <RNText
+                        style={{
+                          fontSize: 12,
+                          lineHeight: 18,
+                          marginTop: 4,
+                          color: voiceModalBodyColor,
+                          ...(Platform.OS === "android" ? { includeFontPadding: false } : {}),
+                        }}
+                      >
+                        {t("chat.sendAsAudioHint")}
+                      </RNText>
+                    </View>
+                  </View>
+                </Pressable>
 
-              <Pressable
-                onPress={onVoiceTranscribe}
-                style={({ pressed }) => ({
-                  flexDirection: "row",
-                  alignItems: "center",
-                  paddingVertical: 14,
-                  paddingHorizontal: 14,
-                  borderRadius: 14,
-                  marginBottom: 10,
-                  backgroundColor: pressed ? (isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)") : colors.cardBg2,
-                  borderWidth: 1,
-                  borderColor: colors.borderColor2,
-                })}
-              >
-                <Icon source="text-box-outline" size={22} color={colors.sectionHeaderText} />
-                <View className="ml-3 flex-1">
-                  <Text className="font-century-gothic-sans-medium text-base" style={{ color: colors.sectionHeaderText }}>
-                    {t("chat.transcribeToText")}
-                  </Text>
-                  <Text className="font-century-gothic text-xs mt-0.5" style={{ color: mutedTextColor }}>
-                    {t("chat.transcribeToTextHint")}
-                  </Text>
-                </View>
-              </Pressable>
+                {/* Metne çevir */}
+                <Pressable
+                  onPress={onVoiceTranscribe}
+                  disabled={isTranscribing}
+                  style={{
+                    borderRadius: 16,
+                    borderWidth: 1.5,
+                    borderColor: isDark ? "rgba(129,140,248,0.35)" : "rgba(129,140,248,0.35)",
+                    backgroundColor: isDark ? "rgba(99,102,241,0.08)" : "rgba(99,102,241,0.06)",
+                    opacity: isTranscribing ? 0.65 : 1,
+                    overflow: "hidden",
+                    alignSelf: "stretch",
+                    width: "100%",
+                  }}
+                >
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      paddingVertical: 16,
+                      paddingHorizontal: 14,
+                      width: "100%",
+                    }}
+                  >
+                    <View
+                      style={{
+                        width: 52,
+                        height: 52,
+                        borderRadius: 14,
+                        backgroundColor: isDark ? "rgba(99,102,241,0.14)" : "rgba(99,102,241,0.1)",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        flexShrink: 0,
+                      }}
+                    >
+                      {isTranscribing ? (
+                        <ActivityIndicator size="small" color={isDark ? "#a5b4fc" : "#6366f1"} />
+                      ) : (
+                        <Icon source="text-box-outline" size={26} color={isDark ? "#a5b4fc" : "#4f46e5"} />
+                      )}
+                    </View>
+                    <View style={{ flex: 1, marginLeft: 14, minWidth: 0, justifyContent: "center" }}>
+                      <RNText
+                        style={{
+                          fontSize: 12,
+                          marginBottom: 4,
+                          color: voiceModalCaptionIndigo,
+                          fontWeight: "600",
+                          ...(Platform.OS === "android" ? { includeFontPadding: false } : {}),
+                        }}
+                      >
+                        {t("chat.voiceModalTranscribeCaption")}
+                      </RNText>
+                      <RNText
+                        style={{
+                          fontSize: 16,
+                          fontWeight: "700",
+                          color: voiceModalTitleColor,
+                          ...(Platform.OS === "android" ? { includeFontPadding: false } : {}),
+                        }}
+                      >
+                        {t("chat.voiceModalTranscribeTitle")}
+                      </RNText>
+                      <RNText
+                        style={{
+                          fontSize: 12,
+                          lineHeight: 18,
+                          marginTop: 4,
+                          color: voiceModalBodyColor,
+                          ...(Platform.OS === "android" ? { includeFontPadding: false } : {}),
+                        }}
+                      >
+                        {t("chat.transcribeToTextHint")}
+                      </RNText>
+                    </View>
+                  </View>
+                </Pressable>
+              </View>
 
-              <Pressable onPress={closeVoiceActionSheet} style={{ paddingVertical: 12, alignItems: "center" }}>
-                <Text className="font-century-gothic-sans-medium text-base" style={{ color: mutedTextColor }}>
+              <Pressable onPress={closeVoiceActionSheet} style={{ paddingVertical: 14, alignItems: "center", marginTop: 4 }}>
+                <RNText
+                  style={{
+                    fontSize: 16,
+                    fontWeight: "600",
+                    color: isDark ? "#fca5a5" : "#b91c1c",
+                    ...(Platform.OS === "android" ? { includeFontPadding: false } : {}),
+                  }}
+                >
                   {t("common.cancel")}
-                </Text>
+                </RNText>
               </Pressable>
-            </Pressable>
-          </Pressable>
+            </View>
+          </View>
         </Modal>
       ) : null}
 
@@ -1762,7 +2658,7 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({
       >
         <BottomSheetView style={{ paddingHorizontal: 20, paddingBottom: 40, paddingTop: 8 }}>
           <Text className="text-lg font-century-gothic-sans-bold mb-4" style={{ color: colors.sectionHeaderText }}>{t("chat.participants")}</Text>
-          {currentThread?.participants.map((participant) => {
+          {participants.map((participant) => {
             const getLabel = () => {
               if (participant.userType === currentUserType) return null;
               if (participant.userType === UserType.BarberStore) return t("labels.store");
@@ -1792,6 +2688,7 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({
                     ownerId={participant.userId}
                     ownerType={ImageOwnerType.User}
                     fallbackUrl={participant.imageUrl}
+                    placeholderAsset={CHAT_AVATAR_PLACEHOLDER}
                     imageClassName="w-full h-full"
                     iconSource={participant.userType === UserType.BarberStore ? "store" : participant.userType === UserType.FreeBarber ? "account-supervisor" : "account"}
                     iconSize={24}

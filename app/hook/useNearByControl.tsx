@@ -7,9 +7,14 @@ import { ensureLocationGateWithUI } from "../components/location/location-gate";
 import i18n from "../i18n/config";
 import type { Pos, LocationStatus, UseNearbyControlParams } from "../types";
 import { BACKGROUND_LOCATION_TASK } from "../tasks/backgroundLocation";
+import { tokenStore } from "../lib/tokenStore";
 
 // Expo Go background location'ı desteklemez
 const IS_EXPO_GO = Constants.executionEnvironment === "storeClient";
+
+function coordsNearlyEqual(lat1: number, lon1: number, lat2: number, lon2: number) {
+    return Math.abs(lat1 - lat2) < 1e-5 && Math.abs(lon1 - lon2) < 1e-5;
+}
 
 function distanceKm(lat1: number, lon1: number, lat2: number, lon2: number) {
     const R = 6371;
@@ -49,6 +54,11 @@ export function useNearbyControl({
     const savedFetchHandler = useRef<((lat: number, lon: number) => Promise<void>) | undefined>(undefined);
 
     const [gateTimedOut, setGateTimedOut] = useState(false);
+    /** Ref yerine koordinat değişince güncellenen state; her render'da yeni {} vermesin (useNearbyWithFilter effect döngüsü). */
+    const [stableLocation, setStableLocation] = useState<
+        { latitude: number; longitude: number } | undefined
+    >(undefined);
+
     const initialLoading = !fetchedOnce && locationStatus !== "denied" && !gateTimedOut;
 
     function shouldFetchByMoveOrAge(lat: number, lon: number) {
@@ -72,9 +82,13 @@ export function useNearbyControl({
             // Error handled by RTK Query
         } finally {
             inflightFetch.current = false;
-            setFetchedOnce(true);
+            setFetchedOnce((prev) => (prev ? prev : true));
             lastFetchPos.current = { lat, lon };
             lastFetchTime.current = Date.now();
+            setStableLocation((prev) => {
+                if (prev && coordsNearlyEqual(prev.latitude, prev.longitude, lat, lon)) return prev;
+                return { latitude: lat, longitude: lon };
+            });
         }
     }, [onFetch]);
 
@@ -99,11 +113,15 @@ export function useNearbyControl({
 
                 const p = { lat, lon };
                 lastKnownPos.current = p;
+                setStableLocation((prev) => {
+                    if (prev && coordsNearlyEqual(prev.latitude, prev.longitude, p.lat, p.lon)) return prev;
+                    return { latitude: p.lat, longitude: p.lon };
+                });
 
                 if (!shouldFetchByMoveOrAge(p.lat, p.lon)) return;
 
-                // Hareket algılandı, güncel fonksiyonu çağır
-                if (savedFetchHandler.current) {
+                // Hareket algılandı, güncel fonksiyonu çağır — oturum yoksa boşuna fetch yok
+                if (savedFetchHandler.current && tokenStore.access) {
                     savedFetchHandler.current(p.lat, p.lon);
                 }
             }
@@ -210,6 +228,8 @@ export function useNearbyControl({
         const tick = () => {
             const pos = lastKnownPos.current;
             if (!pos) return;
+            // Oturum yoksa (logout / refresh-failure) boşuna fetch atma.
+            if (!tokenStore.access) return;
             // Ref üzerinden çağırdığımız için stale closure (eski veri) olmaz.
             savedFetchHandler.current?.(pos.lat, pos.lon);
         };
@@ -281,19 +301,21 @@ export function useNearbyControl({
         }
     };
 
+    // Referans her render'da değişmesin: useNearbyWithFilter + panel useEffect'leri
+    // (manualFetchStores) sürekli tetiklenmesin, retry göstergesi saniyede bir yanmasın.
+    const manualFetch = useCallback(async () => {
+        if (!lastKnownPos.current || locationStatus !== "granted") return;
+        await savedFetchHandler.current?.(lastKnownPos.current.lat, lastKnownPos.current.lon);
+    }, [locationStatus]);
+
     return {
         locationStatus,
         locationMessage,
         hasLocation: locationStatus === "granted",
-        location: lastKnownPos.current ? { latitude: lastKnownPos.current.lat, longitude: lastKnownPos.current.lon } : undefined,
+        location: stableLocation,
         fetchedOnce,
         initialLoading,
-        manualFetch: async () => {
-            if (!lastKnownPos.current || locationStatus !== "granted") return;
-            // Error varsa da manual fetch yapabilir (retry için)
-            // User retry butonuna bastığında tekrar denemeli
-            await savedFetchHandler.current?.(lastKnownPos.current.lat, lastKnownPos.current.lon);
-        },
+        manualFetch,
         retryPermission,
     };
 }

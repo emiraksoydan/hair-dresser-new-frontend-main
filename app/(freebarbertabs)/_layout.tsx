@@ -26,6 +26,7 @@ const FreeBarberLayout = () => {
     enablePanDownToClose: false,
     enableOverDrag: false,
     enableHandlePanningGesture: false,
+    pressBehavior: "none",
   });
 
   const [fgPerm] = Location.useForegroundPermissions();

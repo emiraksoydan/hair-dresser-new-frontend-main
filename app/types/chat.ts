@@ -16,6 +16,8 @@ export type ChatThreadListItemDto = {
   unreadCount: number;
   currentUserImageUrl?: string | null; // Mevcut kullanıcının profil resmi (mesaj balonlarında göstermek için)
   participants: ChatThreadParticipantDto[];
+  /** Favorite thread + BarberStore counterparty: which store to favorite */
+  favoriteStoreId?: string | null;
   /**
    * true: mevcut kullanıcı karşı tarafı favoriye ALMAMIŞSA.
    * Thread listede görünür ve badge alınmaya devam eder,
@@ -50,6 +52,12 @@ export type ChatMessageItemDto = {
   mediaUrl?: string | null;
   replyToMessageId?: string | null;
   replyToTextPreview?: string | null;
+  /** İstemci tarafı: kayıt metering ile üretilen 0…1 tepe değerleri (API’de yoksa sadece lokal) */
+  waveformPeaks?: number[] | null;
+  /** File mesajları için orijinal dosya adı (backend tarafından doldurulur). */
+  fileName?: string | null;
+  /** true: mesaj gönderildikten sonra düzenlendi. */
+  isEdited?: boolean;
 };
 
 export type ChatMessagesReadEvent = {

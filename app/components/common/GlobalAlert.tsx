@@ -1,12 +1,17 @@
 import React, { useCallback } from 'react';
-import { View } from 'react-native';
-import { Button, Dialog, Icon, Portal } from "react-native-paper";
+import { View, TouchableOpacity, Platform } from 'react-native';
+import { Dialog, Icon, Portal } from "react-native-paper";
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState } from '../../store/redux-store';
 import { hideAlert, AlertButton } from '../../store/alertSlice';
 import { Text } from './Text';
 
 import { useTheme } from '../../hook/useTheme';
+import {
+  SOFT_CANCEL_TEXT,
+  primaryConfirmButtonColors,
+  softCancelSurface,
+} from '../../theme/confirmDialogStyles';
 
 /**
  * Global Alert Component - React Native Paper Dialog tabanlı
@@ -17,7 +22,9 @@ export const GlobalAlert: React.FC = () => {
     (state: RootState) => state.alert
   );
   const dispatch = useDispatch();
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
+  const primaryBtn = primaryConfirmButtonColors(isDark);
+  const cancelSurface = softCancelSurface(isDark);
 
   const handleDismiss = useCallback(() => {
     dispatch(hideAlert());
@@ -51,18 +58,6 @@ export const GlobalAlert: React.FC = () => {
   };
 
   const typeConfig = getTypeConfig();
-
-  // Button style'a göre renk
-  const getButtonColor = (style?: 'default' | 'cancel' | 'destructive') => {
-    switch (style) {
-      case 'destructive':
-        return '#ef4444';
-      case 'cancel':
-        return '#6b7280';
-      default:
-        return '#22c55e';
-    }
-  };
 
   return (
     <Portal>
@@ -111,39 +106,77 @@ export const GlobalAlert: React.FC = () => {
 
         <Dialog.Actions
           style={{
-            flexDirection: buttons.length > 2 ? 'column' : 'row',
-            flexWrap: 'wrap',
-            justifyContent: 'center',
-            alignItems: 'stretch',
-            gap: 10,
-            paddingHorizontal: 16,
-            paddingBottom: 16,
             width: '100%',
+            paddingHorizontal: 12,
+            paddingTop: 4,
+            paddingBottom: 8,
+            margin: 0,
+            flexDirection: 'column',
+            alignItems: 'stretch',
           }}
         >
-          {buttons.map((button, index) => (
-            <Button
-              key={index}
-              mode={button.style === 'cancel' ? 'outlined' : 'contained'}
-              onPress={() => handleButtonPress(button)}
-              buttonColor={button.style === 'cancel' ? 'transparent' : getButtonColor(button.style)}
-              textColor={button.style === 'cancel' ? '#9ca3af' : 'white'}
-              style={{
-                borderRadius: 10,
-                minWidth: buttons.length > 2 ? undefined : 100,
-                width: buttons.length > 2 ? '100%' : undefined,
-                borderColor: button.style === 'cancel' ? colors.borderColor : 'transparent',
-              }}
-              labelStyle={{
-                fontFamily: 'CenturyGothic',
-                fontSize: buttons.length > 2 ? 15 : 14,
-                marginVertical: 2,
-                textAlign: 'center',
-              }}
-            >
-              {button.text}
-            </Button>
-          ))}
+          <View
+            style={{
+              flexDirection: buttons.length > 2 ? 'column' : 'row',
+              flexWrap: 'wrap',
+              alignItems: buttons.length > 2 ? 'stretch' : 'center',
+              justifyContent: buttons.length === 2 ? 'center' : buttons.length === 1 ? 'center' : 'flex-start',
+              width: '100%',
+              paddingBottom: 12,
+            }}
+          >
+            {buttons.map((button, index) => {
+              const isCancel = button.style === 'cancel';
+              const fontSize = buttons.length > 2 ? 15 : 14;
+              const isPair = buttons.length === 2;
+              const isSingle = buttons.length === 1;
+              const bg = isCancel ? cancelSurface.backgroundColor : primaryBtn.backgroundColor;
+              const borderCol = isCancel ? cancelSurface.borderColor : primaryBtn.borderColor;
+              const fg = isCancel ? SOFT_CANCEL_TEXT : primaryBtn.color;
+              return (
+                <TouchableOpacity
+                  key={index}
+                  activeOpacity={0.88}
+                  onPress={() => handleButtonPress(button)}
+                  style={{
+                    marginHorizontal: isPair ? 6 : 0,
+                    marginBottom: buttons.length > 2 && index < buttons.length - 1 ? 10 : 0,
+                    alignSelf: isSingle ? 'stretch' : 'center',
+                    width: isSingle ? '100%' : undefined,
+                  }}
+                >
+                  <View
+                    collapsable={false}
+                    style={{
+                      borderRadius: 12,
+                      minHeight: 48,
+                      minWidth: isPair ? 128 : isSingle ? undefined : 120,
+                      paddingVertical: 12,
+                      paddingHorizontal: 20,
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      borderWidth: 1.5,
+                      borderColor: borderCol,
+                      backgroundColor: bg,
+                      ...(Platform.OS === 'android' ? { elevation: 0 } : {}),
+                    }}
+                  >
+                    <Text
+                      style={{
+                        fontFamily: 'CenturyGothic',
+                        fontSize,
+                        fontWeight: '600',
+                        textAlign: 'center',
+                        color: fg,
+                      }}
+                    >
+                      {button.text}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
         </Dialog.Actions>
       </Dialog>
     </Portal>

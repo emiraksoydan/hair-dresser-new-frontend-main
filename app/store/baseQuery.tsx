@@ -41,14 +41,30 @@ export const normalizeLoaded = (raw: any) => {
   return access && refresh ? { access, refresh } : null;
 };
 
+/**
+ * Açık uçlu (login / refresh / OTP) endpoint'ler: token olmadan da çağrılabilir.
+ * Bu liste dışındaki bir endpoint token yoksa network'e gitmeden iptal edilir.
+ *
+ * Not: Daha önce buraya `console.warn` eklenmişti ama cold-start / hesap geçişi /
+ * logout geçiş pencerelerinde 10+ farklı endpoint aynı anda tick'liyor. Uyarı
+ * gerçek bir hata değil (bail-out zaten network'i iptal ediyor); log spam'i
+ * yaratmaması için kaldırıldı. Teşhis gerekirse buraya geçici log eklenebilir.
+ */
+const PUBLIC_ENDPOINTS = new Set<string>([
+  'login',
+  'loginRequest',
+  'verifyOtp',
+  'sendOtp',
+  'refresh',
+  'register',
+]);
+
 const raw = fetchBaseQuery({
   baseUrl: API,
   timeout: API_CONFIG.REQUEST_TIMEOUT_MS,
-  prepareHeaders: (h, { endpoint }) => {
+  prepareHeaders: (h) => {
     if (tokenStore.access) {
       h.set('Authorization', `Bearer ${tokenStore.access}`);
-    } else {
-      console.warn('[baseQuery] TOKEN YOK - istek atsız gidecek, endpoint:', endpoint);
     }
     return h;
   },
@@ -65,6 +81,47 @@ export function clearRefreshLock() {
   refreshing = null;
 }
 
+export type TokenRefreshFailureReason = 'network' | 'invalid' | 'unknown';
+
+/**
+ * Refresh sonucu: ağ hatası ile sunucunun refresh'i reddetmesi (401/403) ayrılır —
+ * çoklu hesapta geçişte geçici ağ hatasında kayıtlı hesabı silmemek için.
+ */
+export async function attemptTokenRefreshWithReason(
+  refreshToken: string
+): Promise<
+  | { ok: true; accessToken: string; refreshToken: string }
+  | { ok: false; reason: TokenRefreshFailureReason }
+> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), API_CONFIG.REQUEST_TIMEOUT_MS);
+  try {
+    const response = await fetch(`${API}Auth/refresh`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refreshToken }),
+      signal: controller.signal,
+    });
+    if (response.status === 401 || response.status === 403) {
+      return { ok: false, reason: 'invalid' };
+    }
+    if (!response.ok) {
+      return { ok: false, reason: 'unknown' };
+    }
+    const data = await response.json();
+    try {
+      const tokens = extractTokens(data);
+      return { ok: true, ...tokens };
+    } catch {
+      return { ok: false, reason: 'unknown' };
+    }
+  } catch {
+    return { ok: false, reason: 'network' };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /**
  * Hesap geçişi öncesinde token yenileme deneyi.
  * Sadece geçerli refresh token ile çağrılmalı.
@@ -74,22 +131,27 @@ export function clearRefreshLock() {
 export async function attemptTokenRefresh(
   refreshToken: string
 ): Promise<{ accessToken: string; refreshToken: string } | null> {
-  try {
-    const r = await rawNoAuth(
-      { url: 'Auth/refresh', method: 'POST', body: { refreshToken } },
-      { type: 'accountSwitch' } as any,
-      {} as any
-    );
-    if ((r as any).error) return null;
-    return extractTokens((r as any).data);
-  } catch {
-    return null;
-  }
+  const r = await attemptTokenRefreshWithReason(refreshToken);
+  return r.ok ? { accessToken: r.accessToken, refreshToken: r.refreshToken } : null;
 }
 
 export const baseQueryWithReauth: BaseQueryFn<any, unknown, FetchBaseQueryError> =
   async (args, api, extra) => {
     try {
+      // Token yoksa ve endpoint public değilse network'e gitmeden iptal et.
+      // Polling / interval / arka plan fetch'leri logout/refresh-failure sonrası
+      // gereksiz network trafiği yaratmasın.
+      const endpointName = (api as any)?.endpoint as string | undefined;
+      const isPublic = endpointName ? PUBLIC_ENDPOINTS.has(endpointName) : false;
+      if (!tokenStore.access && !tokenStore.refresh && !isPublic) {
+        return {
+          error: {
+            status: 'CUSTOM_ERROR',
+            data: { message: '' },
+          },
+        } as any;
+      }
+
       let res = await raw(args, api, extra);
 
       // AbortError kontrolü - RTK Query'nin kendi AbortController'ı tarafından iptal edilen query'ler
@@ -185,10 +247,24 @@ export const baseQueryWithReauth: BaseQueryFn<any, unknown, FetchBaseQueryError>
             const refreshPlain = tokenStore.refresh;
             if (!refreshPlain) return false;
             tokenStore.setRefreshing(true); // SignalR'a bildir
+            // Refresh'i çağıran query'nin abort sinyalinden ayır.
+            // Aksi halde component unmount / yeni query refresh'i de iptal eder ve
+            // AbortError catch'e düşerek kullanıcıyı gereksiz yere logout eder.
+            const refreshAbortController = new AbortController();
+            const refreshTimeoutTimer = setTimeout(
+              () => refreshAbortController.abort(),
+              API_CONFIG.REQUEST_TIMEOUT_MS,
+            );
+            const apiForRefresh = {
+              ...(api as any),
+              signal: refreshAbortController.signal,
+              // abort property'si RTK Query internal kullanımı için; boş fn yeter.
+              abort: () => refreshAbortController.abort(),
+            };
             try {
               const r = await rawNoAuth(
                 { url: 'Auth/refresh', method: 'POST', body: { refreshToken: refreshPlain } },
-                api, extra
+                apiForRefresh, extra
               );
               if ((r as any).error) throw new Error('HTTP error');
               let accessToken: string;
@@ -203,9 +279,18 @@ export const baseQueryWithReauth: BaseQueryFn<any, unknown, FetchBaseQueryError>
               tokenStore.set({ accessToken, refreshToken });
               await saveTokens({ accessToken, refreshToken });
               return true;
-            } catch (error) {
+            } catch (error: any) {
               // Oturum bu arada değiştiyse eski hatayı yeni hesaba uygulama
               if (tokenStore.tokenEpoch !== epochAtStart) return false;
+              // AbortError: RTK Query dışı (bizim timeout) veya caller unmount'u.
+              // Caller unmount'unu artık kendi signal'imizle filtrelediğimiz için
+              // buraya sadece refresh-timeout/network-abort düşer → logout mantıklı değil.
+              const isAbort =
+                error?.name === 'AbortError' ||
+                error?.name === 'DOMException' ||
+                (typeof error?.message === 'string' &&
+                  /abort|cancel/i.test(error.message));
+              if (isAbort) return false;
               // Hesap geçişi sırasında refresh başarısız olursa token'ı silme —
               // o token artık yeni hesaba ait, silmek her şeyi patlatır.
               if (!tokenStore.isSwitchingAccount) {
@@ -214,6 +299,7 @@ export const baseQueryWithReauth: BaseQueryFn<any, unknown, FetchBaseQueryError>
               }
               return false;
             } finally {
+              clearTimeout(refreshTimeoutTimer);
               tokenStore.setRefreshing(false); // SignalR'a bildir
             }
           })();

@@ -23,10 +23,14 @@ import { tokenStore } from './lib/tokenStore';
 import { useSignalRV2 } from './hook/useSignalRV2';
 import { ErrorBoundary } from './components/common/ErrorBoundary';
 import { useFcmToken } from './hook/useFcmToken';
+import { useFirebaseMessaging } from './hook/useFirebaseMessaging';
 import { GlobalSnackbar } from './hook/useSnackbar';
 import { GlobalAlert } from './components/common/GlobalAlert';
+import { GlobalKeyboardDismisser } from './components/common/GlobalKeyboardDismisser';
 // Background location task'ı kaydet (Expo Go'da çalışmaz)
 import './tasks/backgroundLocation';
+// FCM background message handler (React ağacının DIŞINDA, modül yüklenince çalışır)
+import './lib/firebaseMessagingBackground';
 // i18n initialization
 import './i18n/config';
 import { ThemeProvider } from './context/ThemeContext';
@@ -143,7 +147,12 @@ const RootLayout = () => {
                 <NotificationOpenerProvider>
                 <SignalRBootstrap />
                 <FcmTokenBootstrap />
-                <ThemedStack />
+                <FirebaseMessagingBootstrap />
+                {/* Klavye dışına dokunulduğunda klavye kapanır. Butonlar / input'lar */}
+                {/* kendi touch'larını tükettiği için yalnızca boş alanlarda tetiklenir. */}
+                <GlobalKeyboardDismisser>
+                  <ThemedStack />
+                </GlobalKeyboardDismisser>
                 <ThemedStatusBar />
                 <GlobalSnackbar />
                 <GlobalAlert />
@@ -166,6 +175,11 @@ function SignalRBootstrap() {
 
 function FcmTokenBootstrap() {
   useFcmToken();
+  return null;
+}
+
+function FirebaseMessagingBootstrap() {
+  useFirebaseMessaging();
   return null;
 }
 

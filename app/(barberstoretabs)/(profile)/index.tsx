@@ -458,6 +458,7 @@ const Index = () => {
                         data={[]}
                         fetchedOnce={true}
                         onRetry={handleRefresh}
+                        refetching={!!refreshing}
                         customMessages={{
                             error: errorMessage,
                             'service-unavailable': errorMessage,

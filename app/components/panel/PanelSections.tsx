@@ -11,6 +11,7 @@ import { UnifiedStateManager } from '../../components/common/UnifiedStateManager
 import { StoreCardInner } from '../../components/store/storecard';
 import { FreeBarberCardInner } from '../../components/freebarber/freebarbercard';
 import { getErrorMessage } from '../../utils/errorHandler';
+import { shouldShowDiscoveryConnectivityError, type DiscoveryLocationMode } from '../../utils/panelDiscoveryErrors';
 import { useLanguage } from '../../hook/useLanguage';
 import { BarberStoreGetDto, FreeBarGetDto } from '../../types';
 
@@ -43,14 +44,19 @@ export const EmptyStateFunc = ({ loading, hasData, hasLocation, locationStatus, 
 );
 
 
-export const StoresSection = React.memo(({ stores, loading, hasLocation, locationStatus, fetchedOnce, isList, onPressStore, onPressRatings, searchQuery, appliedFilters, error, showImageAnimation = true, onRetry }: any) => {
+export const StoresSection = React.memo(({ stores, loading, hasLocation, locationStatus, fetchedOnce, isList, onPressStore, onPressRatings, searchQuery, appliedFilters, error, showImageAnimation = true, onRetry, discoveryLocationMode = 'userGps' as DiscoveryLocationMode }: any) => {
     const { t } = useLanguage();
     const [expanded, setExpanded] = useState(true);
     const screenWidth = Dimensions.get('window').width;
     const cardWidth = expanded ? screenWidth * 0.935 : screenWidth * 0.955;
 
+    const showServiceError = error && shouldShowDiscoveryConnectivityError(error, {
+        mode: discoveryLocationMode,
+        locationStatus,
+    });
+
     // Network/Server error — panel keşif ile aynı kart + tekrar dene
-    if (error) {
+    if (showServiceError) {
         return (
             <View style={{ minHeight: 200, maxHeight: 400 }}>
                 <UnifiedStateManager
@@ -152,13 +158,18 @@ export const StoresSection = React.memo(({ stores, loading, hasLocation, locatio
     );
 });
 
-export const FreeBarbersSection = React.memo(({ freeBarbers, loading, hasLocation, locationStatus, fetchedOnce, isList, onPressFreeBarber, onPressRatings, searchQuery, appliedFilters, error, showImageAnimation = true, onRetry }: any) => {
+export const FreeBarbersSection = React.memo(({ freeBarbers, loading, hasLocation, locationStatus, fetchedOnce, isList, onPressFreeBarber, onPressRatings, searchQuery, appliedFilters, error, showImageAnimation = true, onRetry, discoveryLocationMode = 'userGps' as DiscoveryLocationMode }: any) => {
     const { t } = useLanguage();
     const [expanded, setExpanded] = useState(false);
     const screenWidth = Dimensions.get('window').width;
     const cardWidth = expanded ? screenWidth * 0.935 : screenWidth * 0.955;
 
-    if (error) {
+    const showServiceError = error && shouldShowDiscoveryConnectivityError(error, {
+        mode: discoveryLocationMode,
+        locationStatus,
+    });
+
+    if (showServiceError) {
         return (
             <View style={{ minHeight: 200, maxHeight: 400 }}>
                 <UnifiedStateManager

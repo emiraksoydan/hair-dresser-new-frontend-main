@@ -1,4 +1,5 @@
 import { useLocalSearchParams } from "expo-router";
+import { useNavigation } from "@react-navigation/native";
 import { useSafeNavigation } from "../../hook/useSafeNavigation";
 import { useActionGuard } from "../../hook/useActionGuard";
 import React, { useEffect, useMemo, useState, useCallback, useRef } from "react";
@@ -99,6 +100,7 @@ const StoreBookingContent = ({
     skip: !storeId,
   });
   const router = useSafeNavigation();
+  const navigation = useNavigation();
   const guard = useActionGuard();
   const { t } = useLanguage();
   const { alert, alertSuccess, alertError } = useAlert();
@@ -113,6 +115,14 @@ const StoreBookingContent = ({
     useAddStoreToAppointmentMutation();
 
   const { userType: currentUserType } = useAuth();
+
+  const handleBookingBack = useCallback(() => {
+    if (navigation.canGoBack()) {
+      navigation.goBack();
+    } else {
+      router.back();
+    }
+  }, [navigation, router]);
 
   // FreeBarber seçimi artık koltuk seçiminde gösteriliyor (barberId koltuğa atanmışsa)
 
@@ -371,7 +381,10 @@ const StoreBookingContent = ({
             </View>
             {!isBottomSheet && (
               <TouchableOpacity
-                onPress={() => router.back()}
+                onPress={handleBookingBack}
+                accessibilityRole="button"
+                accessibilityLabel={t("common.goBack")}
+                hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}
                 className="absolute top-9 left-5 z-10 rounded-[40px] p-3"
                 style={{ backgroundColor: "rgba(0,0,0,0.4)" }}
               >

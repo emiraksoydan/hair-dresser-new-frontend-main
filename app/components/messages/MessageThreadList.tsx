@@ -5,14 +5,14 @@
 
 import { Icon } from "react-native-paper";
 import React, { useMemo, useCallback, useState } from 'react';
-import { View, TouchableOpacity, RefreshControl, Alert } from 'react-native';
+import { View, TouchableOpacity, RefreshControl, ActivityIndicator } from 'react-native';
 import { Text } from '../common/Text';
 import { useAnimatedScrollHandler, useSharedValue } from 'react-native-reanimated';
 import { AnimatedLegendList } from '../common/AnimatedLegendList';
 import { ScrollStackItem } from '../common/ScrollStackItem';
 import { useSafeNavigation } from '../../hook/useSafeNavigation';
 
-import { useGetChatThreadsQuery } from '../../store/api';
+import { useGetChatThreadsQuery, useToggleFavoriteMutation } from '../../store/api';
 import { ChatThreadListItemDto, ChatThreadParticipantDto, AppointmentStatus, UserType, BarberType, ImageOwnerType } from '../../types';
 import { SkeletonComponent } from '../common/skeleton';
 import { UnifiedStateWrapper } from '../common/UnifiedStateManager';
@@ -24,6 +24,8 @@ import { MESSAGES } from '../../constants/messages';
 import { useAuth } from '../../hook/useAuth';
 import { useLanguage } from '../../hook/useLanguage';
 import { useTheme } from '../../hook/useTheme';
+
+const CHAT_AVATAR_PLACEHOLDER = require('../../../assets/images/profileempty.webp');
 
 interface MessageThreadListProps {
     routePrefix: string; // e.g., '/(customertabs)/(messages)' or '/(barberstoretabs)/(messages)'
@@ -42,9 +44,12 @@ export const MessageThreadList: React.FC<MessageThreadListProps> = ({ routePrefi
             scrollY.value = e.contentOffset.y / THREAD_ROW_STRIDE;
         },
     });
-    const { data: threads, isLoading, refetch, isFetching, error, isError } = useGetChatThreadsQuery();
+    const { token: authToken, userType: currentUserType } = useAuth();
+    const { data: threads, isLoading, refetch, error, isError } = useGetChatThreadsQuery(undefined, {
+        skip: !authToken,
+    });
+    const [toggleFavorite, { isLoading: favoriteToggleBusy }] = useToggleFavoriteMutation();
     const formatTime = useFormatTime();
-    const { userType: currentUserType } = useAuth();
     const [isPullRefreshing, setIsPullRefreshing] = useState(false);
     const mutedTextColor = isDark ? '#94a3b8' : '#64748b';
     const tertiaryTextColor = isDark ? '#64748b' : '#94a3b8';
@@ -71,16 +76,12 @@ export const MessageThreadList: React.FC<MessageThreadListProps> = ({ routePrefi
         const threadBorder = hasUnread ? unreadAccent : colors.borderColor;
 
         const handlePress = () => {
-            if (item.isRestrictedForCurrentUser) {
-                Alert.alert(
-                    t('chat.restrictedThreadTitle'),
-                    t('chat.restrictedThreadMessage'),
-                    [{ text: t('common.ok') }]
-                );
-                return;
-            }
             router.push(`/(screens)/chat/${item.threadId}`);
         };
+
+        const previewHint = item.isFavoriteThread && isRestricted;
+        const previewText = previewHint ? t('chat.favoriteThreadListHint') : (item.lastMessagePreview ?? '');
+        const showPreviewBubble = !previewHint && !!item.lastMessagePreview;
 
         // Participant etiketlerini hesapla
         const getParticipantLabel = (participant: ChatThreadParticipantDto) => {
@@ -126,6 +127,7 @@ export const MessageThreadList: React.FC<MessageThreadListProps> = ({ routePrefi
                             ownerId={participant.userId}
                             ownerType={ImageOwnerType.User}
                             fallbackUrl={participant.imageUrl}
+                            placeholderAsset={CHAT_AVATAR_PLACEHOLDER}
                             imageClassName="w-full h-full"
                             iconSource={getIconForParticipant(participant)}
                             iconSize={20}
@@ -177,6 +179,7 @@ export const MessageThreadList: React.FC<MessageThreadListProps> = ({ routePrefi
                                     ownerId={participant.userId}
                                     ownerType={ImageOwnerType.User}
                                     fallbackUrl={participant.imageUrl}
+                                    placeholderAsset={CHAT_AVATAR_PLACEHOLDER}
                                     imageClassName="w-full h-full"
                                     iconSource={getIconForParticipant(participant)}
                                     iconSize={20}
@@ -257,7 +260,27 @@ export const MessageThreadList: React.FC<MessageThreadListProps> = ({ routePrefi
                                 </View>
                             )}
 
-                            {item.lastMessagePreview && (
+                            {previewHint ? (
+                                <View
+                                    className="mt-2.5 flex-row items-center gap-2 px-3 py-2 rounded-xl"
+                                    style={{
+                                        marginLeft: item.participants.length > 0 ? 42 : 0,
+                                        maxWidth: '100%',
+                                        backgroundColor: isDark ? 'rgba(99,102,241,0.12)' : 'rgba(99,102,241,0.08)',
+                                        borderWidth: 1,
+                                        borderColor: isDark ? 'rgba(165,180,252,0.35)' : 'rgba(79,70,229,0.22)',
+                                    }}
+                                >
+                                    <Icon source="heart-outline" size={16} color={isDark ? '#a5b4fc' : '#4f46e5'} />
+                                    <Text
+                                        className="text-sm flex-1 font-century-gothic-sans-medium"
+                                        style={{ color: isDark ? '#c7d2fe' : '#3730a3' }}
+                                        numberOfLines={2}
+                                    >
+                                        {t('chat.favoriteThreadListHint')}
+                                    </Text>
+                                </View>
+                            ) : showPreviewBubble ? (
                                 <View
                                     className={`flex-row items-start rounded-xl ${hasUnread ? "mt-3 gap-3 px-3 py-3" : "mt-2.5 gap-2 px-2.5 py-2 rounded-lg"}`}
                                     style={{
@@ -283,10 +306,10 @@ export const MessageThreadList: React.FC<MessageThreadListProps> = ({ routePrefi
                                         style={hasUnread ? { color: colors.sectionHeaderText, flex: 1, minWidth: 0 } : { color: mutedTextColor, flexShrink: 1, minWidth: 0, maxWidth: '100%' }}
                                         numberOfLines={hasUnread ? 4 : 2}
                                     >
-                                        {item.lastMessagePreview}
+                                        {previewText}
                                     </Text>
                                 </View>
-                            )}
+                            ) : null}
                         </View>
 
                         <View className="items-end shrink-0" style={{ minWidth: 72, paddingLeft: 4 }}>
@@ -306,8 +329,26 @@ export const MessageThreadList: React.FC<MessageThreadListProps> = ({ routePrefi
                                 </View>
                             )}
                             <View className="relative items-center justify-center mt-1">
-                                {isRestricted ? (
-                                    <Icon source="lock" size={20} color={mutedTextColor} />
+                                {isRestricted && item.isFavoriteThread && item.participants[0]?.userId ? (
+                                    <TouchableOpacity
+                                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                                        disabled={favoriteToggleBusy}
+                                        onPress={() => {
+                                            const otherParticipant = item.participants[0];
+                                            const targetId =
+                                                otherParticipant?.userType === UserType.BarberStore
+                                                    ? (item.favoriteStoreId ?? otherParticipant.userId)
+                                                    : otherParticipant.userId;
+                                            toggleFavorite({ targetId }).unwrap().then(() => refetch()).catch(() => { });
+                                        }}
+                                        className="items-center justify-center"
+                                    >
+                                        {favoriteToggleBusy ? (
+                                            <ActivityIndicator size="small" color={unreadAccent} />
+                                        ) : (
+                                            <Icon source="heart-outline" size={22} color={hasUnread ? unreadAccent : mutedTextColor} />
+                                        )}
+                                    </TouchableOpacity>
                                 ) : (
                                     <Icon source="message-text" size={20} color={hasUnread ? unreadAccent : mutedTextColor} />
                                 )}
@@ -324,18 +365,18 @@ export const MessageThreadList: React.FC<MessageThreadListProps> = ({ routePrefi
                 </TouchableOpacity>
             </ScrollStackItem>
         );
-    }, [router, routePrefix, iconSource, formatTime, currentUserType, t, isDark, colors, mutedTextColor, tertiaryTextColor, unreadAccent, cardShadowStyle, scrollY]);
-
-    // Loading durumu
-    if (isLoading) {
-        return (
-            <View className="flex-1 pt-4 px-4" style={{ backgroundColor: colors.screenBg }}>
-                {Array.from({ length: 3 }).map((_, i) => <SkeletonComponent key={i} />)}
-            </View>
-        );
-    }
+    }, [router, routePrefix, iconSource, formatTime, currentUserType, t, isDark, colors, mutedTextColor, tertiaryTextColor, unreadAccent, cardShadowStyle, scrollY, toggleFavorite, refetch, favoriteToggleBusy]);
 
     const hasNoThreads = !threads || (Array.isArray(threads) && threads.length === 0);
+    const [retryBusy, setRetryBusy] = useState(false);
+    const handleRetry = useCallback(async () => {
+        setRetryBusy(true);
+        try {
+            await refetch();
+        } finally {
+            setRetryBusy(false);
+        }
+    }, [refetch]);
     const handleRefresh = useCallback(async () => {
         setIsPullRefreshing(true);
         try {
@@ -344,6 +385,15 @@ export const MessageThreadList: React.FC<MessageThreadListProps> = ({ routePrefi
             setIsPullRefreshing(false);
         }
     }, [refetch]);
+
+    // Loading durumu — hook'ların hepsi yukarıda; erken return sadece JSX için (Rules of Hooks)
+    if (isLoading) {
+        return (
+            <View className="flex-1 pt-4 px-4" style={{ backgroundColor: colors.screenBg }}>
+                {Array.from({ length: 3 }).map((_, i) => <SkeletonComponent key={i} />)}
+            </View>
+        );
+    }
 
     return (
         <View className="flex-1" style={{ backgroundColor: colors.screenBg }}>
@@ -363,7 +413,8 @@ export const MessageThreadList: React.FC<MessageThreadListProps> = ({ routePrefi
                         error={isError ? error : undefined}
                         data={hasNoThreads && !isError ? [] : threads}
                         fetchedOnce={true}
-                        onRetry={refetch}
+                        onRetry={handleRetry}
+                        refetching={!!isError && retryBusy}
                         customMessages={{
                             empty: t('empty.noMessages'),
                         }}

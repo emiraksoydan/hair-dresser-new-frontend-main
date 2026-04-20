@@ -7,14 +7,15 @@ import React, {
   useMemo,
   useRef,
 } from 'react';
+import { InteractionManager } from 'react-native';
 import { jwtDecode } from 'jwt-decode';
 import i18n from 'i18next';
 import {
   loadAllAccounts,
   upsertAccount,
   updateAccountTokens,
-  removeAccount,
   pruneStaleSavedAccounts,
+  refreshInactiveAccounts,
   SavedAccount,
 } from '../lib/multiAccountStorage';
 import { showSnack } from '../store/snackbarSlice';
@@ -23,7 +24,7 @@ import { tokenStore, bumpTokenEpoch } from '../lib/tokenStore';
 import { saveTokens } from '../lib/tokenStorage';
 import { resetSignalRState } from '../store/signalrSlice';
 import { api } from '../store/api';
-import { clearRefreshLock, isExpired, attemptTokenRefresh } from '../store/baseQuery';
+import { clearRefreshLock, isExpired, attemptTokenRefreshWithReason } from '../store/baseQuery';
 import { useAppDispatch } from '../store/hook';
 import { JwtPayload } from '../types';
 import { pathByUserType } from '../utils/auth/redirect-by-user-type';
@@ -41,6 +42,39 @@ function extractUserId(decoded: Partial<JwtPayload> & Record<string, any>): stri
     decoded[NAME_ID_CLAIM] ||
     null
   );
+}
+
+/**
+ * Liste/prune öncesi: bellekteki güncel tokenları kayıtlı hesaba yazar.
+ * Aksi halde diskte eski refresh kalmış olabilir; pruneStaleSavedAccounts yanlışlıkla aktif oturumu siler.
+ */
+async function persistActiveTokensToSavedAccounts(): Promise<void> {
+  const access = tokenStore.access;
+  const refresh = tokenStore.refresh;
+  if (!access || !refresh) return;
+  try {
+    const decoded = jwtDecode<JwtPayload>(access);
+    const uid = extractUserId(decoded as any);
+    if (!uid) return;
+    const existing = await loadAllAccounts();
+    const prev = existing.find((a) => a.id.toLowerCase() === uid.toLowerCase());
+    const userTypeStr = (decoded.userType ?? '').toLowerCase();
+    let ut = UserType.Customer;
+    if (userTypeStr === 'freebarber') ut = UserType.FreeBarber;
+    else if (userTypeStr === 'barberstore') ut = UserType.BarberStore;
+    const displayName = [decoded.name, decoded.lastName].filter(Boolean).join(' ');
+    await upsertAccount({
+      id: uid,
+      userType: ut,
+      displayName: displayName || prev?.displayName || uid,
+      phone: prev?.phone ?? '',
+      accessToken: access,
+      refreshToken: refresh,
+      savedAt: prev?.savedAt ?? Date.now(),
+    });
+  } catch {
+    /* ignore */
+  }
 }
 
 interface MultiAccountContextValue {
@@ -88,6 +122,7 @@ export const MultiAccountProvider: React.FC<{ children: React.ReactNode }> = ({
   }, []);
 
   const prepareAccountSwitcherList = useCallback(async () => {
+    await persistActiveTokensToSavedAccounts();
     await pruneStaleSavedAccounts();
     await refreshAccounts();
   }, [refreshAccounts]);
@@ -143,9 +178,16 @@ export const MultiAccountProvider: React.FC<{ children: React.ReactNode }> = ({
 
   useEffect(() => {
     // Önce bootstrap: storage'a kaydedilmemiş mevcut oturumu kaydet
-    bootstrapCurrentSession().then(() => {
+    bootstrapCurrentSession().then(async () => {
+      await persistActiveTokensToSavedAccounts();
       refreshAccounts();
       refreshCurrentUser();
+      // Aktif olmayan kayıtlı hesapların tokenlarını arka planda yenile.
+      // Böylece 30 günlük refresh token süresi dolmadan önce hesap geçişi çalışır.
+      const activeId = tokenStore.access
+        ? (() => { try { const d = jwtDecode<JwtPayload>(tokenStore.access!); return extractUserId(d as any); } catch { return null; } })()
+        : null;
+      void refreshInactiveAccounts(activeId).then(() => refreshAccounts());
     });
 
     const unsubscribe = tokenStore.onTokenChange((hasToken, token) => {
@@ -189,9 +231,18 @@ export const MultiAccountProvider: React.FC<{ children: React.ReactNode }> = ({
 
         // 1. Mevcut hesabın son tokenlarını kaydet.
         //    try-catch: AsyncStorage hatası kritik yolu engellemesin.
+        //    React state (currentUserId) onTokenChange listener'ı sebebiyle stale
+        //    olabilir; güvenli yol: aktif access token'ı decode edip id'yi oradan al.
         const currentToken = tokenStore.access;
         const currentRefresh = tokenStore.refresh;
-        const savedCurrentId = currentUserId;
+        let savedCurrentId: string | null = currentUserId;
+        if (currentToken) {
+          try {
+            const decoded = jwtDecode<JwtPayload>(currentToken);
+            const tid = extractUserId(decoded as any);
+            if (tid) savedCurrentId = tid;
+          } catch { /* decode hatası: state'deki id kullanılır */ }
+        }
         if (currentToken && currentRefresh && savedCurrentId) {
           try {
             await updateAccountTokens(savedCurrentId, {
@@ -217,14 +268,15 @@ export const MultiAccountProvider: React.FC<{ children: React.ReactNode }> = ({
 
         let finalAccessToken = freshTarget.accessToken;
         let finalRefreshToken = freshTarget.refreshToken;
+        let lastRefreshReason: string | null = null;
 
-        // Yalnızca access token gerçekten süresi dolmuşsa refresh yap.
-        // Geçerli bir token için gereksiz refresh → rotated refreshToken → reuse-detection riski.
+        // Access süresi dolmuşsa refresh dene.
         if (isExpired(freshTarget.accessToken) && freshTarget.refreshToken) {
-          const refreshed = await attemptTokenRefresh(freshTarget.refreshToken);
-          if (refreshed) {
-            finalAccessToken = refreshed.accessToken;
-            finalRefreshToken = refreshed.refreshToken;
+          const refreshResult = await attemptTokenRefreshWithReason(freshTarget.refreshToken);
+          lastRefreshReason = refreshResult.ok ? null : refreshResult.reason;
+          if (refreshResult.ok) {
+            finalAccessToken = refreshResult.accessToken;
+            finalRefreshToken = refreshResult.refreshToken;
             void updateAccountTokens(target.id, {
               accessToken: finalAccessToken,
               refreshToken: finalRefreshToken,
@@ -232,42 +284,16 @@ export const MultiAccountProvider: React.FC<{ children: React.ReactNode }> = ({
           }
         }
 
-        // 4. Her iki token da geçersizse (refresh token revoke edilmiş) hesabı sil + bildir.
-        //    Normal kullanımda buraya düşülmez; yalnızca güvenlik olayı sonrası olur.
+        // Hâlâ kullanılamıyorsa: kayıtlı hesabı listeden silme; yalnızca kullanıcıya bilgi ver.
         if (isExpired(finalAccessToken)) {
-          void removeAccount(target.id).catch(() => {});
-          await refreshAccounts();
-          await pruneStaleSavedAccounts();
-          await refreshAccounts();
-          const list = await loadAllAccounts();
-          const fallback = list
-            .filter(
-              (a) =>
-                currentUserId == null ||
-                a.id.toLowerCase() !== currentUserId.toLowerCase()
-            )
-            .sort((a, b) => b.savedAt - a.savedAt)[0];
-
-          if (fallback) {
-            dispatch(
-              showSnack({
-                message: i18n.t('accounts.sessionRevokedSwitching'),
-                isError: true,
-              })
-            );
-            tokenStore.setAccountSwitching(false);
-            setIsSwitchingAccount(false);
-            setTimeout(() => {
-              void switchAccount(fallback);
-            }, 0);
-            return;
-          }
-
+          const msg = lastRefreshReason === 'invalid'
+            ? i18n.t('accounts.switchFailedSessionExpired')
+            : i18n.t('accounts.switchFailedTryAgain');
           dispatch(
             showSnack({
-              message: i18n.t('accounts.sessionRevoked'),
+              message: msg,
               isError: true,
-            })
+            }),
           );
           tokenStore.setAccountSwitching(false);
           setIsSwitchingAccount(false);
@@ -292,11 +318,24 @@ export const MultiAccountProvider: React.FC<{ children: React.ReactNode }> = ({
         dispatch(api.util.resetApiState());
         router.replace(path as any);
 
-        // 6. Navigation tamamlandıktan sonra flag'leri kapat
-        setTimeout(() => {
+        // 6. Navigation ve re-mount tamamlandıktan sonra flag'leri kapat.
+        //    Sabit 600ms yerine InteractionManager + emniyet timeout'u:
+        //    • runAfterInteractions → navigation animasyonu bittikten hemen sonra
+        //      tetiklenir (hızlı cihazlarda gereksiz bekleme yok).
+        //    • 2sn fallback → interactions bir türlü bitmezse (nadir edge case)
+        //      UI kilitlenmesin diye zorla kapatır.
+        //    flagClosed guard → iki yolun aynı anda bitip çift çağrı yapmasını önler.
+        let flagClosed = false;
+        let fallbackTimer: ReturnType<typeof setTimeout> | null = null;
+        const closeSwitchingFlags = () => {
+          if (flagClosed) return;
+          flagClosed = true;
+          if (fallbackTimer) clearTimeout(fallbackTimer);
           tokenStore.setAccountSwitching(false);
           setIsSwitchingAccount(false);
-        }, 600);
+        };
+        fallbackTimer = setTimeout(closeSwitchingFlags, 2000);
+        InteractionManager.runAfterInteractions(closeSwitchingFlags);
 
         // 7. SignalR'ı arka planda temizle
         void resetSignalRState();

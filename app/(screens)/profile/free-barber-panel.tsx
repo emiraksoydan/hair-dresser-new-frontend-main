@@ -71,6 +71,7 @@ export default function MyPanelScreen() {
     enablePanDownToClose: false,
     enableOverDrag: false,
     enableHandlePanningGesture: false,
+    pressBehavior: "none",
   });
   const ratingsSheet = useBottomSheet({
     snapPoints: ["50%", "85%"],

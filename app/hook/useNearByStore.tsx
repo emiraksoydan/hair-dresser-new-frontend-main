@@ -35,6 +35,7 @@ export function useNearbyStores(enabledOrOptions: boolean | UseNearbyStoresOptio
         stores: result.data,
         loading: result.loading,
         fetching: result.fetching,
+        retryInProgress: result.retryInProgress,
         fetchedOnce: result.fetchedOnce,
         error: result.error,
         locationStatus: result.locationStatus,

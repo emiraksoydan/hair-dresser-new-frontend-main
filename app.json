@@ -22,7 +22,8 @@
         "NSLocationAlwaysUsageDescription": "This app needs your location even when closed to keep free barbers' locations updated.",
         "UIBackgroundModes": [
           "location",
-          "fetch"
+          "fetch",
+          "remote-notification"
         ]
       },
       "bundleIdentifier": "com.hairdresser.app",
@@ -38,7 +39,8 @@
       "permissions": [
         "ACCESS_FINE_LOCATION",
         "ACCESS_BACKGROUND_LOCATION",
-        "RECORD_AUDIO"
+        "RECORD_AUDIO",
+        "POST_NOTIFICATIONS"
       ],
       "googleServicesFile": "./google-services.json",
       "package": "com.hairdresser.app"
@@ -68,7 +70,15 @@
         }
       ],
       "@react-native-firebase/app",
-      "@react-native-firebase/messaging"
+      "@react-native-firebase/messaging",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/icon.png",
+          "color": "#fea60e",
+          "defaultChannel": "default"
+        }
+      ]
     ],
     "fonts": [
       "./assets/fonts/centurygothic.ttf",

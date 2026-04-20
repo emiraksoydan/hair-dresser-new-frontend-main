@@ -35,6 +35,7 @@ export function useNearbyFreeBarber(enabledOrOptions: boolean | UseNearbyFreeBar
         freeBarbers: result.data,
         loading: result.loading,
         fetching: result.fetching,
+        retryInProgress: result.retryInProgress,
         fetchedOnce: result.fetchedOnce,
         error: result.error,
         locationStatus: result.locationStatus,

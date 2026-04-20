@@ -22,6 +22,7 @@ import {
 } from '../types';
 import { FilterRequestDto, SavedFilterGetDto, SavedFilterCreateDto, SavedFilterUpdateDto } from '../types/filter';
 import { transformArrayResponse, transformObjectResponse, transformBooleanResponse, transformApiResponse } from '../utils/api/transform-response';
+import { lastMessagePreviewFromChatMessage, plainMessageSnapshot } from '../utils/chat/lastMessagePreview';
 
 // Cache duration constants (in seconds)
 const CACHE_DURATIONS = {
@@ -523,6 +524,10 @@ export const api = createApi({
                 method: 'GET',
                 params: before ? { before } : undefined,
             }),
+            providesTags: (result, error, arg) => [
+                { type: 'Chat' as const, id: 'MESSAGES' },
+                { type: 'Chat' as const, id: `MESSAGES_APPT_${arg.appointmentId}` },
+            ],
             keepUnusedDataFor: CACHE_DURATIONS.LIST,
             transformResponse: transformArrayResponse<ChatMessageItemDto>,
         }),
@@ -532,6 +537,10 @@ export const api = createApi({
                 method: 'GET',
                 params: before ? { before } : undefined,
             }),
+            providesTags: (result, error, arg) => [
+                { type: 'Chat' as const, id: 'MESSAGES' },
+                { type: 'Chat' as const, id: `MESSAGES_THREAD_${arg.threadId}` },
+            ],
             keepUnusedDataFor: CACHE_DURATIONS.LIST,
             transformResponse: transformArrayResponse<ChatMessageItemDto>,
         }),
@@ -669,17 +678,73 @@ export const api = createApi({
                 method: 'DELETE',
             }),
             async onQueryStarted({ messageId, threadId }, { dispatch, queryFulfilled }) {
-                // Optimistic removal from cache
-                const patch = dispatch(
+                let lastRemaining: ChatMessageItemDto | undefined;
+                const patchMessages = dispatch(
                     api.util.updateQueryData("getChatMessagesByThread", { threadId }, (draft) => {
                         const idx = draft.findIndex((m) => m.messageId === messageId);
                         if (idx !== -1) draft.splice(idx, 1);
+                        lastRemaining = draft.length ? plainMessageSnapshot(draft[draft.length - 1]) : undefined;
+                    }),
+                );
+                const patchThreads = dispatch(
+                    api.util.updateQueryData("getChatThreads", undefined, (threads) => {
+                        if (!threads) return;
+                        const thread = threads.find((t) => t.threadId === threadId);
+                        if (!thread) return;
+                        if (!lastRemaining) {
+                            thread.lastMessagePreview = "";
+                            thread.lastMessageAt = null;
+                        } else {
+                            thread.lastMessagePreview = lastMessagePreviewFromChatMessage(lastRemaining);
+                            thread.lastMessageAt = lastRemaining.createdAt;
+                        }
                     }),
                 );
                 try {
                     await queryFulfilled;
                 } catch {
-                    patch.undo();
+                    patchMessages.undo();
+                    patchThreads.undo();
+                }
+            },
+            invalidatesTags: [],
+        }),
+        updateChatMessage: builder.mutation<ApiResponse<boolean>, { messageId: string; threadId: string; text: string }>({
+            query: ({ messageId, text }) => ({
+                url: `Chat/message/${messageId}`,
+                method: 'PATCH',
+                body: { text },
+            }),
+            async onQueryStarted({ messageId, threadId, text }, { dispatch, queryFulfilled }) {
+                let threadPreviewFromEdit: ChatMessageItemDto | undefined;
+                const patchMessages = dispatch(
+                    api.util.updateQueryData("getChatMessagesByThread", { threadId }, (draft) => {
+                        const msg = draft.find((m) => m.messageId === messageId);
+                        if (msg) {
+                            msg.text = text;
+                            msg.isEdited = true;
+                        }
+                        const last = draft.length ? draft[draft.length - 1] : undefined;
+                        if (last && last.messageId === messageId) {
+                            threadPreviewFromEdit = plainMessageSnapshot(last);
+                        }
+                    }),
+                );
+                const patchThreads = threadPreviewFromEdit
+                    ? dispatch(
+                        api.util.updateQueryData("getChatThreads", undefined, (threads) => {
+                            if (!threads) return;
+                            const thread = threads.find((t) => t.threadId === threadId);
+                            if (!thread) return;
+                            thread.lastMessagePreview = lastMessagePreviewFromChatMessage(threadPreviewFromEdit);
+                        }),
+                    )
+                    : null;
+                try {
+                    await queryFulfilled;
+                } catch {
+                    patchMessages.undo();
+                    patchThreads?.undo();
                 }
             },
             invalidatesTags: [],
@@ -689,7 +754,24 @@ export const api = createApi({
                 url: `Chat/thread/${threadId}`,
                 method: 'DELETE',
             }),
-            invalidatesTags: [{ type: 'Chat' as const, id: 'LIST' }],
+            async onQueryStarted({ threadId }, { dispatch, queryFulfilled }) {
+                const patch = dispatch(
+                    api.util.updateQueryData("getChatMessagesByThread", { threadId }, (draft) => {
+                        if (!draft) return;
+                        draft.splice(0, draft.length);
+                    }),
+                );
+                try {
+                    await queryFulfilled;
+                } catch {
+                    patch.undo();
+                }
+            },
+            invalidatesTags: (result, error, arg) => [
+                { type: 'Chat' as const, id: 'LIST' },
+                { type: 'Chat' as const, id: 'MESSAGES' },
+                { type: 'Chat' as const, id: `MESSAGES_THREAD_${arg.threadId}` },
+            ],
         }),
         markChatThreadRead: builder.mutation<ApiResponse<boolean>, string>({
             query: (threadId) => ({
@@ -959,6 +1041,9 @@ export const api = createApi({
             },
             invalidatesTags: (result, error, arg) => [
                 'Favorite',
+                { type: 'Chat' as const, id: 'LIST' },
+                // Kısıtlı thread'de önce [] cache'lenmiş olabiliyor; favori sonrası mesajlar gelsin diye mesaj sorgularını yenile
+                { type: 'Chat' as const, id: 'MESSAGES' },
                 'MineFreeBarberPanel',
                 'MineStores',
                 { type: 'IsFavorite', id: arg.targetId },
@@ -1530,6 +1615,7 @@ export const {
     useSendChatMessageByThreadMutation,
     useSendChatMediaMessageMutation,
     useDeleteChatMessageMutation,
+    useUpdateChatMessageMutation,
     useDeleteChatThreadMutation,
     useMarkChatThreadReadMutation,
     useMarkChatThreadReadByThreadMutation,

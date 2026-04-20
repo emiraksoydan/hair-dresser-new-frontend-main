@@ -1,0 +1,30 @@
+diff --git a/node_modules/@reduxjs/toolkit/dist/query/rtk-query.legacy-esm.js b/node_modules/@reduxjs/toolkit/dist/query/rtk-query.legacy-esm.js
+index 0f29c22..c039ddc 100644
+--- a/node_modules/@reduxjs/toolkit/dist/query/rtk-query.legacy-esm.js
++++ b/node_modules/@reduxjs/toolkit/dist/query/rtk-query.legacy-esm.js
+@@ -205,9 +205,13 @@ function fetchBaseQuery(_a = {}) {
+       "timeout"
+     ]);
+     let abortController, signal = api.signal;
++    let onApiAbort = void 0;
+     if (timeout) {
+       abortController = new AbortController();
+-      api.signal.addEventListener("abort", abortController.abort);
++      onApiAbort = () => {
++        abortController.abort();
++      };
++      api.signal.addEventListener("abort", onApiAbort);
+       signal = abortController.signal;
+     }
+     let config = __spreadValues(__spreadProps(__spreadValues({}, baseFetchOptions), {
+@@ -257,7 +261,9 @@ function fetchBaseQuery(_a = {}) {
+       };
+     } finally {
+       if (timeoutId) clearTimeout(timeoutId);
+-      abortController == null ? void 0 : abortController.signal.removeEventListener("abort", abortController.abort);
++      if (abortController && onApiAbort) {
++        api.signal.removeEventListener("abort", onApiAbort);
++      }
+     }
+     const responseClone = response.clone();
+     meta.response = responseClone;

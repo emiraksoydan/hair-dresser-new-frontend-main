@@ -18,6 +18,7 @@ import {
 } from "react-native";
 import { BottomSheetScrollView, BottomSheetFlatList } from "@gorhom/bottom-sheet";
 import { Text } from "../common/Text";
+import { useNavigation } from "@react-navigation/native";
 import { useSafeNavigation } from "../../hook/useSafeNavigation";
 import { useActionGuard } from "../../hook/useActionGuard";
 import { Icon, IconButton } from "react-native-paper";
@@ -92,7 +93,16 @@ const FreeBarberBookingContent = ({
   disableHeaderImageSwipe = false,
 }: Props) => {
   const router = useSafeNavigation();
+  const navigation = useNavigation();
   const guard = useActionGuard();
+
+  const handleBookingBack = useCallback(() => {
+    if (navigation.canGoBack()) {
+      navigation.goBack();
+    } else {
+      router.back();
+    }
+  }, [navigation, router]);
   const isAddStoreMode = mode === "add-store";
   const { data: freeBarberData, isLoading } = useGetFreeBarberForUsersQuery(
     barberId,
@@ -416,6 +426,18 @@ const FreeBarberBookingContent = ({
                 borderRadiusClass={borderRadiusClass}
                 enableSwipe={!disableHeaderImageSwipe}
               />
+              {!isBottomSheet && (
+                <TouchableOpacity
+                  onPress={handleBookingBack}
+                  accessibilityRole="button"
+                  accessibilityLabel={t("common.goBack")}
+                  hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}
+                  className="absolute top-10 left-4 z-20 rounded-full p-3"
+                  style={{ backgroundColor: "rgba(0,0,0,0.45)" }}
+                >
+                  <Icon source="chevron-left" size={26} color="white" />
+                </TouchableOpacity>
+              )}
               <View
                 className={`absolute bottom-0 left-0 right-0 px-4 pb-3 bg-black/50 ${borderRadiusClass} justify-end h-full`}
               >

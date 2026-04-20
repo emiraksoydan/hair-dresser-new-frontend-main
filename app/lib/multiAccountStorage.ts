@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { UserType } from '../types';
-import { isExpired, attemptTokenRefresh } from '../store/baseQuery';
+import { isExpired, attemptTokenRefreshWithReason } from '../store/baseQuery';
 
 const ACCOUNTS_KEY = 'multi_accounts_v1';
 
@@ -105,6 +105,30 @@ export function findSavedAccountByPhoneAndUserType(
 }
 
 /**
+ * Aktif olmayan kayıtlı hesapların tokenlarını arka planda yeniler.
+ * Uygulama açılışında çağrılır — 30 günlük refresh token süresi dolmadan önce
+ * hesapları canlı tutar. Aktif hesabı atlar (baseQueryWithReauth halleder).
+ */
+export async function refreshInactiveAccounts(activeUserId: string | null): Promise<void> {
+  const accounts = await loadAllAccounts();
+  for (const a of accounts) {
+    if (activeUserId && a.id.toLowerCase() === activeUserId.toLowerCase()) continue;
+    if (!a.refreshToken) continue;
+    if (!isExpired(a.accessToken)) continue; // henüz süresi dolmamış, atla
+    const result = await attemptTokenRefreshWithReason(a.refreshToken);
+    if (result.ok) {
+      await updateAccountTokens(a.id, {
+        accessToken: result.accessToken,
+        refreshToken: result.refreshToken,
+      });
+    } else if (result.reason === 'invalid') {
+      await removeAccount(a.id);
+    }
+    // network/unknown: kaydı koru, bir sonraki açılışta tekrar dene
+  }
+}
+
+/**
  * Kayıtlı hesaplar: access süresi dolmuşsa refresh dene; olmazsa kaydı sil.
  * Sheet / geçiş öncesi listede ölü oturum göstermemek için kullanılır.
  */
@@ -116,15 +140,17 @@ export async function pruneStaleSavedAccounts(): Promise<void> {
       await removeAccount(a.id);
       continue;
     }
-    const refreshed = await attemptTokenRefresh(a.refreshToken);
-    if (refreshed) {
+    const refreshed = await attemptTokenRefreshWithReason(a.refreshToken);
+    if (refreshed.ok) {
       await updateAccountTokens(a.id, {
         accessToken: refreshed.accessToken,
         refreshToken: refreshed.refreshToken,
       });
-    } else {
+    } else if (refreshed.reason === 'invalid') {
+      // Sunucu refresh'i reddetti; kayıt anlamsız
       await removeAccount(a.id);
     }
+    // network / unknown: kaydı tut; geçiş veya sonraki istekte yeniden denenir
   }
 }
 

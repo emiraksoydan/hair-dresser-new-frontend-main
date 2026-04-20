@@ -23,6 +23,11 @@ import { MESSAGES } from "../../constants/messages";
 import { useLanguage } from "../../hook/useLanguage";
 import { useTheme } from "../../hook/useTheme";
 import { useActionGuard } from "../../hook/useActionGuard";
+import {
+  primaryConfirmButtonColors,
+  softCancelSurface,
+  SOFT_CANCEL_TEXT,
+} from "../../theme/confirmDialogStyles";
 
 type Props = {
   visible: boolean;
@@ -40,7 +45,9 @@ export const BarberEditModal: React.FC<Props> = ({
   storeId,
 }) => {
   const { t } = useLanguage();
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
+  const confirmBtn = primaryConfirmButtonColors(isDark);
+  const cancelBtn = softCancelSurface(isDark);
   const {
     control,
     handleSubmit,
@@ -299,7 +306,6 @@ export const BarberEditModal: React.FC<Props> = ({
                 activeOpacity={0.85}
               >
                 <Icon source="image-plus" size={40} color="#888" />
-                <Text className="text-gray-500 mt-2">{t("image.add")}</Text>
               </TouchableOpacity>
             )}
             <Controller
@@ -332,24 +338,28 @@ export const BarberEditModal: React.FC<Props> = ({
             />
           </View>
         </Dialog.Content>
-        <Dialog.Actions style={{ paddingHorizontal: 16, paddingBottom: 16 }}>
-          <Button 
-            mode="text"
-            onPress={onClose} 
-            textColor="#9CA3AF"
-            style={{ marginRight: 8 }}
+        <Dialog.Actions style={{ paddingHorizontal: 16, paddingBottom: 16, gap: 10, flexWrap: "wrap", justifyContent: "flex-end" }}>
+          <Button
+            mode="outlined"
+            onPress={onClose}
+            textColor={SOFT_CANCEL_TEXT}
+            buttonColor={cancelBtn.borderColor}
+            style={{ borderRadius: 10, borderColor: cancelBtn.borderColor, backgroundColor: cancelBtn.backgroundColor, marginRight: 8 }}
+            labelStyle={{ fontFamily: "CenturyGothic" }}
           >
-            Vazgeç
+            {t("common.cancel")}
           </Button>
           <Button
             mode="contained"
             loading={isAdding || isUpdating}
             disabled={isAdding || isUpdating}
             onPress={handleSubmit(submit)}
-            buttonColor="#10B981"
-            textColor="white"
+            buttonColor={confirmBtn.backgroundColor}
+            textColor={confirmBtn.color}
+            style={{ borderRadius: 10 }}
+            labelStyle={{ fontFamily: "CenturyGothic" }}
           >
-            Kaydet
+            {t("common.save")}
           </Button>
         </Dialog.Actions>
       </Dialog>

@@ -24,34 +24,38 @@ export const getGlobalConnection = () => globalConnection;
 
 export const getConnectionUserId = () => globalConnectionUserId;
 
-// Reset SignalR state (called on logout)
+// Reset SignalR state (logout / hesap geçişi)
+// Snapshot-first: module referansları SYNC olarak nullanır, sonra async stop.
+// Böylece await sırasında useSignalRV2 effect yeni bir bağlantı kurup
+// globalConnection'a yazarsa, biz döndüğümüzde onu yanlışlıkla nullamayız.
+// Eski kod "globalConnection = null" atamasını await'ten SONRA yapıyordu ve
+// hesap geçişinde duplicate connection üretebiliyordu.
 export const resetSignalRState = async () => {
+  const conn = globalConnection;
+  globalConnection = null;
+  globalConnectionUserId = null;
 
-  if (globalConnection) {
+  if (conn) {
     try {
-      globalConnection.off('notification.received');
-      globalConnection.off('notification.updated');
-      globalConnection.off('chat.message');
-      globalConnection.off('chat.threadCreated');
-      globalConnection.off('chat.threadUpdated');
-      globalConnection.off('chat.threadRemoved');
-      globalConnection.off('chat.messagesRead');
-      globalConnection.off('chat.typing');
-      globalConnection.off('appointment.updated');
-      globalConnection.off('badge.updated');
-      globalConnection.off('image.updated');
-      globalConnection.off('image.removed');
-      globalConnection.off('group.joined');
+      conn.off('notification.received');
+      conn.off('notification.updated');
+      conn.off('chat.message');
+      conn.off('chat.threadCreated');
+      conn.off('chat.threadUpdated');
+      conn.off('chat.threadRemoved');
+      conn.off('chat.messagesRead');
+      conn.off('chat.typing');
+      conn.off('appointment.updated');
+      conn.off('badge.updated');
+      conn.off('image.updated');
+      conn.off('image.removed');
+      conn.off('group.joined');
 
-      await globalConnection.stop();
+      await conn.stop();
     } catch (e) {
       // Silent fail
     }
   }
-
-  globalConnection = null;
-  globalConnectionUserId = null;
-
 };
 
 const signalrSlice = createSlice({

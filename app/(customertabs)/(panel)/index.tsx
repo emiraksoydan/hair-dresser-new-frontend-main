@@ -3,7 +3,6 @@ import { useIsFocused } from "@react-navigation/native";
 import {
   Dimensions,
   FlatList,
-  Image,
   RefreshControl,
   TouchableOpacity,
   View,
@@ -23,6 +22,10 @@ import { useAppDispatch } from "../../store/hook";
 import { setFreeBarberSwipeIds, setStoreSwipeIds } from "../../store/bookingSwipeSlice";
 import { showSnack } from "../../store/snackbarSlice";
 import { getErrorMessage, getMessage } from "../../utils/errorHandler";
+import {
+  isPanelConnectivityError,
+  shouldShowDiscoveryConnectivityError,
+} from "../../utils/panelDiscoveryErrors";
 import { FilterDrawer } from "../../components/common/filterdrawer";
 import { SavedFilterChips } from "../../components/common/savedfilterchips";
 import { StoreCardInner } from "../../components/store/storecard";
@@ -120,6 +123,7 @@ const Index = () => {
   const {
     stores,
     loading: storesLoading,
+    retryInProgress: storesRetryInProgress,
     error: storesError,
     locationStatus: storesLocationStatus,
     hasLocation: storesHasLocation,
@@ -135,6 +139,7 @@ const Index = () => {
   const {
     freeBarbers,
     loading: freeBarbersLoading,
+    retryInProgress: freeBarbersRetryInProgress,
     error: freeBarbersError,
     locationStatus: freeBarbersLocationStatus,
     hasLocation: freeBarbersHasLocation,
@@ -202,16 +207,37 @@ const Index = () => {
   const [expandedStores, setExpandedStores] = useState(true);
   const [expandedFreeBarbers, setExpandedFreeBarbers] = useState(true);
 
+  const showStoresConnectivityError = shouldShowDiscoveryConnectivityError(
+    storesError,
+    { mode: "userGps", locationStatus: storesLocationStatus },
+  );
+  const showFreeBarbersConnectivityError = shouldShowDiscoveryConnectivityError(
+    freeBarbersError,
+    { mode: "userGps", locationStatus: freeBarbersLocationStatus },
+  );
+  const storesSoftErrorMessage =
+    storesError && !isPanelConnectivityError(storesError)
+      ? getErrorMessage(storesError)
+      : undefined;
+  const freeBarbersSoftErrorMessage =
+    freeBarbersError && !isPanelConnectivityError(freeBarbersError)
+      ? getErrorMessage(freeBarbersError)
+      : undefined;
+
   // Unified location status and loading
   const isLoading = storesLoading || freeBarbersLoading;
   const fetchedOnce = storesFetchedOnce || freeBarbersFetchedOnce;
   const hasLocation = storesHasLocation || freeBarbersHasLocation;
   const locationStatus = storesLocationStatus || freeBarbersLocationStatus;
 
+  const manualFetchStoresRef = React.useRef(manualFetchStores);
+  manualFetchStoresRef.current = manualFetchStores;
+  const manualFetchFreeBarbersRef = React.useRef(manualFetchFreeBarbers);
+  manualFetchFreeBarbersRef.current = manualFetchFreeBarbers;
   React.useEffect(() => {
     if (!isFocused || locationStatus !== "granted") return;
-    Promise.all([manualFetchStores(), manualFetchFreeBarbers()]).catch(() => {});
-  }, [isFocused, locationStatus, manualFetchStores, manualFetchFreeBarbers]);
+    Promise.all([manualFetchStoresRef.current(), manualFetchFreeBarbersRef.current()]).catch(() => {});
+  }, [isFocused, locationStatus]);
 
   // Refresh handler
   const onRefresh = useCallback(async () => {
@@ -584,7 +610,7 @@ const Index = () => {
       push({ id: "stores-header", type: "stores-header" }, H.storesHeader);
       if (!storesFetchedOnce || (storesLoading && filteredStores.length === 0)) {
         push({ id: "stores-loading", type: "stores-loading" }, H.storesLoading);
-      } else if (storesError) {
+      } else if (showStoresConnectivityError) {
         push({ id: "stores-error", type: "stores-error" }, H.storesError);
       } else {
         const storesToDisplay = filteredStores;
@@ -629,7 +655,7 @@ const Index = () => {
           { id: "freebarbers-loading", type: "freebarbers-loading" },
           H.freebarbersLoading,
         );
-      } else if (freeBarbersError) {
+      } else if (showFreeBarbersConnectivityError) {
         push(
           { id: "freebarbers-error", type: "freebarbers-error" },
           H.freebarbersError,
@@ -672,12 +698,12 @@ const Index = () => {
     filterCriteria.userType,
     storesLoading,
     storesFetchedOnce,
-    storesError,
+    showStoresConnectivityError,
     filteredStores,
     expandedStores,
     freeBarbersLoading,
     freeBarbersFetchedOnce,
-    freeBarbersError,
+    showFreeBarbersConnectivityError,
     filteredFreeBarbers,
     expandedFreeBarbers,
     isList,
@@ -698,36 +724,7 @@ const Index = () => {
           collapsedHint={t("panel.topSectionCollapsedHint")}
         >
           <View style={{ backgroundColor: colors.cardBg, borderRadius: 12, borderWidth: 1.5, borderColor: colors.cardBg }}>
-            <View
-              style={{
-                flexDirection: "row",
-                alignItems: "center",
-                paddingHorizontal: 10,
-                paddingTop: 10,
-                paddingBottom: 4,
-              }}
-            >
-              <Image
-                source={require("../../../assets/icon.png")}
-                style={{
-                  width: 32,
-                  height: 32,
-                  borderRadius: 16,
-                  marginRight: 8,
-                  resizeMode: "contain",
-                }}
-              />
-              <Text
-                className="font-century-gothic-bold"
-                style={{ fontSize: 18, color: colors.sectionHeaderText }}
-                numberOfLines={1}
-              >
-                Hoşgeldiniz{" "}
-                {currentUser?.data?.firstName
-                  ? currentUser.data.firstName
-                  : ""}
-              </Text>
-            </View>
+            <View style={{ paddingHorizontal: 10, paddingTop: 10 }}>
             <SearchBar
               transparent
               compact
@@ -737,6 +734,7 @@ const Index = () => {
               setIsList={setIsList}
               onFilterPress={() => setFilterDrawerVisible(true)}
             />
+            </View>
             {savedFilters.length > 0 && (
               <View style={{ paddingHorizontal: 10, paddingBottom: 8 }}>
                 <SavedFilterChips savedFilters={savedFilters} activeFilterId={activeSavedFilterId} onLoad={(json, id) => loadFromSaved(json, id)} />
@@ -818,6 +816,11 @@ const Index = () => {
                     locationStatus={storesLocationStatus}
                     fetchedOnce={true}
                     onRetry={manualFetchStores}
+                    refetching={
+                      showStoresConnectivityError &&
+                      !!storesError &&
+                      storesRetryInProgress
+                    }
                   >
                     <View />
                   </UnifiedStateWrapper>
@@ -835,7 +838,8 @@ const Index = () => {
                     fetchedOnce={true}
                     onRetry={manualFetchStores}
                     customMessages={{
-                      empty: t("empty.noNearbyStores"),
+                      empty:
+                        storesSoftErrorMessage ?? t("empty.noNearbyStores"),
                     }}
                   >
                     <View />
@@ -909,6 +913,11 @@ const Index = () => {
                     locationStatus={freeBarbersLocationStatus}
                     fetchedOnce={true}
                     onRetry={manualFetchFreeBarbers}
+                    refetching={
+                      showFreeBarbersConnectivityError &&
+                      !!freeBarbersError &&
+                      freeBarbersRetryInProgress
+                    }
                   >
                     <View />
                   </UnifiedStateWrapper>
@@ -927,7 +936,9 @@ const Index = () => {
                     fetchedOnce={true}
                     onRetry={manualFetchFreeBarbers}
                     customMessages={{
-                      empty: t("empty.noNearbyFreeBarbers"),
+                      empty:
+                        freeBarbersSoftErrorMessage ??
+                        t("empty.noNearbyFreeBarbers"),
                     }}
                   >
                     <View />

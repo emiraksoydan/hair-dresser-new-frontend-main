@@ -22,6 +22,7 @@ const BarberStoreLayout = () => {
     enablePanDownToClose: false,
     enableOverDrag: false,
     enableHandlePanningGesture: false,
+    pressBehavior: "none",
   });
 
   const tabs = useMemo(() => getCommonTabs(t, {

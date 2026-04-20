@@ -218,8 +218,8 @@ const stripBsPrefix = (key: string) => isBsPriceKey(key) ? key.slice(BS_PRICE_PR
 
 const Row = ({ label, value, colors }: { label: string; value: string; colors: any }) => (
   <View className="py-1.5" style={{ borderBottomWidth: 1, borderBottomColor: colors.borderColor }}>
-    <Text className="text-gray-400 text-base mb-0.5">{label}</Text>
-    <Text className="text-base" style={{ color: colors.sectionHeaderText }}>{value || "—"}</Text>
+    <Text className="text-gray-400 text-lg mb-0.5">{label}</Text>
+    <Text className="text-lg" style={{ color: colors.sectionHeaderText }}>{value || "—"}</Text>
   </View>
 );
 
@@ -228,9 +228,9 @@ const RowList = ({ label, items, colors }: { label: string; items: string[]; col
   if (unique.length === 0) return null;
   return (
     <View className="py-1.5" style={{ borderBottomWidth: 1, borderBottomColor: colors.borderColor }}>
-      <Text className="text-gray-400 text-base mb-1">{label}</Text>
+      <Text className="text-gray-400 text-lg mb-1">{label}</Text>
       {unique.map((item, i) => (
-        <Text key={`${item}-${i}`} className="text-base py-0.5" style={{ color: colors.sectionHeaderText }}>{item}</Text>
+        <Text key={`${item}-${i}`} className="text-lg py-0.5" style={{ color: colors.sectionHeaderText }}>{item}</Text>
       ))}
     </View>
   );
@@ -1385,10 +1385,14 @@ export const FormFreeBarberOperation = React.memo(
           }
 
           // Refresh panel data to show updated images
-          if (isEdit) {
-            await triggerGetFreeBarberPanel(freeBarberId!);
-          } else {
-            await triggerGetFreeBarberMinePanel();
+          try {
+            if (isEdit) {
+              await triggerGetFreeBarberPanel(freeBarberId!);
+            } else {
+              await triggerGetFreeBarberMinePanel();
+            }
+          } catch {
+            // panel refresh failed; mutation succeeded — still close sheet
           }
           onClose?.();
         } else {
@@ -2315,13 +2319,13 @@ export const FormFreeBarberOperation = React.memo(
                 {currentStep === 8 && (
                   <>
                     <View className="px-0 py-4">
-                      <Text className="text-lg font-bold mb-4" style={{ color: colors.sectionHeaderText }}>
+                      <Text className="text-2xl font-bold mb-4" style={{ color: colors.sectionHeaderText }}>
                         {t("form.stepPreview")}
                       </Text>
                       <View className="rounded-xl p-4 gap-3" style={{ backgroundColor: colors.cardBg, borderWidth: 1, borderColor: colors.borderColor }}>
                         {(getValues("images") ?? []).length > 0 && (
                           <View className="mb-3">
-                            <Text className="text-base font-century-gothic-bold mb-2" style={{ color: colors.sectionHeaderText }}>{t("form.panelImagesTitle")}</Text>
+                            <Text className="text-lg font-century-gothic-bold mb-2" style={{ color: colors.sectionHeaderText }}>{t("form.panelImagesTitle")}</Text>
                             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10 }}>
                               {(getValues("images") ?? []).map((img: { uri: string }, idx: number) => (
                                 <Image key={idx} source={{ uri: img.uri }} style={{ width: 140, height: 110, borderRadius: 10 }} resizeMode="cover" />
@@ -2337,14 +2341,14 @@ export const FormFreeBarberOperation = React.memo(
                         {/* Sertifika Resmi */}
                         {getValues("certificateImage")?.uri && (
                           <View className="py-1.5" style={{ borderBottomWidth: 1, borderBottomColor: colors.borderColor }}>
-                            <Text className="text-base font-century-gothic-bold mb-2" style={{ color: colors.sectionHeaderText }}>{t("form.certificateImage")}</Text>
+                            <Text className="text-lg font-century-gothic-bold mb-2" style={{ color: colors.sectionHeaderText }}>{t("form.certificateImage")}</Text>
                             <Image source={{ uri: getValues("certificateImage")!.uri }} style={{ width: "100%", height: 160, borderRadius: 10 }} resizeMode="cover" />
                           </View>
                         )}
                         {/* Güzellik Uzmanı Sertifika Resmi */}
                         {getValues("beautySalonCertificateImage")?.uri && (
                           <View className="py-1.5" style={{ borderBottomWidth: 1, borderBottomColor: colors.borderColor }}>
-                            <Text className="text-base font-century-gothic-bold mb-2" style={{ color: colors.sectionHeaderText }}>{t("form.beautyExpert")}</Text>
+                            <Text className="text-lg font-century-gothic-bold mb-2" style={{ color: colors.sectionHeaderText }}>{t("form.beautyExpert")}</Text>
                             <Image source={{ uri: getValues("beautySalonCertificateImage")!.uri }} style={{ width: "100%", height: 160, borderRadius: 10 }} resizeMode="cover" />
                           </View>
                         )}
@@ -2354,17 +2358,17 @@ export const FormFreeBarberOperation = React.memo(
                         <RowList label={t("form.beautySalonServices")} items={(getValues("selectedBeautySalonCategories") ?? []).map((id: string) => id)} colors={colors} />
                         {Object.keys(getValues("prices") ?? {}).length > 0 && (
                           <View className="mt-2">
-                            <Text className="text-gray-400 text-sm mb-1">{t("form.stepPrices")}</Text>
+                            <Text className="text-gray-400 text-lg mb-1">{t("form.stepPrices")}</Text>
                             {Object.entries(getValues("prices") ?? {}).map(([catId, price], idx) => {
                               const displayName = stripBsPrefix(catId);
                               const isBs = isBsPriceKey(catId);
                               return (
                                 <View key={`price-${idx}-${catId}`} className="flex-row justify-between py-1">
-                                  <Text className="flex-1" style={{ color: colors.sectionHeaderText }}>
+                                  <Text className="flex-1 text-lg" style={{ color: colors.sectionHeaderText }}>
                                     {categoryLabelMap.get(displayName) ?? displayName}
                                     {isBs ? ` (${t("form.beautySalonCategories")})` : ""}
                                   </Text>
-                                  <Text className="text-[#ffb900]">{typeof price === "string" ? price : ""}</Text>
+                                  <Text className="text-lg text-[#ffb900]">{typeof price === "string" ? price : ""}</Text>
                                 </View>
                               );
                             })}

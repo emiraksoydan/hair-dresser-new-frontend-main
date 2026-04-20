@@ -67,4 +67,3 @@ export function transformApiResponse<T>(response: unknown): { success: boolean; 
   }
   return null;
 }
-

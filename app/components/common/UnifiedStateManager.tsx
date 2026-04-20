@@ -1,5 +1,5 @@
 import React from "react";
-import { View, ActivityIndicator, TouchableOpacity } from "react-native";
+import { View, ActivityIndicator, TouchableOpacity, StyleSheet } from "react-native";
 import { Text } from "./Text";
 import { LottieViewComponent } from "./lottieview";
 import { useLanguage } from "../../hook/useLanguage";
@@ -23,6 +23,8 @@ export interface UnifiedStateProps {
   showRetryButton?: boolean;
   customAnimation?: any;
   loading?: boolean;
+  /** RTK yeniden çekme vb.: hata kartında tam ekran loading yerine küçük gösterge */
+  refetching?: boolean;
   locationStatus?: LocationStatus;
   hasData?: boolean;
   fetchedOnce?: boolean;
@@ -80,6 +82,7 @@ export const UnifiedStateManager: React.FC<UnifiedStateProps> = ({
   showRetryButton = true,
   customAnimation,
   loading = false,
+  refetching = false,
   locationStatus,
   hasData = false,
   fetchedOnce = false,
@@ -162,10 +165,24 @@ export const UnifiedStateManager: React.FC<UnifiedStateProps> = ({
           <View className="mt-4">
             <TouchableOpacity
               onPress={onRetry}
-              style={{ backgroundColor: COLORS.UI.ACCENT_GOLD }}
-              className="px-6 py-2 rounded-lg"
+              disabled={!!refetching}
+              style={[
+                styles.retryButton,
+                {
+                  backgroundColor: COLORS.UI.ACCENT_GOLD,
+                  opacity: refetching ? 0.85 : 1,
+                },
+              ]}
               activeOpacity={0.8}
+              accessibilityState={{ busy: !!refetching }}
             >
+              {!!refetching && (
+                <ActivityIndicator
+                  size="small"
+                  color={COLORS.UI.TEXT_ON_GOLD}
+                  style={styles.retrySpinner}
+                />
+              )}
               <Text
                 style={{ color: COLORS.UI.TEXT_ON_GOLD }}
                 className="font-medium"
@@ -192,12 +209,16 @@ export const getErrorType = (error: any): StateType => {
     return "error";
   }
 
-  // RTK Query string status types - bunlar network/timeout hatalarını gösterir
+  // CUSTOM_ERROR + dolu mesaj: genelde iş kuralı / validation (FETCH_ERROR değil)
+  if (status === "CUSTOM_ERROR" && String(message).trim() !== "") {
+    return "error";
+  }
+
+  // RTK Query: yalnızca gerçek ağ / zaman aşımı / parse sorunları
   if (
-    status === 'FETCH_ERROR' ||
-    status === 'TIMEOUT_ERROR' ||
-    status === 'PARSING_ERROR' ||
-    status === 'CUSTOM_ERROR'
+    status === "FETCH_ERROR" ||
+    status === "TIMEOUT_ERROR" ||
+    status === "PARSING_ERROR"
   ) {
     return "service-unavailable";
   }
@@ -273,6 +294,7 @@ export interface UnifiedStateWrapperProps {
   locationStatus?: LocationStatus;
   fetchedOnce?: boolean;
   onRetry?: () => void;
+  refetching?: boolean;
   customMessages?: Partial<Record<StateType, string>>;
   customAnimations?: Partial<Record<StateType, any>>;
   children: React.ReactNode;
@@ -285,6 +307,7 @@ export const UnifiedStateWrapper: React.FC<UnifiedStateWrapperProps> = ({
   locationStatus,
   fetchedOnce = false,
   onRetry,
+  refetching = false,
   customMessages = {},
   customAnimations = {},
   children,
@@ -305,6 +328,7 @@ export const UnifiedStateWrapper: React.FC<UnifiedStateWrapperProps> = ({
         customAnimation={customAnimations[state]}
         onRetry={onRetry}
         loading={loading}
+        refetching={refetching}
         locationStatus={locationStatus}
         hasData={Array.isArray(data) ? data.length > 0 : !!data}
         fetchedOnce={fetchedOnce}
@@ -315,3 +339,18 @@ export const UnifiedStateWrapper: React.FC<UnifiedStateWrapperProps> = ({
 
   return <>{children}</>;
 };
+
+const styles = StyleSheet.create({
+  retryButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 24,
+    paddingVertical: 10,
+    borderRadius: 8,
+    minHeight: 42,
+  },
+  retrySpinner: {
+    marginRight: 10,
+  },
+});

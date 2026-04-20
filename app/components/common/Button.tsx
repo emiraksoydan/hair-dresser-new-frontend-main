@@ -41,6 +41,10 @@ export const Button: React.FC<ButtonProps> = ({
 
     // buttonColor'a göre disabled rengi hesapla
     const getDisabledColor = (color: string): string => {
+        // Diyalog yumuşak yeşil (GlobalAlert / confirmDialogStyles)
+        if (color === '#a7f3d0' || color === '#34d399') {
+            return 'rgba(4, 120, 87, 0.28)';
+        }
         // Emerald renkleri için koyu versiyonlar
         if (color === '#059669') {
             return '#047857'; // emerald-700 (daha koyu)

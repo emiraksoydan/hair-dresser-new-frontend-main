@@ -1,7 +1,6 @@
 import {
   Dimensions,
   FlatList,
-  Image,
   RefreshControl,
   StyleSheet,
   TouchableOpacity,
@@ -51,6 +50,10 @@ import { useAppDispatch } from "../../store/hook";
 import { setStoreSwipeIds } from "../../store/bookingSwipeSlice";
 import { showSnack } from "../../store/snackbarSlice";
 import { getErrorMessage, getMessage } from "../../utils/errorHandler";
+import {
+  isPanelConnectivityError,
+  shouldShowDiscoveryConnectivityError,
+} from "../../utils/panelDiscoveryErrors";
 import { SavedFilterChips } from "../../components/common/savedfilterchips";
 import { RatingsBottomSheet } from "../../components/rating/ratingsbottomsheet";
 import { useBackendFilters } from "../../hook/useBackendFilters";
@@ -202,6 +205,7 @@ const Index = () => {
   const {
     stores,
     loading,
+    retryInProgress: storeRetryInProgress,
     error: storeError,
     locationStatus,
     locationMessage,
@@ -281,10 +285,12 @@ const Index = () => {
   const [selectedMapItem, setSelectedMapItem] =
     useState<BarberStoreGetDto | null>(null);
 
+  const manualFetchRef = React.useRef(manualFetch);
+  manualFetchRef.current = manualFetch;
   useEffect(() => {
     if (!isFocused || !hasFreeBarberPanel || locationStatus !== "granted") return;
-    manualFetch();
-  }, [isFocused, hasFreeBarberPanel, locationStatus, manualFetch]);
+    manualFetchRef.current();
+  }, [isFocused, hasFreeBarberPanel, locationStatus]);
 
   // Bildirimden gelen focusRegion varsa harita moduna geç
   useEffect(() => {
@@ -337,6 +343,15 @@ const Index = () => {
   const isStoresLoading = loading;
 
   const hasStoreBarbers = displayStores.length > 0;
+
+  const showStoresConnectivityError = shouldShowDiscoveryConnectivityError(
+    storeError,
+    { mode: "userGps", locationStatus },
+  );
+  const storeSoftErrorMessage =
+    storeError && !isPanelConnectivityError(storeError)
+      ? getErrorMessage(storeError)
+      : undefined;
 
   const { present: presentRatings } = ratingsSheet;
   const { schedulePresent: scheduleRatingsPresent, cancelScheduledPresent: cancelRatingsPresent } =
@@ -534,7 +549,7 @@ const Index = () => {
       push({ id: "stores-empty", type: "stores-empty" }, H.empty);
     } else if (!fetchedOnce || (isStoresLoading && filteredStores.length === 0)) {
       push({ id: "stores-loading", type: "stores-loading" }, H.loading);
-    } else if (storeError) {
+    } else if (showStoresConnectivityError) {
       push({ id: "stores-error", type: "stores-error" }, H.error);
     } else {
       const storesToDisplay = filteredStores;
@@ -568,7 +583,7 @@ const Index = () => {
     return rows;
   }, [
     isStoresLoading,
-    storeError,
+    showStoresConnectivityError,
     filteredStores,
     expandedStoreBarber,
     filterCriteria.userType,
@@ -615,34 +630,7 @@ const Index = () => {
         collapsedHint={panelTopCollapsedHint}
       >
         <View style={{ backgroundColor: colors.cardBg, borderRadius: 14, borderWidth: 1.5, borderColor: colors.cardBg, overflow: "hidden" }}>
-          <View
-            style={{
-              flexDirection: "row",
-              alignItems: "center",
-              paddingHorizontal: 10,
-              paddingTop: 10,
-              paddingBottom: 4,
-            }}
-          >
-            <Image
-              source={require("../../../assets/icon.png")}
-              style={{
-                width: 32,
-                height: 32,
-                borderRadius: 16,
-                marginRight: 8,
-                resizeMode: "contain",
-              }}
-            />
-            <Text
-              className="font-century-gothic-bold"
-              style={{ fontSize: 18, color: colors.sectionHeaderText }}
-              numberOfLines={1}
-            >
-              Hoşgeldiniz{" "}
-              {currentUser?.data?.firstName ? currentUser.data.firstName : ""}
-            </Text>
-          </View>
+          <View style={{ paddingHorizontal: 10, paddingTop: 10 }}>
           <SearchBar
             transparent
             compact
@@ -652,6 +640,7 @@ const Index = () => {
             setIsList={setIsList}
             onFilterPress={() => setFilterDrawerVisible(true)}
           />
+          </View>
           <TouchableOpacity
             activeOpacity={0.7}
             onPress={handleViewMyPanelPress}
@@ -773,6 +762,11 @@ const Index = () => {
                     locationStatus={locationStatus}
                     fetchedOnce={true}
                     onRetry={manualFetch}
+                    refetching={
+                      showStoresConnectivityError &&
+                      !!storeError &&
+                      storeRetryInProgress
+                    }
                   >
                     <View />
                   </UnifiedStateWrapper>
@@ -807,9 +801,10 @@ const Index = () => {
                     onRetry={manualFetch}
                     customMessages={{
                       empty:
-                        searchQuery || hasActiveFilters
+                        storeSoftErrorMessage ??
+                        (searchQuery || hasActiveFilters
                           ? t("empty.noResultsFound")
-                          : t("empty.noNearbyStores"),
+                          : t("empty.noNearbyStores")),
                     }}
                   >
                     <View />

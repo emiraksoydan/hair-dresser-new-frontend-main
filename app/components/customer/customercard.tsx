@@ -58,7 +58,9 @@ const CustomerCard: React.FC<Props> = ({
             style={{ width: cardWidth, overflow: 'hidden', ...(!isList ? { backgroundColor: colors.cardBg } : {}) }}
         >
             <View className={`${!isList ? 'flex flex-row ' : ''}`}>
-                <View className="relative mr-2">
+                <View
+                    className={`relative ${isList ? "mb-2" : "mr-3"}`}
+                >
                     <CardImage
                         singleImageUrl={customer.imageUrl}
                         onPress={handlePressCard}
@@ -72,7 +74,7 @@ const CustomerCard: React.FC<Props> = ({
                         </View>
                     )}
                 </View>
-                <View className="flex-1 flex-col gap-2">
+                <View className={`flex-1 flex-col ${isList ? 'gap-3' : 'gap-2'}`}>
                     <View
                         className={`flex-row justify-between ${!isList ? 'items-start' : 'items-center'}`}
                     >
@@ -111,7 +113,10 @@ const CustomerCard: React.FC<Props> = ({
 
                     <View
                         className="flex-row justify-between items-center"
-                        style={{ marginTop: !isList ? -5 : -10 }}
+                        style={{
+                            // Liste (favoriler): isim/kalp ile puan/yorum arasında nefes payı — negatif margin sıkıştırıyordu
+                            marginTop: isList ? 4 : -5,
+                        }}
                     >
                         <RatingSection
                             rating={customer.rating || 0}

@@ -36,7 +36,7 @@ const FAVORITE_CARD_STRIDE = 320;
 const FavoritesList: React.FC<FavoritesListProps> = ({ mode = 'store' }) => {
     const { t } = useLanguage();
     const { colors } = useTheme();
-    const { data: favorites, isLoading, refetch, isFetching, error, isError } = useGetMyFavoritesQuery();
+    const { data: favorites, isLoading, refetch, error, isError } = useGetMyFavoritesQuery();
     const { data: currentUser, isLoading: isUserLoading, isSuccess: isUserSuccess } = useGetMeQuery();
     const compareUid = currentUser?.data?.id;
     const compareUserType = currentUser?.data?.userType;
@@ -63,12 +63,14 @@ const FavoritesList: React.FC<FavoritesListProps> = ({ mode = 'store' }) => {
         enablePanDownToClose: false,
         enableOverDrag: false,
         enableHandlePanningGesture: false,
+        pressBehavior: "none",
     });
     const updateFreeBarberSheet = useBottomSheet({
         snapPoints: ["100%"],
         enablePanDownToClose: false,
         enableOverDrag: false,
         enableHandlePanningGesture: false,
+        pressBehavior: "none",
     });
 
     const anyFavoritesSheetOpen =
@@ -281,6 +283,16 @@ const FavoritesList: React.FC<FavoritesListProps> = ({ mode = 'store' }) => {
         }
     }, [refetch]);
 
+    const [retryBusy, setRetryBusy] = useState(false);
+    const handleRetry = useCallback(async () => {
+        setRetryBusy(true);
+        try {
+            await refetch();
+        } finally {
+            setRetryBusy(false);
+        }
+    }, [refetch]);
+
     if (isLoading) {
         return (
             <View className="flex-1  pt-4 px-4" style={{ backgroundColor: colors.screenBg }}>
@@ -308,7 +320,8 @@ const FavoritesList: React.FC<FavoritesListProps> = ({ mode = 'store' }) => {
                         error={error}
                         data={allFavorites}
                         fetchedOnce={true}
-                        onRetry={refetch}
+                        onRetry={handleRetry}
+                        refetching={!!isError && retryBusy}
                         customMessages={{
                             empty: t('empty.noFavoritesAdded'),
                         }}

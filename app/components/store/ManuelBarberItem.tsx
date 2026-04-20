@@ -162,18 +162,6 @@ export const ManuelBarberItem = React.memo<ManuelBarberItemProps>(
               </Text>
             )}
 
-            {!avatarUri && (
-              <Text
-                style={{
-                  fontSize: 11,
-                  fontFamily: "CenturyGothic",
-                  color: colors.textSecondary,
-                  marginTop: 6,
-                }}
-              >
-                {t("form.addImage")}
-              </Text>
-            )}
           </View>
         </View>
       </View>

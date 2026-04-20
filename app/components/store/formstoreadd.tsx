@@ -410,8 +410,8 @@ export type FormValues = z.input<ReturnType<typeof createFullSchema>>;
 
 const PreviewRow = ({ label, value, colors }: { label: string; value: string; colors: any }) => (
   <View className="py-1.5" style={{ borderBottomWidth: 1, borderBottomColor: colors.borderColor }}>
-    <Text className="text-gray-400 text-base mb-0.5">{label}</Text>
-    <Text className="text-base" style={{ color: colors.sectionHeaderText }}>{value || "—"}</Text>
+    <Text className="text-gray-400 text-lg mb-0.5">{label}</Text>
+    <Text className="text-lg" style={{ color: colors.sectionHeaderText }}>{value || "—"}</Text>
   </View>
 );
 
@@ -420,9 +420,9 @@ const PreviewRowList = ({ label, items, colors }: { label: string; items: string
   if (unique.length === 0) return null;
   return (
     <View className="py-1.5" style={{ borderBottomWidth: 1, borderBottomColor: colors.borderColor }}>
-      <Text className="text-gray-400 text-base mb-1">{label}</Text>
+      <Text className="text-gray-400 text-lg mb-1">{label}</Text>
       {unique.map((item, i) => (
-        <Text key={`${item}-${i}`} className="text-base py-0.5" style={{ color: colors.sectionHeaderText }}>{item}</Text>
+        <Text key={`${item}-${i}`} className="text-lg py-0.5" style={{ color: colors.sectionHeaderText }}>{item}</Text>
       ))}
     </View>
   );
@@ -905,7 +905,11 @@ const FormStoreAdd = ({
     }
 
     // Refresh stores list to show new store with images
-    await triggerGetMineStores();
+    try {
+      await triggerGetMineStores();
+    } catch {
+      // list refresh failed; store was still created — close sheet
+    }
     onClose?.();
     setIsSubmitting(false);
   };
@@ -2261,14 +2265,14 @@ const FormStoreAdd = ({
             {currentStep === 11 && (
               <>
                 <View className="px-2 py-4">
-                  <Text className="text-lg font-bold mb-4" style={{ color: colors.sectionHeaderText }}>
+                  <Text className="text-2xl font-bold mb-4" style={{ color: colors.sectionHeaderText }}>
                     {t("form.stepPreview")}
                   </Text>
                   <View className="rounded-xl p-4 gap-3" style={{ backgroundColor: colors.cardBg, borderWidth: 1, borderColor: colors.borderColor }}>
                     {/* Mağaza Görselleri */}
                     {(getValues("storeImages") ?? []).length > 0 && (
                       <View className="mb-3">
-                        <Text className="text-base font-century-gothic-bold mb-2" style={{ color: colors.sectionHeaderText }}>{t("form.panelImagesTitle")}</Text>
+                        <Text className="text-lg font-century-gothic-bold mb-2" style={{ color: colors.sectionHeaderText }}>{t("form.panelImagesTitle")}</Text>
                         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10 }}>
                           {(getValues("storeImages") ?? []).map((img: { uri: string }, idx: number) => (
                             <Image key={idx} source={{ uri: img.uri }} style={{ width: 140, height: 110, borderRadius: 10 }} resizeMode="cover" />
@@ -2279,7 +2283,7 @@ const FormStoreAdd = ({
                     {/* Vergi Levhası */}
                     {getValues("taxDocumentImage")?.uri && (
                       <View className="py-1.5" style={{ borderBottomWidth: 1, borderBottomColor: colors.borderColor }}>
-                        <Text className="text-base font-century-gothic-bold mb-2" style={{ color: colors.sectionHeaderText }}>{t("form.taxDocumentImage")}</Text>
+                        <Text className="text-lg font-century-gothic-bold mb-2" style={{ color: colors.sectionHeaderText }}>{t("form.taxDocumentImage")}</Text>
                         <Image source={{ uri: getValues("taxDocumentImage").uri }} style={{ width: "100%", height: 160, borderRadius: 10 }} resizeMode="cover" />
                       </View>
                     )}
@@ -2291,13 +2295,13 @@ const FormStoreAdd = ({
                     {/* Fiyatlar */}
                     {Object.keys(getValues("prices") ?? {}).length > 0 && (
                       <View className="mt-2">
-                        <Text className="text-gray-400 text-sm mb-1">{t("form.stepStorePrices")}</Text>
+                        <Text className="text-gray-400 text-lg mb-1">{t("form.stepStorePrices")}</Text>
                         {Object.entries(getValues("prices") ?? {}).map(([catId, price], idx) => (
                           <View key={`price-${idx}`} className="flex-row justify-between py-1">
-                            <Text className="flex-1 text-sm" style={{ color: colors.sectionHeaderText }}>
+                            <Text className="flex-1 text-lg" style={{ color: colors.sectionHeaderText }}>
                               {services.find((s: any) => s.id === catId)?.name ?? catId}
                             </Text>
-                            <Text className="text-sm" style={{ color: '#fea60e' }}>{typeof price === "string" ? price : ""}</Text>
+                            <Text className="text-lg" style={{ color: '#fea60e' }}>{typeof price === "string" ? price : ""}</Text>
                           </View>
                         ))}
                       </View>
@@ -2311,15 +2315,15 @@ const FormStoreAdd = ({
                       const ptLabel = isRent ? "Kira (Koltuk kirası)" : "Yüzde (Komisyon)";
                       return (
                         <View className="py-1.5" style={{ borderBottomWidth: 1, borderBottomColor: colors.borderColor }}>
-                          <Text className="text-gray-400 text-sm mb-0.5">{t("form.pricingTitle") || "Fiyatlandırma Tipi"}</Text>
-                          <Text className="text-sm" style={{ color: colors.sectionHeaderText }}>{ptLabel}: <Text style={{ color: '#fea60e' }}>{ptValue}</Text></Text>
+                          <Text className="text-gray-400 text-lg mb-0.5">{t("form.pricingTitle") || "Fiyatlandırma Tipi"}</Text>
+                          <Text className="text-lg" style={{ color: colors.sectionHeaderText }}>{ptLabel}: <Text style={{ color: '#fea60e' }}>{ptValue}</Text></Text>
                         </View>
                       );
                     })()}
                     {/* Koltuklar */}
                     {(chairs ?? []).length > 0 && (
                       <View className="py-1.5" style={{ borderBottomWidth: 1, borderBottomColor: colors.borderColor }}>
-                        <Text className="text-gray-400 text-sm mb-1">{t("form.previewChairsSection")}</Text>
+                        <Text className="text-gray-400 text-lg mb-1">{t("form.previewChairsSection")}</Text>
                         {(chairs ?? []).map((chair: any, idx: number) => {
                           const isBarberChair = !!(chair.barberId) || chair.mode === "barber";
                           const barberName = isBarberChair && chair.barberId
@@ -2328,9 +2332,9 @@ const FormStoreAdd = ({
                           const label = isBarberChair ? (barberName || "—") : (chair.name || "—");
                           return (
                             <View key={`chair-${idx}`} className="flex-row items-center py-0.5 gap-2">
-                              <Text className="text-sm" style={{ color: colors.textSecondary }}>{idx + 1}.</Text>
-                              <Text className="text-sm flex-1" style={{ color: colors.sectionHeaderText }}>{label}</Text>
-                              <Text className="text-xs" style={{ color: colors.textSecondary }}>{isBarberChair ? t("form.barberChair") : t("form.namedChair")}</Text>
+                              <Text className="text-lg" style={{ color: colors.textSecondary }}>{idx + 1}.</Text>
+                              <Text className="text-lg flex-1" style={{ color: colors.sectionHeaderText }}>{label}</Text>
+                              <Text className="text-base" style={{ color: colors.textSecondary }}>{isBarberChair ? t("form.barberChair") : t("form.namedChair")}</Text>
                             </View>
                           );
                         })}
@@ -2349,11 +2353,11 @@ const FormStoreAdd = ({
                       if (rows.length === 0) return null;
                       return (
                         <View className="py-1.5" style={{ borderBottomWidth: 1, borderBottomColor: colors.borderColor }}>
-                          <Text className="text-gray-400 text-sm mb-1">{t("form.workingHours")}</Text>
+                          <Text className="text-gray-400 text-lg mb-1">{t("form.workingHours")}</Text>
                           {rows.map((r: any, i: number) => (
                             <View key={i} className="flex-row justify-between py-0.5">
-                              <Text className="text-sm" style={{ color: colors.sectionHeaderText }}>{r.label}</Text>
-                              <Text className="text-sm" style={{ color: r.isClosed ? '#ef4444' : '#fea60e' }}>
+                              <Text className="text-lg" style={{ color: colors.sectionHeaderText }}>{r.label}</Text>
+                              <Text className="text-lg" style={{ color: r.isClosed ? '#ef4444' : '#fea60e' }}>
                                 {r.isClosed ? "Kapalı" : `${r.start} - ${r.end}`}
                               </Text>
                             </View>

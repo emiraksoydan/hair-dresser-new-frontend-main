@@ -3,7 +3,7 @@
  * Uses pre-called RTK Query hooks to avoid conditional hook calls
  */
 
-import { useCallback, useEffect, useRef, useMemo } from "react";
+import { useCallback, useEffect, useRef, useMemo, useState } from "react";
 import { useNearbyControl } from "./useNearByControl";
 import { LocationStatus } from "../types";
 import { FilterRequestDto } from "../types/filter";
@@ -32,7 +32,10 @@ interface UseNearbyWithFilterOptions<T> {
 interface UseNearbyWithFilterResult<T> {
     data: T[];
     loading: boolean;
+    /** RTK: arka plan/polling dahil her istek — hata kartı UI için kullanma */
     fetching: boolean;
+    /** Sadece "Tekrar dene" / manualFetch süresince — flicker yapmaz */
+    retryInProgress: boolean;
     fetchedOnce: boolean;
     error: any;
     locationStatus: LocationStatus;
@@ -92,25 +95,27 @@ export function useNearbyWithFilter<T>(
     const prevFilterFingerprint = useRef(filterFingerprint);
     const locationRef = useRef<{ lat: number; lon: number } | null>(null);
     const isFilterRefetching = useRef(false);
+    const filterRef = useRef(filter);
+    filterRef.current = filter;
 
     const onFetch = useCallback(async (lat: number, lon: number) => {
         // Save location for filter change refetch
         locationRef.current = { lat, lon };
-        
-        if (shouldUseFiltered) {
-            // Use filtered endpoint with full filter object
+        const f = filterRef.current;
+        const useFiltered = useFilteredEndpoint && f;
+
+        if (useFiltered) {
             const filterWithLocation: FilterRequestDto = {
-                ...filter,
+                ...f,
                 latitude: lat,
                 longitude: lon,
                 distanceKm: radiusKm,
             };
             await filteredTrigger(filterWithLocation, false);
         } else {
-            // Use simple nearby endpoint
             await nearbyTrigger({ lat, lon, radiusKm }, false);
         }
-    }, [nearbyTrigger, filteredTrigger, radiusKm, filter, shouldUseFiltered]);
+    }, [nearbyTrigger, filteredTrigger, radiusKm, useFilteredEndpoint]);
 
     const nearby = useNearbyControl({
         enabled,
@@ -121,15 +126,13 @@ export function useNearbyWithFilter<T>(
         error: activeResult.error,
     });
 
-    // Update location ref from nearby control
+    // Konum: referans yerine lat/lon ile senkron (gereksiz effect tetiklemesini önler)
+    const locLat = nearby.location?.latitude;
+    const locLon = nearby.location?.longitude;
     useEffect(() => {
-        if (nearby.location) {
-            locationRef.current = { 
-                lat: nearby.location.latitude, 
-                lon: nearby.location.longitude 
-            };
-        }
-    }, [nearby.location]);
+        if (locLat == null || locLon == null) return;
+        locationRef.current = { lat: locLat, lon: locLon };
+    }, [locLat, locLon]);
 
     // Refetch when filter changes (and we have location)
     useEffect(() => {
@@ -155,8 +158,10 @@ export function useNearbyWithFilter<T>(
         const refetchWithNewFilter = async () => {
             isFilterRefetching.current = true;
             try {
+                const f = filterRef.current;
+                if (!f) return;
                 const filterWithLocation: FilterRequestDto = {
-                    ...filter,
+                    ...f,
                     latitude: locationRef.current!.lat,
                     longitude: locationRef.current!.lon,
                     distanceKm: radiusKm,
@@ -168,19 +173,32 @@ export function useNearbyWithFilter<T>(
         };
         
         refetchWithNewFilter();
-    }, [filterFingerprint, filter, radiusKm, filteredTrigger, shouldUseFiltered]);
+    }, [filterFingerprint, radiusKm, filteredTrigger, shouldUseFiltered]);
+
+    const [retryInProgress, setRetryInProgress] = useState(false);
+    const manualFetchWrapped = useCallback(async () => {
+        const fn = nearby.manualFetch;
+        if (!fn) return;
+        setRetryInProgress(true);
+        try {
+            await fn();
+        } finally {
+            setRetryInProgress(false);
+        }
+    }, [nearby.manualFetch]);
 
     return {
         data: (activeResult.data ?? []) as T[],
         loading: nearby.initialLoading || activeResult.isLoading,
         fetching: activeResult.isFetching,
+        retryInProgress,
         fetchedOnce: nearby.fetchedOnce,
         error: activeResult.error,
         locationStatus: nearby.locationStatus,
         locationMessage: nearby.locationMessage,
         hasLocation: nearby.hasLocation,
         location: nearby.location,
-        manualFetch: nearby.manualFetch ?? (async () => { }),
+        manualFetch: manualFetchWrapped,
         retryPermission: nearby.retryPermission,
     };
 }

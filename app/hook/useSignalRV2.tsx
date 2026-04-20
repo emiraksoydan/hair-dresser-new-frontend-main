@@ -15,9 +15,11 @@ import type {
   NotificationDto,
   ChatThreadListItemDto,
   ChatMessageDto,
+  ChatMessageItemDto,
   AppointmentGetDto,
   ChatMessagesReadEvent,
 } from "../types";
+import { lastMessagePreviewFromChatMessage, plainMessageSnapshot } from "../utils/chat/lastMessagePreview";
 import { AppointmentStatus, AppointmentFilter } from "../types/appointment";
 import { API_CONFIG } from "../constants/api";
 import { useAuth } from "./useAuth";
@@ -78,19 +80,26 @@ export const useSignalRV2 = () => {
     });
 
     conn.on("chat.message", (dto: ChatMessageDto) => {
-      const activeThreadId = getActiveThreadId();
-      const isViewingThread = activeThreadId === dto.threadId;
       const isOwnMessage = dto.senderUserId === userIdRef.current;
-      const isUnreadMessage = !isViewingThread && !isOwnMessage;
 
+      let suppressIncomingForRestrictedFavorite = false;
 
       dispatch(
         api.util.updateQueryData("getChatThreads", undefined, (draft) => {
           if (!draft) return;
           const thread = draft.find((t) => t.threadId === dto.threadId);
           if (thread) {
-            thread.lastMessagePreview = dto.text.length > 60 ? dto.text.substring(0, 60) : dto.text;
-            thread.lastMessageAt = dto.createdAt;
+            suppressIncomingForRestrictedFavorite =
+              !!thread.isFavoriteThread &&
+              !!thread.isRestrictedForCurrentUser &&
+              !isOwnMessage;
+            if (suppressIncomingForRestrictedFavorite) {
+              thread.lastMessageAt = dto.createdAt;
+            } else {
+              const raw = dto.text ?? "";
+              thread.lastMessagePreview = raw.length > 60 ? raw.substring(0, 60) : raw;
+              thread.lastMessageAt = dto.createdAt;
+            }
             // NOT: Thread'un unreadCount'unu optimistic update yapmıyoruz
             // Backend'den chat.threadUpdated event'i ile authoritative unreadCount gelecek
             // Bu sayede çakışma (race condition) sorunu önlenir
@@ -107,7 +116,8 @@ export const useSignalRV2 = () => {
       // Kendi mesajlarını SignalR üzerinden cache'e EKLEMİYORUZ.
       // Çünkü api.tsx'deki onQueryStarted, HTTP yanıtından sonra cache'e ekliyor.
       // SignalR ile de eklenirse: optimistic(tempId) + real(uuid) aynı anda görünür → çift balon sorunu.
-      if (!isOwnMessage) {
+      // Favori thread'de karşıyı favorilememiş kullanıcı: mesaj içeriği gösterilmez (bildirim/thread güncellemesi yeterli).
+      if (!isOwnMessage && !suppressIncomingForRestrictedFavorite) {
         dispatch(
           api.util.updateQueryData("getChatMessagesByThread", { threadId: dto.threadId }, (draft) => {
             if (!draft) return;
@@ -124,6 +134,60 @@ export const useSignalRV2 = () => {
               });
               draft.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
             }
+          }),
+        );
+      }
+    });
+
+    conn.on("chat.messageRemoved", (data: { threadId: string; messageId: string }) => {
+      let lastRemaining: ChatMessageItemDto | undefined;
+      dispatch(
+        api.util.updateQueryData("getChatMessagesByThread", { threadId: data.threadId }, (draft) => {
+          if (!draft) return;
+          const idx = draft.findIndex((m) => m.messageId === data.messageId);
+          if (idx !== -1) draft.splice(idx, 1);
+          lastRemaining = draft.length ? plainMessageSnapshot(draft[draft.length - 1]) : undefined;
+        }),
+      );
+      dispatch(
+        api.util.updateQueryData("getChatThreads", undefined, (draft) => {
+          if (!draft) return;
+          const thread = draft.find((t) => t.threadId === data.threadId);
+          if (!thread) return;
+          if (!lastRemaining) {
+            thread.lastMessagePreview = "";
+            thread.lastMessageAt = null;
+          } else {
+            thread.lastMessagePreview = lastMessagePreviewFromChatMessage(lastRemaining);
+            thread.lastMessageAt = lastRemaining.createdAt;
+          }
+        }),
+      );
+    });
+
+    conn.on("chat.messageEdited", (data: { threadId: string; messageId: string; newText: string }) => {
+      let previewMsg: ChatMessageItemDto | undefined;
+      dispatch(
+        api.util.updateQueryData("getChatMessagesByThread", { threadId: data.threadId }, (draft) => {
+          if (!draft) return;
+          const msg = draft.find((m) => m.messageId === data.messageId);
+          if (msg) {
+            msg.text = data.newText;
+            msg.isEdited = true;
+          }
+          const last = draft.length ? draft[draft.length - 1] : undefined;
+          if (last?.messageId === data.messageId) {
+            previewMsg = plainMessageSnapshot(last);
+          }
+        }),
+      );
+      if (previewMsg) {
+        dispatch(
+          api.util.updateQueryData("getChatThreads", undefined, (draft) => {
+            if (!draft) return;
+            const thread = draft.find((t) => t.threadId === data.threadId);
+            if (!thread) return;
+            thread.lastMessagePreview = lastMessagePreviewFromChatMessage(previewMsg);
           }),
         );
       }
