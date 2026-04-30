@@ -18,6 +18,7 @@ import { useLanguage } from '../../hook/useLanguage';
 import { PanelImageOverflowMenu } from '../panel/PanelImageOverflowMenu';
 import { useLazyGetServicePackagesByOwnerQuery } from '../../store/api';
 import { Icon } from 'react-native-paper';
+import { COLORS } from '../../constants/colors';
 
 type Props = {
     store: BarberStoreGetDto;
@@ -78,8 +79,11 @@ const StoreCard: React.FC<Props> = ({ store, isList, expanded, cardWidthStore, i
 
     return (
         <View
-            style={{ width: cardWidthStore, marginBottom: 12 }}
-            className="mt-4"
+            style={{
+                width: cardWidthStore,
+                marginBottom: expanded ? 12 : 4,
+                marginTop: expanded ? 16 : 4,
+            }}
         >
             <View
                 style={{
@@ -98,9 +102,10 @@ const StoreCard: React.FC<Props> = ({ store, isList, expanded, cardWidthStore, i
                         <TouchableOpacity
                             onPress={handlePressAppointment}
                             activeOpacity={0.8}
-                            className="bg-[#fea60e] rounded-full px-2 py-0.5 mr-1"
+                            className="rounded-full px-2 py-0.5 mr-1"
+                            style={{ backgroundColor: COLORS.UI.ACCENT_GOLD }}
                         >
-                            <Text className="text-white font-century-gothic-sans-semibold text-sm">
+                            <Text className="font-century-gothic-sans-semibold text-sm" style={{ color: COLORS.UI.TEXT_ON_GOLD }}>
                                 {t("card.bookAppointment")}
                             </Text>
                         </TouchableOpacity>
@@ -128,13 +133,22 @@ const StoreCard: React.FC<Props> = ({ store, isList, expanded, cardWidthStore, i
                             />
                         )}
                         {isList && (
-                            <View className="absolute top-3 right-3 flex-row gap-2 z-10">
+                            <View
+                                className="absolute top-2 left-2 right-2 z-10 flex-row flex-wrap justify-end items-center gap-2"
+                                pointerEvents="box-none"
+                            >
                                 <TouchableOpacity
                                     onPress={handlePressAppointment}
                                     activeOpacity={0.8}
-                                    className="bg-[#fea60e] rounded-full px-2.5 py-1"
+                                    className="rounded-full px-2.5 py-1 self-start max-w-full"
+                                    style={{ backgroundColor: COLORS.UI.ACCENT_GOLD }}
                                 >
-                                    <Text className="text-white font-century-gothic-sans-semibold text-sm">
+                                    <Text
+                                        className="font-century-gothic-sans-semibold text-sm"
+                                        numberOfLines={1}
+                                        ellipsizeMode="tail"
+                                        style={{ color: COLORS.UI.TEXT_ON_GOLD, maxWidth: 130 }}
+                                    >
                                         {t("card.bookAppointment")}
                                     </Text>
                                 </TouchableOpacity>
@@ -241,12 +255,14 @@ const StoreCard: React.FC<Props> = ({ store, isList, expanded, cardWidthStore, i
                     </View>
 
                     {activeTab === 'services' && (
-                        <ServiceOfferingsList
-                            offerings={store.serviceOfferings || []}
-                            layout="vertical"
-                            previewCount={3}
-                            showExpandButton={true}
-                        />
+                        <View style={{ minHeight: expanded ? undefined : 188 }}>
+                            <ServiceOfferingsList
+                                offerings={store.serviceOfferings || []}
+                                layout="vertical"
+                                previewCount={3}
+                                showExpandButton={true}
+                            />
+                        </View>
                     )}
                     {activeTab === 'packages' && (
                         packagesFetching ? (

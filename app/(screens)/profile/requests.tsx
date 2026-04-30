@@ -28,7 +28,7 @@ import { ScrollStackItem } from "../../components/common/ScrollStackItem";
 
 const REQUEST_STRIDE = 148;
 
-const ACCENT = "#ffb900";
+const ACCENT = "#FACC15";
 
 function clamp(n: number, min: number, max: number) {
     return Math.min(max, Math.max(min, n));
@@ -392,7 +392,7 @@ export default function RequestsPage() {
                                         style={{
                                             padding: 8,
                                             borderRadius: 10,
-                                            backgroundColor: isDark ? "rgba(255, 185, 0, 0.12)" : "#fffbeb",
+                                            backgroundColor: isDark ? "rgba(250, 204, 21, 0.12)" : "#fffbeb",
                                             marginRight: 12,
                                         }}
                                     >

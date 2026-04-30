@@ -18,7 +18,7 @@ import { ScrollStackItem } from "../../components/common/ScrollStackItem";
 
 const COMPLAINT_STRIDE = 160;
 
-const ACCENT = "#ffb900";
+const ACCENT = "#FACC15";
 const AVATAR = 58;
 const AVATAR_RADIUS = 12;
 
@@ -135,9 +135,9 @@ export default function ComplaintsPage() {
                                 <View
                                     className="mt-1.5 self-start rounded-full px-2.5 py-1"
                                     style={{
-                                        backgroundColor: isDark ? "rgba(255, 185, 0, 0.14)" : "rgba(255, 185, 0, 0.12)",
+                                        backgroundColor: isDark ? "rgba(250, 204, 21, 0.14)" : "rgba(250, 204, 21, 0.12)",
                                         borderWidth: 1,
-                                        borderColor: isDark ? "rgba(255, 185, 0, 0.35)" : "rgba(251, 191, 36, 0.45)",
+                                        borderColor: isDark ? "rgba(250, 204, 21, 0.35)" : "rgba(251, 191, 36, 0.45)",
                                     }}
                                 >
                                     <Text

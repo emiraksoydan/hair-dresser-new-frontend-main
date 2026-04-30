@@ -1,6 +1,6 @@
 import { Icon } from "react-native-paper";
 import React, { useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, ScrollView, StyleSheet, TouchableOpacity, View } from "react-native";
+import { ActivityIndicator, ScrollView, StatusBar, StyleSheet, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { Text } from "../../components/common/Text";
@@ -15,10 +15,8 @@ import {
   CompareGoldAccentBar,
   CompareHeaderChrome,
   CompareOwnerRow,
-  VsBadge,
   compareBackButtonSurface,
   compareHeaderTitleStyle,
-  screenBg,
   useCompareCardShell,
   useCompareMetrics,
 } from "../compare/compareShared";
@@ -70,7 +68,7 @@ function MineStoreCompareColumn({
         >
           {store?.storeName ?? "—"}
         </Text>
-        <Icon source="swap-horizontal" size={m.backIcon - 4} color="#ffb900" />
+        <Icon source="swap-horizontal" size={m.backIcon - 4} color="#FACC15" />
       </TouchableOpacity>
 
       <CompareOwnerRow label={t("profile.rating")} value={`${store?.rating?.toFixed(1) ?? "—"}`} />
@@ -191,7 +189,9 @@ export default function StoreCompareScreen() {
 
   if (stores.length < 2) {
     return (
-      <SafeAreaView style={{ flex: 1, backgroundColor: screenBg(isDark) }} edges={["top"]}>
+      <View style={{ flex: 1, backgroundColor: colors.screenBg }}>
+        <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={colors.screenBg} />
+      <SafeAreaView style={{ flex: 1, backgroundColor: colors.screenBg }} edges={["top"]}>
         <HeaderRow />
         <View style={{ flex: 1, justifyContent: "center", padding: m.emptyPad }}>
           <Text style={{ textAlign: "center", color: colors.textSecondary, fontSize: m.rowFont }}>
@@ -199,23 +199,29 @@ export default function StoreCompareScreen() {
           </Text>
         </View>
       </SafeAreaView>
+      </View>
     );
   }
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: screenBg(isDark) }} edges={["top"]}>
+    <View style={{ flex: 1, backgroundColor: colors.screenBg }}>
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={colors.screenBg} />
+    <SafeAreaView style={{ flex: 1, backgroundColor: colors.screenBg }} edges={["top"]}>
       <HeaderRow />
 
       {loading ? (
         <View style={{ padding: m.loadingPad, alignItems: "center" }}>
-          <ActivityIndicator color="#ffb900" />
+          <ActivityIndicator color="#FACC15" />
         </View>
       ) : null}
 
       <ScrollView
+        style={{ backgroundColor: colors.screenBg }}
         contentContainerStyle={{
           paddingHorizontal: m.scrollPadH,
           paddingBottom: m.scrollPadBottom,
+          flexGrow: 1,
+          backgroundColor: colors.screenBg,
         }}
         showsVerticalScrollIndicator={false}
       >
@@ -229,7 +235,6 @@ export default function StoreCompareScreen() {
             onCycle={() => setLeftId(cycleStore(leftId, rightId))}
             t={t}
           />
-          <VsBadge />
           <MineStoreCompareColumn
             isDark={isDark}
             colors={colors}
@@ -252,5 +257,6 @@ export default function StoreCompareScreen() {
         </Text>
       </ScrollView>
     </SafeAreaView>
+    </View>
   );
 }

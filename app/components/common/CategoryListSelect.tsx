@@ -69,7 +69,7 @@ export const CategoryListSelect = React.memo(
                 >
                   {itemLabel}
                 </Text>
-                <Icon source="chevron-right" size={20} color={isSelected ? "#ffb900" : "#6B7280"} />
+                <Icon source="chevron-right" size={20} color={isSelected ? "#FACC15" : "#6B7280"} />
               </TouchableOpacity>
             );
           })}
@@ -94,7 +94,7 @@ const styles = StyleSheet.create({
   },
   itemSelected: {
     borderLeftWidth: 3,
-    borderLeftColor: "#ffb900",
+    borderLeftColor: "#FACC15",
     borderTopRightRadius: 8,
     borderBottomRightRadius: 8,
   },

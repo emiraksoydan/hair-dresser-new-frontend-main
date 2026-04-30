@@ -2,13 +2,21 @@
  * Backend Filter Hook
  * Uses existing backend filtering instead of client-side filtering
  * Integrates with existing FilterRequestDto structure
- * 
+ *
  * IMPORTANT: Filter values are stored as language-independent keys (e.g., "all", "store", "freeBarber")
  * Translation happens only in the UI layer (FilterDrawer component)
+ *
+ * Kayıtlı filtre JSON: { schemaVersion, criteria } (FILTER_CRITERIA_SCHEMA_VERSION)
  */
 
 import { useState, useCallback, useMemo } from 'react';
 import { FilterRequestDto } from '../types';
+import {
+  AvailabilityFilter,
+  DEFAULT_DISTANCE_PRESET_ID,
+  distanceKmFromPreset,
+  FILTER_CRITERIA_SCHEMA_VERSION,
+} from '../constants/filterDefaults';
 
 export type PriceSortType = 'none' | 'asc' | 'desc';
 
@@ -19,36 +27,30 @@ export const USER_TYPE_KEYS = {
   STORE: 'store',
 } as const;
 
-// Backend expects these exact Turkish string values for UserType field
-const USER_TYPE_BACKEND_MAP: Record<string, string> = {
-  [USER_TYPE_KEYS.STORE]: 'Dükkan',
-  [USER_TYPE_KEYS.FREE_BARBER]: 'Serbest Berber',
-  [USER_TYPE_KEYS.ALL]: 'Hepsi',
-} as const;
-
 export const MAIN_CATEGORY_KEYS = {
   ALL: 'all',
 } as const;
 
-// Status filter keys - unified for both Store (open/closed) and FreeBarber (available/unavailable)
 export const STATUS_KEYS = {
   ALL: 'all',
-  AVAILABLE: 'available', // FreeBarber: müsait, Store: açık
-  UNAVAILABLE: 'unavailable', // FreeBarber: meşgul, Store: kapalı
+  AVAILABLE: 'available',
+  UNAVAILABLE: 'unavailable',
 } as const;
 
 export interface BackendFilterCriteria {
+  /** Keşif yarıçapı: '10' | '50' | '100' | 'unlimited' */
+  distancePreset?: string;
   searchQuery?: string;
-  userType?: string; // "all", "freeBarber", "store" - language independent keys
-  mainCategory?: string; // BarberType as string or "all"
-  mainHeadings?: string[]; // Ana başlıklar (çoklu)
-  subHeadings?: string[]; // Alt başlıklar (çoklu)
+  userType?: string;
+  mainCategory?: string;
+  mainHeadings?: string[];
+  subHeadings?: string[];
   serviceIds?: string[];
   priceSort?: PriceSortType;
   minPrice?: string;
   maxPrice?: string;
-  pricingType?: string; // "all", "rent", "percent"
-  status?: string; // "all", "available", "unavailable" - unified status filter
+  pricingType?: string;
+  status?: string;
   minRating?: number;
   favoritesOnly?: boolean;
 }
@@ -58,12 +60,48 @@ export interface UseBackendFiltersOptions {
   onFilterChange?: (criteria: BackendFilterCriteria, filterDto: FilterRequestDto) => void;
 }
 
+/** Sunucuya gidecek sarmalanmış kayıtlı filtre gövdesi */
+export function wrapFilterCriteriaForSave(criteria: BackendFilterCriteria): string {
+  return JSON.stringify({
+    schemaVersion: FILTER_CRITERIA_SCHEMA_VERSION,
+    criteria,
+  });
+}
+
+/** Kayıtlı filtreyi criteria'ya çöz — eski düz JSON ile uyumlu */
+export function parseSavedFilterCriteriaJson(
+  json: string,
+): Partial<BackendFilterCriteria> | null {
+  try {
+    const parsed = JSON.parse(json) as Record<string, unknown>;
+    if (parsed && typeof parsed === 'object') {
+      if (
+        'criteria' in parsed &&
+        typeof parsed.criteria === 'object' &&
+        parsed.criteria !== null
+      ) {
+        const v = (parsed as { schemaVersion?: number }).schemaVersion;
+        if (v === undefined || v === FILTER_CRITERIA_SCHEMA_VERSION) {
+          return parsed.criteria as Partial<BackendFilterCriteria>;
+        }
+      }
+      if (!('schemaVersion' in parsed)) {
+        return parsed as Partial<BackendFilterCriteria>;
+      }
+    }
+  } catch {
+    // ignore
+  }
+  return null;
+}
+
 export const useBackendFilters = (options: UseBackendFiltersOptions = {}) => {
   const [activeSavedFilterId, setActiveSavedFilterId] = useState<string | undefined>(undefined);
   const [criteria, setCriteria] = useState<BackendFilterCriteria>(() => ({
+    distancePreset: DEFAULT_DISTANCE_PRESET_ID,
     searchQuery: '',
-    userType: USER_TYPE_KEYS.ALL, // Language-independent key
-    mainCategory: MAIN_CATEGORY_KEYS.ALL, // Language-independent key
+    userType: USER_TYPE_KEYS.ALL,
+    mainCategory: MAIN_CATEGORY_KEYS.ALL,
     mainHeadings: [],
     subHeadings: [],
     serviceIds: [],
@@ -71,102 +109,100 @@ export const useBackendFilters = (options: UseBackendFiltersOptions = {}) => {
     minPrice: '',
     maxPrice: '',
     pricingType: 'all',
-    status: STATUS_KEYS.ALL, // Unified status filter
+    status: STATUS_KEYS.ALL,
     minRating: 0,
     favoritesOnly: false,
     ...options.defaultCriteria,
   }));
 
-  // Convert frontend criteria to backend FilterRequestDto
-  const toFilterRequestDto = useCallback((
-    criteria: BackendFilterCriteria,
-    location?: { latitude: number; longitude: number },
-    currentUserId?: string,
-    t?: (key: string) => string
-  ): FilterRequestDto => {
-    // ✅ Category name'i BarberType enum'a dönüştür
-    let mainCategoryEnum: number | undefined = undefined;
-    if (criteria.mainCategory && criteria.mainCategory !== MAIN_CATEGORY_KEYS.ALL) {
-      const { categoryNameToEnum } = require('../constants/business');
-      mainCategoryEnum = categoryNameToEnum(criteria.mainCategory, t);
-    }
-
-    // Convert language-independent userType key to backend Turkish value
-    const backendUserType = criteria.userType ? USER_TYPE_BACKEND_MAP[criteria.userType] : undefined;
-
-    // Status filter: backend uses isAvailable for FreeBarber, isOpenNow for Store
-    // Since we don't know which endpoint will be called here, we set both
-    const statusValue = criteria.status === STATUS_KEYS.ALL
-      ? undefined
-      : criteria.status === STATUS_KEYS.AVAILABLE;
-
-    const dto: FilterRequestDto = {
-      latitude: location?.latitude,
-      longitude: location?.longitude,
-      distanceKm: 10.0,
-      searchQuery: criteria.searchQuery || undefined,
-      userType: backendUserType,
-      mainCategory: mainCategoryEnum,
-      serviceIds: criteria.serviceIds?.length ? criteria.serviceIds : undefined,
-      priceSort: criteria.priceSort === 'none' ? undefined : criteria.priceSort,
-      minPrice: criteria.minPrice ? parseFloat(criteria.minPrice) : undefined,
-      maxPrice: criteria.maxPrice ? parseFloat(criteria.maxPrice) : undefined,
-      pricingType: criteria.pricingType === 'all' ? undefined : criteria.pricingType,
-      isAvailable: statusValue,
-      isOpenNow: statusValue,
-      minRating: criteria.minRating && criteria.minRating > 0 ? criteria.minRating : undefined,
-      favoritesOnly: criteria.favoritesOnly || undefined,
-      currentUserId: currentUserId || undefined,
-    };
-
-    // Remove undefined fields to keep the payload clean
-    return Object.fromEntries(
-      Object.entries(dto).filter(([_, v]) => v !== undefined)
-    ) as FilterRequestDto;
-  }, []);
-
-  const updateCriteria = useCallback((updates: Partial<BackendFilterCriteria>, t?: (key: string) => string) => {
-    setCriteria(prev => {
-      const newCriteria = { ...prev, ...updates };
-
-      // Convert to FilterRequestDto and call change handler
-      if (options.onFilterChange) {
-        const filterDto = toFilterRequestDto(newCriteria, undefined, undefined, t);
-        options.onFilterChange(newCriteria, filterDto);
+  const toFilterRequestDto = useCallback(
+    (
+      c: BackendFilterCriteria,
+      location?: { latitude: number; longitude: number },
+      currentUserId?: string,
+      t?: (key: string) => string,
+    ): FilterRequestDto => {
+      let mainCategoryEnum: number | undefined = undefined;
+      if (c.mainCategory && c.mainCategory !== MAIN_CATEGORY_KEYS.ALL) {
+        const { categoryNameToEnum } = require('../constants/business');
+        mainCategoryEnum = categoryNameToEnum(c.mainCategory, t);
       }
 
-      return newCriteria;
-    });
-  }, [options.onFilterChange, toFilterRequestDto]);
+      let availability: number | undefined;
+      if (c.status === STATUS_KEYS.AVAILABLE) availability = AvailabilityFilter.Ready;
+      else if (c.status === STATUS_KEYS.UNAVAILABLE) availability = AvailabilityFilter.NotReady;
 
-  const clearFilters = useCallback((t?: (key: string) => string) => {
-    const defaultCriteria: BackendFilterCriteria = {
-      searchQuery: '',
-      userType: USER_TYPE_KEYS.ALL,
-      mainCategory: MAIN_CATEGORY_KEYS.ALL,
-      mainHeadings: [],
-      subHeadings: [],
-      serviceIds: [],
-      priceSort: 'none',
-      minPrice: '',
-      maxPrice: '',
-      pricingType: 'all',
-      status: STATUS_KEYS.ALL,
-      minRating: 0,
-      favoritesOnly: false,
-      ...options.defaultCriteria,
-    };
+      const dto: FilterRequestDto = {
+        latitude: location?.latitude,
+        longitude: location?.longitude,
+        distanceKm: distanceKmFromPreset(c.distancePreset),
+        searchQuery: c.searchQuery || undefined,
+        mainCategory: mainCategoryEnum,
+        serviceIds: c.serviceIds?.length ? c.serviceIds : undefined,
+        priceSort: c.priceSort === 'none' ? undefined : c.priceSort,
+        minPrice: c.minPrice ? parseFloat(c.minPrice) : undefined,
+        maxPrice: c.maxPrice ? parseFloat(c.maxPrice) : undefined,
+        pricingType: c.pricingType === 'all' ? undefined : c.pricingType,
+        availability,
+        minRating: c.minRating && c.minRating > 0 ? c.minRating : undefined,
+        favoritesOnly: c.favoritesOnly || undefined,
+        currentUserId: currentUserId || undefined,
+      };
 
-    setCriteria(defaultCriteria);
-    setActiveSavedFilterId(undefined);
+      return Object.fromEntries(
+        Object.entries(dto).filter(([_, v]) => v !== undefined),
+      ) as FilterRequestDto;
+    },
+    [],
+  );
 
-    if (options.onFilterChange) {
-      const filterDto = toFilterRequestDto(defaultCriteria, undefined, undefined, t);
-      options.onFilterChange(defaultCriteria, filterDto);
-    }
-  }, [options.defaultCriteria, options.onFilterChange, toFilterRequestDto]);
+  const updateCriteria = useCallback(
+    (updates: Partial<BackendFilterCriteria>, t?: (key: string) => string) => {
+      setCriteria((prev) => {
+        const newCriteria = { ...prev, ...updates };
 
-  // Get active filter count for UI badges
+        if (options.onFilterChange) {
+          const filterDto = toFilterRequestDto(newCriteria, undefined, undefined, t);
+          options.onFilterChange(newCriteria, filterDto);
+        }
+
+        return newCriteria;
+      });
+    },
+    [options.onFilterChange, toFilterRequestDto],
+  );
+
+  const clearFilters = useCallback(
+    (t?: (key: string) => string) => {
+      const defaultCriteria: BackendFilterCriteria = {
+        distancePreset: DEFAULT_DISTANCE_PRESET_ID,
+        searchQuery: '',
+        userType: USER_TYPE_KEYS.ALL,
+        mainCategory: MAIN_CATEGORY_KEYS.ALL,
+        mainHeadings: [],
+        subHeadings: [],
+        serviceIds: [],
+        priceSort: 'none',
+        minPrice: '',
+        maxPrice: '',
+        pricingType: 'all',
+        status: STATUS_KEYS.ALL,
+        minRating: 0,
+        favoritesOnly: false,
+        ...options.defaultCriteria,
+      };
+
+      setCriteria(defaultCriteria);
+      setActiveSavedFilterId(undefined);
+
+      if (options.onFilterChange) {
+        const filterDto = toFilterRequestDto(defaultCriteria, undefined, undefined, t);
+        options.onFilterChange(defaultCriteria, filterDto);
+      }
+    },
+    [options.defaultCriteria, options.onFilterChange, toFilterRequestDto],
+  );
+
   const activeFilterCount = useMemo(() => {
     let count = 0;
 
@@ -182,22 +218,25 @@ export const useBackendFilters = (options: UseBackendFiltersOptions = {}) => {
     if (criteria.minRating && criteria.minRating > 0) count++;
     if (criteria.favoritesOnly) count++;
     if (criteria.priceSort && criteria.priceSort !== 'none') count++;
+    if (
+      criteria.distancePreset &&
+      criteria.distancePreset !== DEFAULT_DISTANCE_PRESET_ID
+    )
+      count++;
 
     return count;
   }, [criteria]);
 
   const hasActiveFilters = useMemo(() => activeFilterCount > 0, [activeFilterCount]);
 
-  // Check if search is active (separate from filters)
-  const hasActiveSearch = useMemo(() =>
-    !!(criteria.searchQuery && criteria.searchQuery.trim())
-    , [criteria.searchQuery]);
+  const hasActiveSearch = useMemo(
+    () => !!(criteria.searchQuery && criteria.searchQuery.trim()),
+    [criteria.searchQuery],
+  );
 
-  // Validation
   const validation = useMemo(() => {
     const errors: string[] = [];
 
-    // Validate price range
     if (criteria.minPrice && criteria.maxPrice) {
       const minPrice = parseFloat(criteria.minPrice);
       const maxPrice = parseFloat(criteria.maxPrice);
@@ -215,7 +254,6 @@ export const useBackendFilters = (options: UseBackendFiltersOptions = {}) => {
       }
     }
 
-    // Validate rating
     if (criteria.minRating && (criteria.minRating < 0 || criteria.minRating > 5)) {
       errors.push('Rating must be between 0 and 5');
     }
@@ -226,24 +264,27 @@ export const useBackendFilters = (options: UseBackendFiltersOptions = {}) => {
     };
   }, [criteria]);
 
-  // Helper to create FilterRequestDto for API calls
-  const createFilterRequestDto = useCallback((
-    location?: { latitude: number; longitude: number },
-    currentUserId?: string,
-    t?: (key: string) => string
-  ): FilterRequestDto => {
-    return toFilterRequestDto(criteria, location, currentUserId, t);
-  }, [criteria, toFilterRequestDto]);
+  const createFilterRequestDto = useCallback(
+    (
+      location?: { latitude: number; longitude: number },
+      currentUserId?: string,
+      t?: (key: string) => string,
+    ): FilterRequestDto => {
+      return toFilterRequestDto(criteria, location, currentUserId, t);
+    },
+    [criteria, toFilterRequestDto],
+  );
 
-  // Kayıtlı filtreyi yükler — filterCriteriaJson'u parse edip criteria'ya uygular
   const loadFromSaved = useCallback((filterCriteriaJson: string, filterId?: string) => {
-    try {
-      const parsed: BackendFilterCriteria = JSON.parse(filterCriteriaJson);
-      setCriteria(prev => ({ ...prev, ...parsed }));
-      setActiveSavedFilterId(filterId);
-    } catch {
-      // Bozuk JSON ise sessizce geç
+    const merged = parseSavedFilterCriteriaJson(filterCriteriaJson);
+    if (merged) {
+      setCriteria((prev) => ({
+        ...prev,
+        ...merged,
+        distancePreset: merged.distancePreset ?? DEFAULT_DISTANCE_PRESET_ID,
+      }));
     }
+    setActiveSavedFilterId(filterId);
   }, []);
 
   return {

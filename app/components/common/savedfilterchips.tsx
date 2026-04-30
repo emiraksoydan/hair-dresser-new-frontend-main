@@ -40,16 +40,16 @@ export const SavedFilterChips = memo(({ savedFilters, activeFilterId, onLoad }: 
                                 flexDirection: 'row',
                                 alignItems: 'center',
                                 gap: 6,
-                                backgroundColor: isActive ? '#ffb900' : colors.cardBg2,
+                                backgroundColor: isActive ? '#FACC15' : colors.cardBg2,
                                 borderRadius: 20,
                                 borderWidth: 1,
-                                borderColor: '#ffb900',
+                                borderColor: '#FACC15',
                                 paddingHorizontal: 13,
                                 paddingVertical: 7,
                                 minHeight: 32,
                             }}
                         >
-                            <Icon source="bookmark" size={14} color={isActive ? colors.cardBg2 : '#ffb900'} />
+                            <Icon source="bookmark" size={14} color={isActive ? colors.cardBg2 : '#FACC15'} />
                             <Text
                                 style={{
                                     color: isActive ? colors.cardBg2 : colors.sectionHeaderText,

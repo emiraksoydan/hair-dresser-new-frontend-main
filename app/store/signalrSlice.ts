@@ -50,6 +50,7 @@ export const resetSignalRState = async () => {
       conn.off('image.updated');
       conn.off('image.removed');
       conn.off('group.joined');
+      conn.off('store.availability.changed');
 
       await conn.stop();
     } catch (e) {

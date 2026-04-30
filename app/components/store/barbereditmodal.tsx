@@ -323,10 +323,10 @@ export const BarberEditModal: React.FC<Props> = ({
                     onBlur={onBlur}
                     textColor={colors.sectionHeaderText}
                     outlineColor={errors.name ? "#b00020" : colors.borderColor2}
-                    activeOutlineColor={errors.name ? "#b00020" : "#ffb900"}
+                    activeOutlineColor={errors.name ? "#b00020" : "#FACC15"}
                     theme={{
                       roundness: 10,
-                      colors: { onSurfaceVariant: "gray", primary: "#ffb900" },
+                      colors: { onSurfaceVariant: "gray", primary: "#FACC15" },
                     }}
                     style={{ backgroundColor: colors.cardBg }}
                   />

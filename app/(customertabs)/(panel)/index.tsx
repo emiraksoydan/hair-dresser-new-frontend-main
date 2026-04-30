@@ -1,6 +1,6 @@
-import React, { useCallback, useMemo, useRef, useState } from "react";
-import { useIsFocused } from "@react-navigation/native";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  ActivityIndicator,
   Dimensions,
   FlatList,
   RefreshControl,
@@ -12,7 +12,7 @@ import { Text } from "../../components/common/Text";
 import { OsmMapView as MapView } from "../../components/common/OsmMapView";
 import { useSafeNavigation } from "../../hook/useSafeNavigation";
 import SearchBar from "../../components/common/searchbar";
-import { BottomSheetModal, BottomSheetView } from "@gorhom/bottom-sheet";
+import { BottomSheetModal } from "@gorhom/bottom-sheet";
 import { useBottomSheet } from "../../hook/useBottomSheet";
 import MotiViewExpand from "../../components/common/motiviewexpand";
 import { toggleExpand } from "../../utils/common/expand-toggle";
@@ -39,9 +39,9 @@ import { StoreMarker } from "../../components/common/storemarker";
 import { DeferredRender } from "../../components/common/deferredrender";
 import { SkeletonComponent } from "../../components/common/skeleton";
 import { UnifiedStateWrapper } from "../../components/common/UnifiedStateManager";
-import { useNearbyStores } from "../../hook/useNearByStore";
-import { useNearbyFreeBarber } from "../../hook/useNearByFreeBarber";
-import { useBackendFilters } from "../../hook/useBackendFilters";
+import { useNearbyDiscovery } from "../../hook/useNearbyDiscovery";
+import { useBackendFilters, wrapFilterCriteriaForSave } from "../../hook/useBackendFilters";
+import { DEFAULT_DISTANCE_PRESET_ID } from "../../constants/filterDefaults";
 import { useLanguage } from "../../hook/useLanguage";
 import { useTheme } from "../../hook/useTheme";
 import { useActionGuard } from "../../hook/useActionGuard";
@@ -50,28 +50,15 @@ import { PanelCollapsibleTop } from "../../components/panel/PanelCollapsibleTop"
 import { PerplexityHorizontalList } from "../../components/panel/PerplexityHorizontalList";
 import { PerplexityListItem } from "../../components/panel/PerplexityListItem";
 import { useFabOverlayWhenSheetOpen, usePanelMoreFab } from "../../hook/usePanelMoreFab";
-import { getCompareStripBottom } from "../../components/layout/panelBottomOverlays";
-import {
-  compareStripCtaStyle,
-  compareStripOuterStyle,
-  useCompareMetrics,
-} from "../../(screens)/compare/compareShared";
-
 const { width: screenWidth } = Dimensions.get("window");
 
 const Index = () => {
   const insets = useSafeAreaInsets();
-  const compareStripBottom = useMemo(
-    () => getCompareStripBottom(insets.bottom),
-    [insets.bottom],
-  );
   const { colors, isDark } = useTheme();
   const dispatch = useAppDispatch();
   const { t } = useLanguage();
-  const cmpM = useCompareMetrics();
   const router = useSafeNavigation();
   const guard = useActionGuard();
-  const isFocused = useIsFocused();
 
   // Current user for favorites filter
   const { data: currentUser } = useGetMeQuery();
@@ -79,6 +66,26 @@ const Index = () => {
 
   const [compareStoreIds, setCompareStoreIds] = useState<string[]>([]);
   const [compareFbIds, setCompareFbIds] = useState<string[]>([]);
+  const compareNavFiredRef = useRef(false);
+  useEffect(() => {
+    if (compareStoreIds.length === 2) {
+      if (compareNavFiredRef.current) return;
+      compareNavFiredRef.current = true;
+      const [a, b] = compareStoreIds;
+      setCompareStoreIds([]);
+      router.push({ pathname: "/(screens)/compare/public-stores", params: { left: a, right: b } });
+      return;
+    }
+    if (compareFbIds.length === 2) {
+      if (compareNavFiredRef.current) return;
+      compareNavFiredRef.current = true;
+      const [a, b] = compareFbIds;
+      setCompareFbIds([]);
+      router.push({ pathname: "/(screens)/compare/public-freebarbers", params: { left: a, right: b } });
+      return;
+    }
+    compareNavFiredRef.current = false;
+  }, [compareStoreIds, compareFbIds, router]);
   const toggleCompareStore = useCallback((storeId: string) => {
     setCompareFbIds([]);
     setCompareStoreIds((prev) => {
@@ -122,35 +129,48 @@ const Index = () => {
   // Location and data hooks - always use filtered endpoint for consistent filtering
   const {
     stores,
-    loading: storesLoading,
-    retryInProgress: storesRetryInProgress,
-    error: storesError,
-    locationStatus: storesLocationStatus,
-    hasLocation: storesHasLocation,
-    location: storesLocation,
-    fetchedOnce: storesFetchedOnce,
-    manualFetch: manualFetchStores,
-  } = useNearbyStores({
+    freeBarbers,
+    loading: discoveryLoading,
+    retryInProgress: discoveryRetryInProgress,
+    error: discoveryError,
+    locationStatus: discoveryLocationStatus,
+    hasLocation: discoveryHasLocation,
+    location: discoveryLocation,
+    fetchedOnce: discoveryFetchedOnce,
+    manualFetch: manualFetchDiscovery,
+    loadMore: loadMoreDiscovery,
+    hasMoreStores,
+    hasMoreFreeBarbers,
+    loadingMore: loadingMoreDiscovery,
+  } = useNearbyDiscovery({
     enabled: true,
     filter: filterDto,
-    useFilteredEndpoint: true, // Her zaman filtered endpoint kullan
+    useFilteredEndpoint: true,
+    persistKey: "customer-discovery",
   });
 
-  const {
-    freeBarbers,
-    loading: freeBarbersLoading,
-    retryInProgress: freeBarbersRetryInProgress,
-    error: freeBarbersError,
-    locationStatus: freeBarbersLocationStatus,
-    hasLocation: freeBarbersHasLocation,
-    location: freeBarbersLocation,
-    fetchedOnce: freeBarbersFetchedOnce,
-    manualFetch: manualFetchFreeBarbers,
-  } = useNearbyFreeBarber({
-    enabled: true,
-    filter: filterDto,
-    useFilteredEndpoint: true, // Her zaman filtered endpoint kullan
-  });
+  const handlePanelEndReached = useCallback(() => {
+    if (hasMoreStores || hasMoreFreeBarbers) loadMoreDiscovery();
+  }, [hasMoreStores, hasMoreFreeBarbers, loadMoreDiscovery]);
+  const anyLoadingMore = loadingMoreDiscovery;
+  const anyHasMore = hasMoreStores || hasMoreFreeBarbers;
+
+  const storesLoading = discoveryLoading;
+  const freeBarbersLoading = discoveryLoading;
+  const storesRetryInProgress = discoveryRetryInProgress;
+  const freeBarbersRetryInProgress = discoveryRetryInProgress;
+  const storesError = discoveryError;
+  const freeBarbersError = discoveryError;
+  const storesLocationStatus = discoveryLocationStatus;
+  const freeBarbersLocationStatus = discoveryLocationStatus;
+  const storesHasLocation = discoveryHasLocation;
+  const freeBarbersHasLocation = discoveryHasLocation;
+  const storesLocation = discoveryLocation;
+  const freeBarbersLocation = discoveryLocation;
+  const storesFetchedOnce = discoveryFetchedOnce;
+  const freeBarbersFetchedOnce = discoveryFetchedOnce;
+  const manualFetchStores = manualFetchDiscovery;
+  const manualFetchFreeBarbers = manualFetchDiscovery;
 
   const { data: settingData } = useGetSettingQuery();
 
@@ -163,6 +183,7 @@ const Index = () => {
   const [selectedMapItem, setSelectedMapItem] = useState<
     BarberStoreGetDto | FreeBarGetDto | null
   >(null);
+  const mapRef = useRef<any>(null);
 
   const panelMapFabItems = useMemo(
     () => [
@@ -192,8 +213,9 @@ const Index = () => {
 
   // Bottom sheet hooks
   const mapDetailSheet = useBottomSheet({
-    snapPoints: ["90%", "100%"],
+    snapPoints: ["92%", "100%"],
     enablePanDownToClose: true,
+    enableOverDrag: true,
   });
 
   const ratingsSheet = useBottomSheet({
@@ -224,22 +246,12 @@ const Index = () => {
       ? getErrorMessage(freeBarbersError)
       : undefined;
 
-  // Unified location status and loading
-  const isLoading = storesLoading || freeBarbersLoading;
-  const fetchedOnce = storesFetchedOnce || freeBarbersFetchedOnce;
-  const hasLocation = storesHasLocation || freeBarbersHasLocation;
-  const locationStatus = storesLocationStatus || freeBarbersLocationStatus;
+  // Unified location status and loading (tek Discovery isteği)
+  const isLoading = discoveryLoading;
+  const fetchedOnce = discoveryFetchedOnce;
+  const hasLocation = discoveryHasLocation;
+  const locationStatus = discoveryLocationStatus;
 
-  const manualFetchStoresRef = React.useRef(manualFetchStores);
-  manualFetchStoresRef.current = manualFetchStores;
-  const manualFetchFreeBarbersRef = React.useRef(manualFetchFreeBarbers);
-  manualFetchFreeBarbersRef.current = manualFetchFreeBarbers;
-  React.useEffect(() => {
-    if (!isFocused || locationStatus !== "granted") return;
-    Promise.all([manualFetchStoresRef.current(), manualFetchFreeBarbersRef.current()]).catch(() => {});
-  }, [isFocused, locationStatus]);
-
-  // Refresh handler
   const onRefresh = useCallback(async () => {
     if (isRefreshingRef.current) return;
 
@@ -254,12 +266,12 @@ const Index = () => {
       }
 
       isRefreshingRef.current = true;
-      await Promise.all([manualFetchStores(), manualFetchFreeBarbers()]);
+      await manualFetchDiscovery();
     } finally {
       setRefreshing(false);
       isRefreshingRef.current = false;
     }
-  }, [manualFetchStores, manualFetchFreeBarbers, locationStatus]);
+  }, [manualFetchDiscovery, locationStatus]);
 
   // Rating handler
   const handlePressRatings = useCallback(
@@ -398,6 +410,16 @@ const Index = () => {
 
   // Map initial region
   const mapInitialRegion = useMemo(() => {
+    const userCoord = safeCoord(discoveryLocation?.latitude, discoveryLocation?.longitude);
+    if (userCoord) {
+      return {
+        latitude: userCoord.lat,
+        longitude: userCoord.lon,
+        latitudeDelta: 0.03,
+        longitudeDelta: 0.03,
+      };
+    }
+
     const storeCandidate = filteredStores
       .map((s) => safeCoord(s.latitude, s.longitude))
       .find(Boolean);
@@ -410,13 +432,45 @@ const Index = () => {
         longitudeDelta: 0.03,
       };
     }
+
+    const freeBarberCandidate = filteredFreeBarbers
+      .map((b) => safeCoord((b as any).latitude, (b as any).longitude))
+      .find(Boolean);
+    if (freeBarberCandidate) {
+      return {
+        latitude: freeBarberCandidate.lat,
+        longitude: freeBarberCandidate.lon,
+        latitudeDelta: 0.03,
+        longitudeDelta: 0.03,
+      };
+    }
+
     return {
       latitude: 41.0082,
       longitude: 28.9784,
       latitudeDelta: 0.08,
       longitudeDelta: 0.08,
     };
-  }, [filteredStores]);
+  }, [discoveryLocation?.latitude, discoveryLocation?.longitude, filteredStores, filteredFreeBarbers]);
+
+  useEffect(() => {
+    if (!isMapMode) return;
+    const userCoord = safeCoord(discoveryLocation?.latitude, discoveryLocation?.longitude);
+    if (!userCoord) return;
+    try {
+      mapRef.current?.animateToRegion(
+        {
+          latitude: userCoord.lat,
+          longitude: userCoord.lon,
+          latitudeDelta: 0.03,
+          longitudeDelta: 0.03,
+        },
+        450,
+      );
+    } catch {
+      // ignore
+    }
+  }, [isMapMode, discoveryLocation?.latitude, discoveryLocation?.longitude]);
 
   // Render store item
   const renderStoreItem = useCallback(
@@ -497,8 +551,8 @@ const Index = () => {
       storesError: 360,
       storesEmpty: 360,
       storeRow: expandedStores ? (isList ? 300 : 270) : 200,
-      storesHorizontal: 220,
-      freebarbersHeader: 72,
+      storesHorizontal: 166,
+      freebarbersHeader: expandedStores ? 72 : 48,
       freebarbersLoading: 130,
       freebarbersError: 360,
       freebarbersEmpty: 360,
@@ -608,9 +662,9 @@ const Index = () => {
       filterCriteria.userType === "store";
     if (shouldShowStores) {
       push({ id: "stores-header", type: "stores-header" }, H.storesHeader);
-      if (!storesFetchedOnce || (storesLoading && filteredStores.length === 0)) {
+      if (!storesFetchedOnce && storesLoading) {
         push({ id: "stores-loading", type: "stores-loading" }, H.storesLoading);
-      } else if (showStoresConnectivityError) {
+      } else if (showStoresConnectivityError && filteredStores.length === 0) {
         push({ id: "stores-error", type: "stores-error" }, H.storesError);
       } else {
         const storesToDisplay = filteredStores;
@@ -650,12 +704,12 @@ const Index = () => {
         { id: "freebarbers-header", type: "freebarbers-header" },
         H.freebarbersHeader,
       );
-      if (!freeBarbersFetchedOnce || (freeBarbersLoading && filteredFreeBarbers.length === 0)) {
+      if (!freeBarbersFetchedOnce && freeBarbersLoading) {
         push(
           { id: "freebarbers-loading", type: "freebarbers-loading" },
           H.freebarbersLoading,
         );
-      } else if (showFreeBarbersConnectivityError) {
+      } else if (showFreeBarbersConnectivityError && filteredFreeBarbers.length === 0) {
         push(
           { id: "freebarbers-error", type: "freebarbers-error" },
           H.freebarbersError,
@@ -710,7 +764,7 @@ const Index = () => {
   ]);
 
   return (
-    <View className="flex flex-1 pl-4 pr-2" style={{ backgroundColor: colors.screenBg }}>
+    <View className="flex flex-1 px-3" style={{ backgroundColor: colors.screenBg, overflow: "hidden" }}>
       <View
         className={
           isMapMode
@@ -747,6 +801,7 @@ const Index = () => {
       {isMapMode && (
         <View className="absolute inset-0" style={{ zIndex: 5, elevation: 5 }}>
           <MapView
+            ref={mapRef}
             style={{ flex: 1 }}
             userInterfaceStyle={isDark ? "dark" : "light"}
             initialRegion={mapInitialRegion}
@@ -775,6 +830,17 @@ const Index = () => {
           }
           initialNumToRender={10}
           windowSize={21}
+          // Infinite-scroll: stores + freebarbers iki ayrı sayfalı liste. Liste
+          // sonuna yaklaşıldığında ikisi için de bir sonraki sayfa istenir.
+          onEndReached={anyHasMore ? handlePanelEndReached : undefined}
+          onEndReachedThreshold={0.5}
+          ListFooterComponent={
+            anyLoadingMore ? (
+              <View style={{ paddingVertical: 16 }}>
+                <ActivityIndicator size="small" color="#c2a523" />
+              </View>
+            ) : null
+          }
           renderItem={({ item }) => {
             if (item.type === "stores-header") {
               return (
@@ -857,22 +923,19 @@ const Index = () => {
 
             if (item.type === "stores-content-horizontal") {
               return (
-                <View style={{ minHeight: 200 }}>
-                  <PerplexityHorizontalList
-                    data={item.data}
-                    keyExtractor={(store: BarberStoreGetDto) => store.id}
-                    minHeight={isList ? 260 : 280}
-                    nestedScrollEnabled
-                    contentContainerStyle={{ paddingTop: 8, paddingBottom: 16, paddingHorizontal: 10 }}
-                    renderItem={({ item: store }) => renderStoreItem({ item: store })}
-                  />
-                </View>
+                <PerplexityHorizontalList
+                  data={item.data}
+                  keyExtractor={(store: BarberStoreGetDto) => store.id}
+                  nestedScrollEnabled
+                  contentContainerStyle={{ paddingTop: 0, paddingBottom: 8, paddingHorizontal: 10 }}
+                  renderItem={({ item: store }) => renderStoreItem({ item: store })}
+                />
               );
             }
 
             if (item.type === "freebarbers-header") {
               return (
-                <View className="flex flex-row justify-between items-center mt-6">
+                <View className={`flex flex-row justify-between items-center ${expandedStores ? "mt-3" : "mt-0"}`}>
                   <Text className="font-century-gothic text-xl" style={{ color: colors.sectionHeaderText }}>
                     {t("panel.nearbyFreeBarbers")}
                   </Text>
@@ -957,16 +1020,13 @@ const Index = () => {
 
             if (item.type === "freebarbers-content-horizontal") {
               return (
-                <View style={{ minHeight: 200 }}>
-                  <PerplexityHorizontalList
-                    data={item.data}
-                    keyExtractor={(fb: FreeBarGetDto) => (fb as any).id}
-                    minHeight={isList ? 260 : 280}
-                    nestedScrollEnabled
-                    contentContainerStyle={{ paddingTop: 8, paddingBottom: 16, paddingHorizontal: 10 }}
-                    renderItem={({ item: fb }) => renderFreeBarberItem({ item: fb })}
-                  />
-                </View>
+                <PerplexityHorizontalList
+                  data={item.data}
+                  keyExtractor={(fb: FreeBarGetDto) => (fb as any).id}
+                  nestedScrollEnabled
+                  contentContainerStyle={{ paddingTop: 0, paddingBottom: 8, paddingHorizontal: 10 }}
+                  renderItem={({ item: fb }) => renderFreeBarberItem({ item: fb })}
+                />
               );
             }
 
@@ -975,39 +1035,12 @@ const Index = () => {
         />
       </View>
 
-      {(compareStoreIds.length === 2 || compareFbIds.length === 2) && (
-        <View style={[{ zIndex: 30 }, compareStripOuterStyle(isDark, cmpM, compareStripBottom)]}>
-          <TouchableOpacity
-            onPress={() => {
-              if (compareStoreIds.length === 2) {
-                const [a, b] = compareStoreIds;
-                setCompareStoreIds([]);
-                router.push({
-                  pathname: "/(screens)/compare/public-stores",
-                  params: { left: a, right: b },
-                });
-              } else if (compareFbIds.length === 2) {
-                const [a, b] = compareFbIds;
-                setCompareFbIds([]);
-                router.push({
-                  pathname: "/(screens)/compare/public-freebarbers",
-                  params: { left: a, right: b },
-                });
-              }
-            }}
-            style={compareStripCtaStyle(cmpM)}
-          >
-            <Text style={{ fontFamily: "CenturyGothic-Bold", fontSize: cmpM.rowFont + 2, color: "#1f2937" }}>
-              {t("compare.continue")}
-            </Text>
-          </TouchableOpacity>
-        </View>
-      )}
-
       {/* Filter drawer */}
       <FilterDrawer
         visible={filterDrawerVisible}
         onClose={() => setFilterDrawerVisible(false)}
+        selectedDistancePreset={filterCriteria.distancePreset ?? DEFAULT_DISTANCE_PRESET_ID}
+        onChangeDistancePreset={(preset) => updateFilterCriteria({ distancePreset: preset })}
         selectedUserType={filterCriteria.userType || "all"}
         onChangeUserType={(value) => updateFilterCriteria({ userType: value })}
         showUserTypeFilter={true}
@@ -1056,7 +1089,7 @@ const Index = () => {
         savedFilters={savedFilters}
         activeSavedFilterId={activeSavedFilterId}
         hasActiveFilters={hasActiveFilters}
-        currentFilterCriteriaJson={JSON.stringify(filterCriteria)}
+        currentFilterCriteriaJson={wrapFilterCriteriaForSave(filterCriteria)}
         onLoadSavedFilter={(json) => loadFromSaved(json)}
         onDeleteSavedFilter={(filterId) => guard(async () => {
           try {
@@ -1068,7 +1101,7 @@ const Index = () => {
         })}
         onSaveCurrentFilter={(name) => guard(async () => {
           try {
-            const res = await createSavedFilter({ name, filterCriteriaJson: JSON.stringify(filterCriteria) }).unwrap();
+            const res = await createSavedFilter({ name, filterCriteriaJson: wrapFilterCriteriaForSave(filterCriteria) }).unwrap();
             dispatch(showSnack({ message: getMessage(res.message) || '' }));
           } catch (e) {
             dispatch(showSnack({ message: getErrorMessage(e), isError: true }));
@@ -1088,13 +1121,13 @@ const Index = () => {
       <BottomSheetModal
         ref={mapDetailSheet.ref}
         backdropComponent={mapDetailSheet.makeBackdrop()}
-        handleIndicatorStyle={{ backgroundColor: colors.sheetHandle }}
+        handleComponent={() => null}
         backgroundStyle={{ backgroundColor: colors.sheetBg }}
         snapPoints={mapDetailSheet.snapPoints}
         enablePanDownToClose={mapDetailSheet.enablePanDownToClose}
         onChange={mapDetailSheet.handleChange}
       >
-        <BottomSheetView style={{ flex: 1, padding: 0, margin: 0 }}>
+        <View style={{ flex: 1 }}>
           <DeferredRender
             active={mapDetailSheet.isOpen && !!selectedMapItem}
             placeholder={
@@ -1120,7 +1153,7 @@ const Index = () => {
               </>
             )}
           </DeferredRender>
-        </BottomSheetView>
+        </View>
       </BottomSheetModal>
 
       {/* Ratings bottom sheet */}

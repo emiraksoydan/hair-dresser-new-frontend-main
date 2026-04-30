@@ -1,7 +1,7 @@
 import { useEffect, useRef, useCallback } from 'react';
 import Constants from 'expo-constants';
 import * as Notifications from 'expo-notifications';
-import { AppState, Platform } from 'react-native';
+import { AppState, NativeModules, Platform } from 'react-native';
 import { useDispatch } from 'react-redux';
 import { useAuth } from './useAuth';
 import { useNotificationOpener } from '../context/NotificationOpenerContext';
@@ -13,7 +13,24 @@ type RemoteMessage = {
   data?: Record<string, string>;
 };
 
-const isExpoGo = Constants.appOwnership === 'expo';
+const isExpoGo = Constants.executionEnvironment === 'storeClient';
+
+/**
+ * Native Firebase app hazır mı?
+ * RNFBAppModule varlığı gerekli ama yeterli değil — native init tamamlanmadan
+ * messaging() "No Firebase App '[DEFAULT]'" fırlatır. getApp() ile doğruluyoruz.
+ */
+function isNativeFirebaseReady(): boolean {
+  if (!NativeModules.RNFBAppModule) return false;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { getApp } = require('@react-native-firebase/app');
+    getApp('[DEFAULT]');
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 /**
  * FCM + expo-notifications köprüsü (foreground + tap).
@@ -76,7 +93,7 @@ export function useFirebaseMessaging() {
 
   // 1) Foreground mesajı (uygulama açıkken geldiğinde)
   useEffect(() => {
-    if (!token || isExpoGo) return;
+    if (!token || isExpoGo || !isNativeFirebaseReady()) return;
 
     let messagingModule: any;
     try {
@@ -88,31 +105,36 @@ export function useFirebaseMessaging() {
     const messaging = messagingModule?.default;
     if (!messaging || typeof messaging !== 'function') return;
 
-    const unsub = messaging().onMessage(async (remoteMessage: RemoteMessage) => {
-      try {
-        const title = remoteMessage?.notification?.title || 'Yeni bildirim';
-        const body =
-          remoteMessage?.notification?.body ||
-          (remoteMessage?.data?.payload as string) ||
-          '';
+    let unsub: (() => void) | undefined;
+    try {
+      unsub = messaging().onMessage(async (remoteMessage: RemoteMessage) => {
+        try {
+          const title = remoteMessage?.notification?.title || 'Yeni bildirim';
+          const body =
+            remoteMessage?.notification?.body ||
+            (remoteMessage?.data?.payload as string) ||
+            '';
 
-        // Cache'i tazele (notification list / badge)
-        refreshNotifications();
+          // Cache'i tazele (notification list / badge)
+          refreshNotifications();
 
-        // Foreground'daysa lokal bildirim olarak göster.
-        await Notifications.scheduleNotificationAsync({
-          content: {
-            title,
-            body,
-            data: (remoteMessage?.data as any) ?? {},
-            sound: 'default',
-          },
-          trigger: null,
-        });
-      } catch {
-        // Foreground gösterim hataları sessizce düşsün.
-      }
-    });
+          // Foreground'daysa lokal bildirim olarak göster.
+          await Notifications.scheduleNotificationAsync({
+            content: {
+              title,
+              body,
+              data: (remoteMessage?.data as any) ?? {},
+              sound: 'default',
+            },
+            trigger: null,
+          });
+        } catch {
+          // Foreground gösterim hataları sessizce düşsün.
+        }
+      });
+    } catch {
+      return;
+    }
 
     return () => {
       try { unsub?.(); } catch { /* ignore */ }
@@ -121,7 +143,7 @@ export function useFirebaseMessaging() {
 
   // 2) Uygulama background'dayken bildirime tıklandı
   useEffect(() => {
-    if (!token || isExpoGo) return;
+    if (!token || isExpoGo || !isNativeFirebaseReady()) return;
 
     let messagingModule: any;
     try {
@@ -133,9 +155,14 @@ export function useFirebaseMessaging() {
     const messaging = messagingModule?.default;
     if (!messaging || typeof messaging !== 'function') return;
 
-    const unsub = messaging().onNotificationOpenedApp(
-      (remoteMessage: RemoteMessage) => handleNotificationTap(remoteMessage),
-    );
+    let unsub: (() => void) | undefined;
+    try {
+      unsub = messaging().onNotificationOpenedApp(
+        (remoteMessage: RemoteMessage) => handleNotificationTap(remoteMessage),
+      );
+    } catch {
+      return;
+    }
 
     return () => {
       try { unsub?.(); } catch { /* ignore */ }
@@ -144,7 +171,7 @@ export function useFirebaseMessaging() {
 
   // 3) Uygulama kapalıyken bildirime tıklanıp açıldı (cold start)
   useEffect(() => {
-    if (!token || isExpoGo) return;
+    if (!token || isExpoGo || !isNativeFirebaseReady()) return;
 
     let cancelled = false;
     (async () => {
@@ -170,6 +197,23 @@ export function useFirebaseMessaging() {
   // 4) Foreground'da lokal bildirime tıklama (expo-notifications)
   useEffect(() => {
     if (!token) return;
+
+    // App local bildirime tıklanarak cold start ile açıldıysa
+    // son notification response'u bir kez işle.
+    Notifications.getLastNotificationResponseAsync()
+      .then((resp) => {
+        try {
+          const data = resp?.notification?.request?.content?.data as any;
+          if (data) {
+            handleNotificationTap({ data, messageId: data?.notificationId });
+          }
+        } catch {
+          // ignore
+        }
+      })
+      .catch(() => {
+        // ignore
+      });
 
     const sub = Notifications.addNotificationResponseReceivedListener((resp) => {
       try {

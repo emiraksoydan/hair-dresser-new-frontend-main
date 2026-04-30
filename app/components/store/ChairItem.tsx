@@ -14,7 +14,7 @@ type ChairItemProps = {
   index: number;
   chairId: string;
   mode: "named" | "barber";
-  barberOptions: Array<{ label: string; value: string }>;
+  barberOptions: Array<{ label: string; value: string; ratingAvg?: number | null; ratingCount?: number | null }>;
   errors: FieldErrors<any>;
   onRemove: () => void;
   onModeChange: (mode: "named" | "barber") => void;

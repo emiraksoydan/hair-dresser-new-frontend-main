@@ -9,6 +9,8 @@ interface UseNearbyFreeBarberOptions {
     enabled: boolean;
     filter?: FilterRequestDto;
     useFilteredEndpoint?: boolean;
+    /** Filter mode'da infinite-scroll sayfa boyutu (backend limit hard-cap ile korunur). */
+    pageSize?: number;
 }
 
 export function useNearbyFreeBarber(enabledOrOptions: boolean | UseNearbyFreeBarberOptions) {
@@ -25,10 +27,12 @@ export function useNearbyFreeBarber(enabledOrOptions: boolean | UseNearbyFreeBar
         enabled: options.enabled,
         filter: options.filter,
         useFilteredEndpoint: options.useFilteredEndpoint,
+        pageSize: options.pageSize,
         nearbyTrigger,
         nearbyResult,
         filteredTrigger,
         filteredResult,
+        liveFavoriteEntity: "freeBarber",
     });
 
     return {
@@ -44,5 +48,8 @@ export function useNearbyFreeBarber(enabledOrOptions: boolean | UseNearbyFreeBar
         location: result.location,
         manualFetch: result.manualFetch,
         retryPermission: result.retryPermission,
+        loadMore: result.loadMore,
+        hasMore: result.hasMore,
+        loadingMore: result.loadingMore,
     };
 }

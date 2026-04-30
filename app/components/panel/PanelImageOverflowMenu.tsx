@@ -125,7 +125,7 @@ export function PanelImageOverflowMenu({ images, panelCompare, galleryTitle }: P
               backgroundColor: isDark
                 ? "rgba(255, 255, 255, 0.94)"
                 : "rgba(255, 255, 255, 0.98)",
-              borderColor: "rgba(255, 185, 0, 0.42)",
+              borderColor: "rgba(250, 204, 21, 0.42)",
             },
           ]}
           pointerEvents={menuOpen ? "auto" : "none"}
@@ -142,7 +142,7 @@ export function PanelImageOverflowMenu({ images, panelCompare, galleryTitle }: P
                 index < menuItems.length - 1 && styles.rowSeparator,
                 pressed && {
                   opacity: 0.9,
-                  backgroundColor: "rgba(255, 185, 0, 0.14)",
+                  backgroundColor: "rgba(250, 204, 21, 0.14)",
                 },
               ]}
               accessibilityRole="menuitem"
@@ -187,7 +187,7 @@ const styles = StyleSheet.create({
   },
   pill: {
     backgroundColor: "rgba(15,23,42,0.78)",
-    borderColor: "rgba(255,185,0,0.55)",
+    borderColor: "rgba(250, 204, 21,0.55)",
     borderWidth: 1.5,
     borderRadius: 20,
     padding: 6,
@@ -212,7 +212,7 @@ const styles = StyleSheet.create({
   },
   rowSeparator: {
     borderBottomWidth: 1,
-    borderBottomColor: "rgba(255, 185, 0, 0.22)",
+    borderBottomColor: "rgba(250, 204, 21, 0.22)",
   },
   rowInner: {
     flexDirection: "row",
@@ -228,7 +228,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
-    backgroundColor: "rgba(255, 185, 0, 0.16)",
+    backgroundColor: "rgba(250, 204, 21, 0.16)",
   },
   rowLabel: {
     flex: 1,

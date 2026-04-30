@@ -22,10 +22,10 @@ const NOTIFICATION_SOUND = require('../../assets/sounds/notificationmessage.mp3'
  * Sound source: Local asset (assets/sounds/notification.mp3) - network bağımsız, anında çalar
  * Ses dosyasının kendi süresi var (3 saniye), otomatik biter - döngüye gerek yok
  */
-export const useNotificationSound = (notificationBadgeCount: number, chatBadgeCount: number) => {
+export const useNotificationSound = (notificationBadgeCount: number, chatBadgeCount: number, options?: { suppressSound?: boolean }) => {
     const { isAuthenticated } = useAuth();
     const { data: settingData } = useGetSettingQuery(undefined, { skip: !isAuthenticated });
-    const soundEnabled = settingData?.data?.enableNotificationSound ?? true;
+    const soundEnabled = (settingData?.data?.enableNotificationSound ?? true) && !(options?.suppressSound ?? false);
 
     // CRITICAL FIX: Initialize with -1 to detect first real value
     // This ensures sound plays on manual refresh if there are new notifications

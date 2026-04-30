@@ -23,6 +23,8 @@ import {
   handlePickMultipleImages,
   truncateFileName,
 } from "../../utils/form/pick-document";
+import { ImageUploadHint } from "../common/ImageUploadHint";
+import { OutlinedImagePickField } from "../common/OutlinedImagePickField";
 import { Dropdown } from "react-native-element-dropdown";
 import { CategoryListSelect } from "../common/CategoryListSelect";
 import {
@@ -76,6 +78,7 @@ import { LocationStatus } from "../../types";
 import { StepFormIndicator } from "../common/StepFormIndicator";
 import { extractCreatedStoreIdFromResponse } from "../../utils/form/store-create-response";
 import { SheetCloseButton } from "../common/SheetCloseButton";
+import { getCurrentLocationSafe } from "../../utils/location/location-helper";
 
 const createChairPricingSchema = (t: (key: string) => string) =>
   z
@@ -1166,20 +1169,14 @@ const FormStoreAdd = ({
     }
   }, [currentStep]);
 
-  async function getPermissionOrAsk() {
-    const { status } = await Location.requestForegroundPermissionsAsync();
-    return status === "granted";
-  }
   async function pickMyCurrentLocation() {
-    const ok = await getPermissionOrAsk();
-    if (!ok) {
-      alert("Konum izni gerekli.");
+    const res = await getCurrentLocationSafe();
+    if (!res.ok) {
+      dispatch(showSnack({ message: res.message, isError: true }));
       return;
     }
-    const pos = await Location.getCurrentPositionAsync({
-      accuracy: Location.Accuracy.Balanced,
-    });
-    const { latitude, longitude } = pos.coords;
+    const latitude = res.lat;
+    const longitude = res.lon;
     updateLocation(latitude, longitude);
     await reverseAndSetAddress(latitude, longitude);
   }
@@ -1322,6 +1319,7 @@ const FormStoreAdd = ({
                           </TouchableOpacity>
                         )}
                       </ScrollView>
+                      <ImageUploadHint className="mt-2 px-1" />
                     </View>
                   )}
                 />
@@ -1334,40 +1332,30 @@ const FormStoreAdd = ({
                     name="taxDocumentImage"
                     render={({ field: { value, onChange } }) => (
                       <>
-                        <TouchableOpacity
-                          activeOpacity={0.85}
+                        <OutlinedImagePickField
+                          label={t("form.taxDocumentImage")}
+                          valueText={
+                            value?.name
+                              ? truncateFileName(value.name, 28)
+                              : t("form.imageNotSelected")
+                          }
+                          error={!!errors.taxDocumentImage}
+                          borderColor={errors.taxDocumentImage ? "#b00020" : colors.borderColor}
+                          colors={{
+                            cardBg: colors.cardBg,
+                            sectionHeaderText: colors.sectionHeaderText,
+                            textSecondary: colors.textSecondary,
+                          }}
                           onPress={async () => {
                             const file = await handlePickImage();
                             if (!file) return;
                             onChange(file);
                           }}
-                        >
-                          <TextInput
-                            label={t("form.taxDocumentImage")}
-                            mode="outlined"
-                            value={
-                              value?.name
-                                ? truncateFileName(value.name)
-                                : t("form.imageNotSelected")
-                            }
-                            editable={false}
-                            dense
-                            pointerEvents="none"
-                            textColor={colors.sectionHeaderText}
-                            outlineColor={
-                              errors.taxDocumentImage ? "#b00020" : colors.borderColor
-                            }
-                            right={<TextInput.Icon icon="image" color={colors.sectionHeaderText} />}
-                            theme={{
-                              roundness: 10,
-                              colors: { onSurfaceVariant: colors.textSecondary, primary: colors.sectionHeaderText },
-                            }}
-                            style={{ backgroundColor: colors.cardBg, borderWidth: 0 }}
-                          />
-                        </TouchableOpacity>
+                        />
                         <HelperText type="error" visible={!!errors.taxDocumentImage} style={{ fontFamily: 'CenturyGothic' }}>
                           {taxDocErrorText}
                         </HelperText>
+                        {!errors.taxDocumentImage && <ImageUploadHint className="px-1" />}
                         {value?.uri && (
                           <View className="mt-2 relative w-full rounded-xl overflow-hidden" style={{ backgroundColor: colors.cardBg }}>
                             <Image
@@ -1839,6 +1827,17 @@ const FormStoreAdd = ({
                   </View>
                 ) : (
                   <View style={{ marginHorizontal: 8, marginBottom: 4 }}>
+                    <Text
+                      style={{
+                        fontFamily: "CenturyGothic",
+                        fontSize: 12,
+                        lineHeight: 17,
+                        color: colors.textSecondary,
+                        marginBottom: 10,
+                      }}
+                    >
+                      {t("form.staffListManageHint")}
+                    </Text>
                     {barberFields.map((item, index) => (
                       <ManuelBarberItem
                         key={item._key}
@@ -2384,8 +2383,8 @@ const FormStoreAdd = ({
               className="flex-1"
               mode="outlined"
               onPress={handlePrevStep}
-              buttonColor="#ffb900"
-              textColor="#ffb900"
+              buttonColor="#FACC15"
+              textColor="#FACC15"
             >
               {t("form.stepPrev")}
             </Button>
@@ -2395,7 +2394,7 @@ const FormStoreAdd = ({
               className="flex-1"
               mode="contained"
               onPress={handleNextStep}
-              buttonColor="#ffb900"
+              buttonColor="#FACC15"
               textColor="#1F2937"
             >
               {t("form.stepNext")}

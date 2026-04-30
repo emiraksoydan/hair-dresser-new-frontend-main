@@ -30,20 +30,19 @@ export const ManuelBarberItem = React.memo<ManuelBarberItemProps>(
       <View
         style={{
           marginBottom: 12,
-          borderRadius: 16,
-          paddingVertical: 12,
-          paddingHorizontal: 12,
+          borderRadius: 14,
+          padding: 14,
           borderWidth: 1,
           borderColor: nameError ? "#b00020" : colors.borderColor,
           backgroundColor: colors.cardBg,
         }}
       >
-        <View style={{ flexDirection: "row", alignItems: "flex-start" }}>
+        <View style={{ flexDirection: "row", alignItems: "center" }}>
           <TouchableOpacity
             activeOpacity={0.82}
             onPress={onAvatarPress}
             accessibilityLabel={t("form.addImage")}
-            style={{ marginTop: 2 }}
+            style={{ marginTop: 0 }}
           >
             {avatarUri ? (
               <Avatar.Image size={52} source={{ uri: avatarUri }} />
@@ -76,7 +75,7 @@ export const ManuelBarberItem = React.memo<ManuelBarberItemProps>(
                 flexDirection: "row",
                 alignItems: "center",
                 justifyContent: "space-between",
-                marginBottom: 6,
+                marginBottom: 8,
               }}
             >
               <View
@@ -115,39 +114,47 @@ export const ManuelBarberItem = React.memo<ManuelBarberItemProps>(
                 size={22}
                 iconColor="#ef4444"
                 onPress={onRemove}
-                style={{ margin: 0, marginTop: -4 }}
+                style={{ margin: 0 }}
               />
             </View>
 
-            <Controller
-              control={control}
-              name={`barbers.${index}.name`}
-              render={({ field: { value, onChange, onBlur } }) => (
-                <TextInput
-                  label={t("form.personnelName")}
-                  mode="outlined"
-                  dense
-                  value={value ?? ""}
-                  onChangeText={onChange}
-                  onBlur={onBlur}
-                  textColor={colors.sectionHeaderText}
-                  outlineColor={nameError ? "#b00020" : colors.borderColor}
-                  activeOutlineColor={nameError ? "#b00020" : accent}
-                  error={!!nameError}
-                  theme={{
-                    roundness: 10,
-                    colors: {
-                      onSurfaceVariant: colors.textSecondary,
-                      primary: accent,
-                    },
-                  }}
-                  style={{
-                    backgroundColor: colors.cardBg,
-                    fontFamily: "CenturyGothic",
-                  }}
-                />
-              )}
-            />
+            <View
+              style={{
+                borderRadius: 10,
+                backgroundColor: isDark ? "rgba(255,255,255,0.04)" : "rgba(15,23,42,0.03)",
+                padding: 8,
+              }}
+            >
+              <Controller
+                control={control}
+                name={`barbers.${index}.name`}
+                render={({ field: { value, onChange, onBlur } }) => (
+                  <TextInput
+                    label={t("form.personnelName")}
+                    mode="outlined"
+                    dense
+                    value={value ?? ""}
+                    onChangeText={onChange}
+                    onBlur={onBlur}
+                    textColor={colors.sectionHeaderText}
+                    outlineColor={nameError ? "#b00020" : colors.borderColor}
+                    activeOutlineColor={nameError ? "#b00020" : accent}
+                    error={!!nameError}
+                    theme={{
+                      roundness: 10,
+                      colors: {
+                        onSurfaceVariant: colors.textSecondary,
+                        primary: accent,
+                      },
+                    }}
+                    style={{
+                      backgroundColor: colors.cardBg,
+                      fontFamily: "CenturyGothic",
+                    }}
+                  />
+                )}
+              />
+            </View>
 
             {!!nameError && (
               <Text

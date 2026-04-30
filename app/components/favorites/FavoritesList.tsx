@@ -1,9 +1,9 @@
 import { Icon } from "react-native-paper";
-import React, { useCallback, useMemo, useState } from 'react';
-import { View, FlatList, Dimensions, RefreshControl, ScrollView, TouchableOpacity } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ActivityIndicator, View, FlatList, Dimensions, RefreshControl, ScrollView, TouchableOpacity } from 'react-native';
 import { PerplexityAnimatedList } from '../common/PerplexityAnimatedList';
 import { Text } from '../common/Text';
-import { useGetMyFavoritesQuery, useGetMeQuery, useGetFreeBarberMinePanelQuery, useGetSettingQuery } from '../../store/api';
+import { api, useGetMyFavoritesQuery, useGetMeQuery, useGetFreeBarberMinePanelQuery, useGetSettingQuery } from '../../store/api';
 import { useAppDispatch } from '../../store/hook';
 import { setFreeBarberSwipeIds, setStoreSwipeIds } from '../../store/bookingSwipeSlice';
 import { shouldFilterStoresToOthersOnly, shouldFilterOwnFreeBarberFromCompare, isOtherUsersStore, isOtherUsersFreeBarber } from '../../utils/compare-eligibility';
@@ -32,11 +32,14 @@ type FavoritesListProps = {
 };
 
 const FAVORITE_CARD_STRIDE = 320;
+const FAVORITES_PAGE_SIZE = 30;
+/** RN `onEndReached` ilk layout'ta (kısa liste / threshold) yanlış tetiklenebilir — footer spinner flash'ını önler. */
+const END_REACHED_GRACE_MS = 450;
 
 const FavoritesList: React.FC<FavoritesListProps> = ({ mode = 'store' }) => {
     const { t } = useLanguage();
     const { colors } = useTheme();
-    const { data: favorites, isLoading, refetch, error, isError } = useGetMyFavoritesQuery();
+    const { data: favorites, isLoading, refetch, error, isError } = useGetMyFavoritesQuery({ limit: FAVORITES_PAGE_SIZE });
     const { data: currentUser, isLoading: isUserLoading, isSuccess: isUserSuccess } = useGetMeQuery();
     const compareUid = currentUser?.data?.id;
     const compareUserType = currentUser?.data?.userType;
@@ -274,14 +277,66 @@ const FavoritesList: React.FC<FavoritesListProps> = ({ mode = 'store' }) => {
         return null;
     }, [cardWidth, goStoreDetail, goFreeBarberDetail, getTargetTypeLabel, getTargetTypeColor, mode, handlePressRatings, settingData]);
 
+    // Infinite scroll state
+    const [isLoadingOlder, setIsLoadingOlder] = useState(false);
+    const hasMoreRef = useRef(true);
+    const lastLoadedBeforeRef = useRef<string | null>(null);
+    const suppressEndReachedUntilMsRef = useRef(0);
+    const bumpEndReachedGrace = useCallback(() => {
+        suppressEndReachedUntilMsRef.current = Date.now() + END_REACHED_GRACE_MS;
+    }, []);
+
+    useEffect(() => {
+        bumpEndReachedGrace();
+    }, [bumpEndReachedGrace]);
+
+    const loadOlderFavorites = useCallback(async () => {
+        if (Date.now() < suppressEndReachedUntilMsRef.current) return;
+        if (isLoadingOlder || !hasMoreRef.current) return;
+        if (!favorites || favorites.length === 0) return;
+
+        // Cursor: en eski favorinin (CreatedAt, Id) çifti — tie-breaker için beforeId.
+        const oldest = favorites[favorites.length - 1];
+        const before = oldest?.createdAt;
+        const beforeId = oldest?.id;
+        if (!before) return;
+        const cursorKey = `${before}|${beforeId ?? ""}`;
+        if (lastLoadedBeforeRef.current === cursorKey) return;
+        lastLoadedBeforeRef.current = cursorKey;
+
+        setIsLoadingOlder(true);
+        try {
+            const result = await dispatch(
+                api.endpoints.getMyFavorites.initiate(
+                    { before, beforeId, limit: FAVORITES_PAGE_SIZE },
+                    // subscribe:false — pagination dispatch'leri kalıcı subscriber
+                    // bırakmasın. Sayfa başına 1 anonim subscriber birikiyordu;
+                    // her favori toggle (invalidatesTags 'Favorite') hepsini refetch
+                    // tetikliyor → ekstra ağ + memory leak.
+                    { subscribe: false, forceRefetch: true },
+                ),
+            ).unwrap();
+            if (!Array.isArray(result) || result.length < FAVORITES_PAGE_SIZE) {
+                hasMoreRef.current = false;
+            }
+        } catch {
+            lastLoadedBeforeRef.current = null;
+        } finally {
+            setIsLoadingOlder(false);
+        }
+    }, [dispatch, favorites, isLoadingOlder]);
+
     const handleRefresh = useCallback(async () => {
         setIsPullRefreshing(true);
+        bumpEndReachedGrace();
+        hasMoreRef.current = true;
+        lastLoadedBeforeRef.current = null;
         try {
             await refetch();
         } finally {
             setIsPullRefreshing(false);
         }
-    }, [refetch]);
+    }, [refetch, bumpEndReachedGrace]);
 
     const [retryBusy, setRetryBusy] = useState(false);
     const handleRetry = useCallback(async () => {
@@ -354,10 +409,10 @@ const FavoritesList: React.FC<FavoritesListProps> = ({ mode = 'store' }) => {
                         borderRadius: 14,
                         backgroundColor: colors.cardBg,
                         borderWidth: 1,
-                        borderColor: "#ffb90055",
+                        borderColor: "#FACC1555",
                     }}
                 >
-                    <Icon source="compare-horizontal" size={22} color="#ffb900" />
+                    <Icon source="compare-horizontal" size={22} color="#FACC15" />
                     <Text style={{ fontFamily: "CenturyGothic-Bold", color: colors.sectionHeaderText, fontSize: 14 }}>
                         {t("compare.fromFavorites")}
                     </Text>
@@ -381,6 +436,15 @@ const FavoritesList: React.FC<FavoritesListProps> = ({ mode = 'store' }) => {
                         onRefresh={handleRefresh}
                         tintColor="#f05e23"
                     />
+                }
+                onEndReached={loadOlderFavorites}
+                onEndReachedThreshold={0.3}
+                ListFooterComponent={
+                    isLoadingOlder ? (
+                        <View style={{ paddingVertical: 12 }}>
+                            <ActivityIndicator size="small" color="#f05e23" />
+                        </View>
+                    ) : null
                 }
             />
 

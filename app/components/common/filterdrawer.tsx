@@ -4,7 +4,7 @@
  */
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { View, TouchableOpacity, ScrollView, Dimensions, Modal, StyleSheet } from 'react-native';
+import { View, TouchableOpacity, ScrollView, Dimensions, Modal, StyleSheet, KeyboardAvoidingView, Platform, Keyboard, KeyboardEvent } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text } from './Text';
 import Animated, {
@@ -72,6 +72,10 @@ interface FilterDrawerProps {
     showFavoritesOnly: boolean;
     onChangeFavoritesOnly: (value: boolean) => void;
 
+    /** Keşif mesafesi: '10' | '50' | '100' | 'unlimited' */
+    selectedDistancePreset: string;
+    onChangeDistancePreset: (preset: string) => void;
+
     // Temizle butonu
     onClearFilters: () => void;
 
@@ -93,8 +97,8 @@ const FilterChipItem = ({ label, selected, onPress }: { label: string; selected:
         <TouchableOpacity
             onPress={onPress}
             style={{
-                backgroundColor: selected ? '#ffb900' : colors.cardBg2,
-                borderColor: selected ? '#ffb900' : colors.borderColor,
+                backgroundColor: selected ? '#FACC15' : colors.cardBg2,
+                borderColor: selected ? '#FACC15' : colors.borderColor,
                 borderWidth: 1,
                 paddingHorizontal: 16,
                 paddingVertical: 8,
@@ -143,6 +147,8 @@ export const FilterDrawer: React.FC<FilterDrawerProps> = ({
     onChangeRating,
     showFavoritesOnly,
     onChangeFavoritesOnly,
+    selectedDistancePreset,
+    onChangeDistancePreset,
     onClearFilters,
     savedFilters,
     activeSavedFilterId,
@@ -160,6 +166,7 @@ export const FilterDrawer: React.FC<FilterDrawerProps> = ({
     const visibleValue = useSharedValue(visible ? 1 : 0);
     const [saveNameInput, setSaveNameInput] = useState('');
     const [showSaveInput, setShowSaveInput] = useState(false);
+    const [keyboardHeight, setKeyboardHeight] = useState(0);
 
     const activeFilter = activeSavedFilterId ? savedFilters?.find(sf => sf.id === activeSavedFilterId) : undefined;
     const isUpdateMode = !!activeFilter;
@@ -183,7 +190,7 @@ export const FilterDrawer: React.FC<FilterDrawerProps> = ({
         },
         inputSearchStyle: {
             backgroundColor: colors.cardBg2,
-            borderColor: '#ffb900',
+            borderColor: '#FACC15',
             borderWidth: 1,
             borderRadius: 8,
             color: colors.sectionHeaderText,
@@ -196,7 +203,7 @@ export const FilterDrawer: React.FC<FilterDrawerProps> = ({
         selectedStyle: {
             borderRadius: 8,
             backgroundColor: colors.borderColor,
-            borderColor: '#ffb900',
+            borderColor: '#FACC15',
             paddingHorizontal: 8,
             paddingVertical: 4,
             margin: 2,
@@ -314,6 +321,16 @@ export const FilterDrawer: React.FC<FilterDrawerProps> = ({
 
     const getMainCategoryLabel = (category: string) => {
         if (category === 'all') return t('filters.all');
+        const normalized = category.toLowerCase();
+        if (normalized === "malehairdresser" || normalized === "erkekberber") {
+            return t("barberType.maleHairdresser");
+        }
+        if (normalized === "femalehairdresser" || normalized === "kadinkuafor") {
+            return t("barberType.femaleHairdresser");
+        }
+        if (normalized === "beautysalon" || normalized === "guzelliksalonu") {
+            return t("barberType.beautySalon");
+        }
         return category;
     };
 
@@ -343,6 +360,23 @@ export const FilterDrawer: React.FC<FilterDrawerProps> = ({
         { label: t('filters.onlyFavorites'), value: true },
     ];
 
+    useEffect(() => {
+        const handleKeyboardShow = (event: KeyboardEvent) => {
+            setKeyboardHeight(event.endCoordinates?.height ?? 0);
+        };
+        const handleKeyboardHide = () => {
+            setKeyboardHeight(0);
+        };
+        const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+        const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+        const showSub = Keyboard.addListener(showEvent, handleKeyboardShow);
+        const hideSub = Keyboard.addListener(hideEvent, handleKeyboardHide);
+        return () => {
+            showSub.remove();
+            hideSub.remove();
+        };
+    }, []);
+
     return (
         <Modal
             visible={visible}
@@ -364,6 +398,11 @@ export const FilterDrawer: React.FC<FilterDrawerProps> = ({
                 {/* Drawer */}
                 <GestureDetector gesture={panGesture}>
                     <Animated.View style={[styles.drawer, { backgroundColor: colors.sheetBg }, drawerStyle]}>
+                        <KeyboardAvoidingView
+                            style={{ flex: 1 }}
+                            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                            keyboardVerticalOffset={Math.max(insets.top, 8)}
+                        >
                         {/* Header */}
                         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16, paddingTop: Math.max(16, insets.top + 8), borderBottomWidth: 1, borderBottomColor: colors.borderColor }}>
                             <Text className="text-white text-xl font-century-gothic-bold" style={{ color: colors.sectionHeaderText }}>{t('filters.title')}</Text>
@@ -376,7 +415,10 @@ export const FilterDrawer: React.FC<FilterDrawerProps> = ({
                         <ScrollView
                             className="flex-1 px-4"
                             showsVerticalScrollIndicator={false}
-                            contentContainerStyle={{ paddingBottom: 100, paddingTop: 16 }}
+                            keyboardShouldPersistTaps="handled"
+                            keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+                            contentInsetAdjustmentBehavior="always"
+                            contentContainerStyle={{ paddingBottom: 100 + keyboardHeight, paddingTop: 16 }}
                         >
                             {/* Kayıtlı Filtreler */}
                             {onLoadSavedFilter && savedFilters && savedFilters.length > 0 && (
@@ -401,6 +443,27 @@ export const FilterDrawer: React.FC<FilterDrawerProps> = ({
                                     <Divider style={{ backgroundColor: colors.borderColor, marginBottom: 16 }} />
                                 </>
                             )}
+
+                            {/* Keşif yarıçapı */}
+                            <Text style={{ color: colors.sectionHeaderText, fontSize: 14, fontFamily: 'CenturyGothicBold', marginBottom: 10 }}>
+                                {t('filters.searchRadius')}
+                            </Text>
+                            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 16 }} contentContainerStyle={{ gap: 8 }}>
+                                {[
+                                    { id: '10', label: t('filters.radius10km') },
+                                    { id: '50', label: t('filters.radius50km') },
+                                    { id: '100', label: t('filters.radius100km') },
+                                    { id: 'unlimited', label: t('filters.radiusUnlimited') },
+                                ].map((opt) => (
+                                    <FilterChipItem
+                                        key={opt.id}
+                                        label={opt.label}
+                                        selected={selectedDistancePreset === opt.id}
+                                        onPress={() => onChangeDistancePreset(opt.id)}
+                                    />
+                                ))}
+                            </ScrollView>
+                            <Divider style={{ backgroundColor: colors.borderColor, marginBottom: 16 }} />
 
                             {/* Kullanıcı Türü */}
                             {showUserTypeFilter && (
@@ -463,7 +526,7 @@ export const FilterDrawer: React.FC<FilterDrawerProps> = ({
                                         placeholderStyle={multiSelectStylesDynamic.placeholderStyle}
                                         selectedTextStyle={multiSelectStylesDynamic.selectedTextStyle}
                                         itemTextStyle={multiSelectStylesDynamic.itemTextStyle}
-                                        activeColor="#ffb900"
+                                        activeColor="#FACC15"
                                         selectedStyle={multiSelectStylesDynamic.selectedStyle}
                                         selectedTextProps={{ numberOfLines: 1 }}
                                     />
@@ -496,7 +559,7 @@ export const FilterDrawer: React.FC<FilterDrawerProps> = ({
                                         placeholderStyle={multiSelectStylesDynamic.placeholderStyle}
                                         selectedTextStyle={multiSelectStylesDynamic.selectedTextStyle}
                                         itemTextStyle={multiSelectStylesDynamic.itemTextStyle}
-                                        activeColor="#ffb900"
+                                        activeColor="#FACC15"
                                         selectedStyle={multiSelectStylesDynamic.selectedStyle}
                                         selectedTextProps={{ numberOfLines: 1 }}
                                     />
@@ -529,7 +592,7 @@ export const FilterDrawer: React.FC<FilterDrawerProps> = ({
                                         placeholderStyle={multiSelectStylesDynamic.placeholderStyle}
                                         selectedTextStyle={multiSelectStylesDynamic.selectedTextStyle}
                                         itemTextStyle={multiSelectStylesDynamic.itemTextStyle}
-                                        activeColor="#ffb900"
+                                        activeColor="#FACC15"
                                         selectedStyle={multiSelectStylesDynamic.selectedStyle}
                                         selectedTextProps={{ numberOfLines: 1 }}
                                     />
@@ -573,8 +636,8 @@ export const FilterDrawer: React.FC<FilterDrawerProps> = ({
                                         paddingVertical: 10,
                                         borderRadius: 12,
                                         borderWidth: 1,
-                                        backgroundColor: priceSort === 'asc' ? '#ffb900' : colors.cardBg2,
-                                        borderColor: priceSort === 'asc' ? '#ffb900' : colors.borderColor,
+                                        backgroundColor: priceSort === 'asc' ? '#FACC15' : colors.cardBg2,
+                                        borderColor: priceSort === 'asc' ? '#FACC15' : colors.borderColor,
                                     }}
                                     activeOpacity={0.7}
                                 >
@@ -594,8 +657,8 @@ export const FilterDrawer: React.FC<FilterDrawerProps> = ({
                                         paddingVertical: 10,
                                         borderRadius: 12,
                                         borderWidth: 1,
-                                        backgroundColor: priceSort === 'desc' ? '#ffb900' : colors.cardBg2,
-                                        borderColor: priceSort === 'desc' ? '#ffb900' : colors.borderColor,
+                                        backgroundColor: priceSort === 'desc' ? '#FACC15' : colors.cardBg2,
+                                        borderColor: priceSort === 'desc' ? '#FACC15' : colors.borderColor,
                                     }}
                                     activeOpacity={0.7}
                                 >
@@ -623,7 +686,7 @@ export const FilterDrawer: React.FC<FilterDrawerProps> = ({
                                         placeholder="0"
                                         textColor={colors.sectionHeaderText}
                                         outlineColor={colors.borderColor}
-                                        theme={{ roundness: 12, colors: { onSurfaceVariant: colors.textSecondary, primary: '#ffb900' } }}
+                                        theme={{ roundness: 12, colors: { onSurfaceVariant: colors.textSecondary, primary: '#FACC15' } }}
                                         style={{ backgroundColor: colors.cardBg2, borderWidth: 0 }}
                                     />
                                 </View>
@@ -639,7 +702,7 @@ export const FilterDrawer: React.FC<FilterDrawerProps> = ({
                                         placeholder="∞"
                                         textColor={colors.sectionHeaderText}
                                         outlineColor={colors.borderColor}
-                                        theme={{ roundness: 12, colors: { onSurfaceVariant: colors.textSecondary, primary: '#ffb900' } }}
+                                        theme={{ roundness: 12, colors: { onSurfaceVariant: colors.textSecondary, primary: '#FACC15' } }}
                                         style={{ backgroundColor: colors.cardBg2, borderWidth: 0 }}
                                     />
                                 </View>
@@ -708,7 +771,7 @@ export const FilterDrawer: React.FC<FilterDrawerProps> = ({
                                             onChangeText={setSaveNameInput}
                                             textColor={colors.sectionHeaderText}
                                             outlineColor={colors.borderColor}
-                                            activeOutlineColor="#ffb900"
+                                            activeOutlineColor="#FACC15"
                                             theme={{ roundness: 10, colors: { onSurfaceVariant: colors.textSecondary } }}
                                             style={{ flex: 1, backgroundColor: colors.cardBg2, height: 44 }}
                                         />
@@ -724,7 +787,7 @@ export const FilterDrawer: React.FC<FilterDrawerProps> = ({
                                                     setShowSaveInput(false);
                                                 }
                                             }}
-                                            style={{ backgroundColor: '#ffb900', borderRadius: 10, paddingHorizontal: 14, height: 44, alignItems: 'center', justifyContent: 'center' }}
+                                            style={{ backgroundColor: '#FACC15', borderRadius: 10, paddingHorizontal: 14, height: 44, alignItems: 'center', justifyContent: 'center' }}
                                             activeOpacity={0.8}
                                         >
                                             <Icon source="check" size={20} color="#1a1b25" />
@@ -743,11 +806,11 @@ export const FilterDrawer: React.FC<FilterDrawerProps> = ({
                                             if (isUpdateMode && activeFilter) setSaveNameInput(activeFilter.name);
                                             setShowSaveInput(true);
                                         }}
-                                        style={{ width: '100%', borderWidth: 1.5, borderColor: isUpdateMode ? '#ffb900' : colors.borderColor, borderRadius: 12, paddingVertical: 12, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6 }}
+                                        style={{ width: '100%', borderWidth: 1.5, borderColor: isUpdateMode ? '#FACC15' : colors.borderColor, borderRadius: 12, paddingVertical: 12, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6 }}
                                         activeOpacity={0.8}
                                     >
-                                        <Icon source={isUpdateMode ? "bookmark-check" : "bookmark-outline"} size={18} color={isUpdateMode ? '#ffb900' : colors.textSecondary} />
-                                        <Text style={{ color: isUpdateMode ? '#ffb900' : colors.textSecondary, fontSize: 14, fontFamily: 'CenturyGothic' }}>
+                                        <Icon source={isUpdateMode ? "bookmark-check" : "bookmark-outline"} size={18} color={isUpdateMode ? '#FACC15' : colors.textSecondary} />
+                                        <Text style={{ color: isUpdateMode ? '#FACC15' : colors.textSecondary, fontSize: 14, fontFamily: 'CenturyGothic' }}>
                                             {isUpdateMode ? t('filters.updateFilter') : t('filters.saveFilter')}
                                         </Text>
                                     </TouchableOpacity>
@@ -756,14 +819,15 @@ export const FilterDrawer: React.FC<FilterDrawerProps> = ({
                             {/* Temizle */}
                             <TouchableOpacity
                                 onPress={onClearFilters}
-                                style={{ width: '100%', borderWidth: 1.5, borderColor: '#ffb900', borderRadius: 12, paddingVertical: 12, alignItems: 'center', justifyContent: 'center' }}
+                                style={{ width: '100%', borderWidth: 1.5, borderColor: '#FACC15', borderRadius: 12, paddingVertical: 12, alignItems: 'center', justifyContent: 'center' }}
                                 activeOpacity={0.8}
                             >
-                                <Text style={{ color: '#ffb900', fontSize: 14, fontWeight: '600', fontFamily: 'CenturyGothic' }}>
+                                <Text style={{ color: '#FACC15', fontSize: 14, fontWeight: '600', fontFamily: 'CenturyGothic' }}>
                                     {t('filters.clear')}
                                 </Text>
                             </TouchableOpacity>
                         </View>
+                        </KeyboardAvoidingView>
                     </Animated.View>
                 </GestureDetector>
             </View>

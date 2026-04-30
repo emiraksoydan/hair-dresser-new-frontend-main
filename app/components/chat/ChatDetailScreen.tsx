@@ -28,6 +28,7 @@ import { BlurView } from "expo-blur";
 import { MotiView } from "moti";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { Text } from "../common/Text";
+import { KeyboardDismissExclusionView } from "../common/KeyboardDismissExclusionView";
 import { ChatBubbleAudio } from "./ChatBubbleAudio";
 import { useSafeNavigation } from "../../hook/useSafeNavigation";
 import { useActionGuard } from "../../hook/useActionGuard";
@@ -38,6 +39,7 @@ import {
   BottomSheetView,
 } from "@gorhom/bottom-sheet";
 import {
+  api,
   useGetChatMessagesByThreadQuery,
   useSendChatMessageMutation,
   useSendChatMessageByThreadMutation,
@@ -50,6 +52,7 @@ import {
   useNotifyTypingMutation,
   useToggleFavoriteMutation,
 } from "../../store/api";
+import { useAppDispatch } from "../../store/hook";
 import {
   ChatMessageItemDto,
   ChatMessageDto,
@@ -81,8 +84,9 @@ import { API_CONFIG } from "../../constants/api";
 import { tokenStore } from "../../lib/tokenStore";
 import { isExpired, attemptTokenRefresh } from "../../store/baseQuery";
 import { downsampleWaveformPeaks, meteringDbToNorm } from "../../utils/audioWaveform";
-import { File as ExpoFsFile, Paths } from "expo-file-system";
+import { File as ExpoFsFile, Directory as ExpoFsDirectory, Paths } from "expo-file-system";
 import { parseChatClipboardPayload } from "../../utils/chat/clipboardPayload";
+import { buildLocationMediaPayload, parseLocationMediaUrl } from "../../utils/chat/locationMediaUrl";
 import {
   primaryConfirmButtonColors,
   softCancelSurface,
@@ -92,9 +96,37 @@ import {
 /** Sohbette karşı tarafta profil fotoğrafı yokken */
 const CHAT_AVATAR_PLACEHOLDER = require("../../../assets/images/profileempty.webp");
 
+/**
+ * F7: Sesli mesajlar için LOW_QUALITY preset + özelleştirilmiş bitrate.
+ * Sohbet için HIGH_QUALITY (~128 kbps, stereo 44.1kHz) aşırı — dosya boyutu
+ * 2-4x büyüyor, yükleme süresi ve mobil veri tüketimi artıyor. Monoral 22.05kHz
+ * @ 32 kbps AAC konuşma kayıtları için yeterli (WhatsApp/Telegram da benzer seviyede).
+ * Metering yine açık — waveform preview için gerekli.
+ */
 const VOICE_RECORD_OPTIONS: Audio.RecordingOptions = {
-  ...Audio.RecordingOptionsPresets.HIGH_QUALITY,
+  ...Audio.RecordingOptionsPresets.LOW_QUALITY,
   isMeteringEnabled: true,
+  android: {
+    ...Audio.RecordingOptionsPresets.LOW_QUALITY.android,
+    extension: ".m4a",
+    outputFormat: Audio.AndroidOutputFormat.MPEG_4,
+    audioEncoder: Audio.AndroidAudioEncoder.AAC,
+    sampleRate: 22050,
+    numberOfChannels: 1,
+    bitRate: 32000,
+  },
+  ios: {
+    ...Audio.RecordingOptionsPresets.LOW_QUALITY.ios,
+    extension: ".m4a",
+    outputFormat: Audio.IOSOutputFormat.MPEG4AAC,
+    audioQuality: Audio.IOSAudioQuality.MEDIUM,
+    sampleRate: 22050,
+    numberOfChannels: 1,
+    bitRate: 32000,
+    linearPCMBitDepth: 16,
+    linearPCMIsBigEndian: false,
+    linearPCMIsFloat: false,
+  },
 };
 
 interface ChatDetailScreenProps {
@@ -308,8 +340,12 @@ type ChatBubbleImageProps = {
   t: (key: string) => string;
 };
 
-/** Chat görseli: yükleme göstergesi, hata + yeniden dene. */
-const ChatBubbleImage: React.FC<ChatBubbleImageProps> = ({
+/**
+ * Chat görseli: yükleme göstergesi, hata + yeniden dene.
+ * F8: React.memo ile sarıldı — parent ChatDetailScreen her render olduğunda (ör. typing,
+ * audio playback, input değişimi) her image bubble yeniden render olmasın.
+ */
+const ChatBubbleImageInner: React.FC<ChatBubbleImageProps> = ({
   mediaUrl,
   brandColor,
   mutedTextColor,
@@ -349,11 +385,24 @@ const ChatBubbleImage: React.FC<ChatBubbleImageProps> = ({
   return (
     <TouchableOpacity activeOpacity={0.85} onPress={() => onOpen(uri)}>
       <View style={{ width: 220, height: 160, borderRadius: 12, overflow: "hidden", backgroundColor: cardBg2 }}>
+        {/*
+          F8: expo-image'a geçiş pahalı bir native rebuild gerektiriyor, bu yüzden RN Image
+          üzerinde güvenli optimizasyonlar uygulandı:
+          - `fadeDuration={0}` (android): 300ms fade-in flicker'ı kaldırır, thread içinde
+            scroll ederken görsellerin tekrar tekrar solunup belirmesi önlenir.
+          - `progressiveRenderingEnabled`: büyük görseller aşamalı olarak çizilir.
+          - resizeMethod="resize" (android): decode aşamasında target size'a scale, bellek
+            kullanımı ~%70 azalır.
+          İleri optimizasyon için `expo-image` geçişi önerilir (disk cache + placeholder).
+        */}
         <Image
           key={retryKey}
           source={{ uri }}
           style={{ width: 220, height: 160 }}
           resizeMode="cover"
+          fadeDuration={0}
+          progressiveRenderingEnabled
+          resizeMethod="resize"
           onLoadStart={() => {
             setLoading(true);
             setFailed(false);
@@ -385,6 +434,32 @@ const ChatBubbleImage: React.FC<ChatBubbleImageProps> = ({
     </TouchableOpacity>
   );
 };
+
+// F8: React.memo — sadece mediaUrl / renk değiştiğinde yeniden render.
+const ChatBubbleImage = React.memo(ChatBubbleImageInner);
+
+// F3: Stabil keyExtractor — FlatList her render'da yeni fonksiyon almasın diye
+// component dışına alındı; böylece dahili `_onCellLayout` cache'i temiz kalır.
+const messageRowKeyExtractor = (item: { key: string }): string => item.key;
+
+// F4: Yazıyor-indicator'ı kendi React.memo component'i olarak ayrıldı. Böylece
+// parent re-render olduğunda (yeni mesaj, renk teması, input değişimi vb.) typing
+// barı gereksiz re-render almaz; sadece `label` değiştiğinde render olur.
+const TypingIndicatorBar: React.FC<{
+  label: string | null;
+  typingSuffix: string;
+  mutedTextColor: string;
+}> = React.memo(({ label, typingSuffix, mutedTextColor }) => {
+  if (!label) return null;
+  return (
+    <View className="flex-row items-center px-4 py-2">
+      <Text className="text-xs italic" style={{ color: mutedTextColor }}>
+        {label} {typingSuffix}
+      </Text>
+    </View>
+  );
+});
+TypingIndicatorBar.displayName = "TypingIndicatorBar";
 
 export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({
   threadId,
@@ -500,26 +575,101 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({
     }
   }, [isLoadingThreads, threads, currentThread, threadId, refetchThreads]);
 
+  const MESSAGES_PAGE_SIZE = 30;
+  /** RN `onEndReached` (özellikle inverted) ilk layout'ta yanlış tetiklenebilir — footer spinner flash'ını önler. */
+  const CHAT_MESSAGES_END_REACHED_GRACE_MS = 450;
+  const suppressChatEndReachedUntilMsRef = useRef(0);
+  const bumpChatEndReachedGrace = useCallback(() => {
+    suppressChatEndReachedUntilMsRef.current = Date.now() + CHAT_MESSAGES_END_REACHED_GRACE_MS;
+  }, []);
   const {
     data: messages,
     isLoading,
     refetch,
   } = useGetChatMessagesByThreadQuery(
-    { threadId },
+    { threadId, limit: MESSAGES_PAGE_SIZE },
     { skip: skipChatMessages },
   );
 
   const [messagesRefreshing, setMessagesRefreshing] = useState(false);
   const onMessagesRefresh = useCallback(async () => {
     setMessagesRefreshing(true);
+    bumpChatEndReachedGrace();
     try {
+      // Pull-to-refresh → pagination state'i sıfırla (tekrar en yeni sayfa + yeni eski sayfalar çekilebilsin).
+      hasMoreRef.current = true;
+      lastLoadedBeforeRef.current = null;
       await Promise.all([refetch(), refetchThreads()]);
     } catch {
       /* ignore */
     } finally {
       setMessagesRefreshing(false);
     }
-  }, [refetch, refetchThreads]);
+  }, [refetch, refetchThreads, bumpChatEndReachedGrace]);
+
+  // ---------------------------------------------------------------------------
+  // Infinite scroll / older-page loader.
+  //
+  // Strateji:
+  //  - RTK Query tarafında `serializeQueryArgs` sadece `threadId`e bakıyor ⇒ tek cache entry.
+  //  - `loadOlder()` en eski mesajın `createdAt`ini `before` cursor olarak geçip dispatch eder;
+  //    merge fonksiyonu sonucu cache'in BAŞINA prepend eder.
+  //  - Inverted FlatList'te "en eski" = listenin sonu ⇒ `onEndReached` ile tetiklenir.
+  //  - Sunucu `MESSAGES_PAGE_SIZE`den az dönerse başka sayfa yok demektir → `hasMore=false`.
+  //  - Aynı cursor ile tekrar tetiklenmeyi önlemek için `lastLoadedBeforeRef` tutuluyor;
+  //    scroll momentum sırasında birden fazla çağrıyı da `isLoadingOlderRef` bloklar.
+  // ---------------------------------------------------------------------------
+  const dispatch = useAppDispatch();
+  const [isLoadingOlder, setIsLoadingOlder] = useState(false);
+  const isLoadingOlderRef = useRef(false);
+  const hasMoreRef = useRef(true);
+  const lastLoadedBeforeRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    hasMoreRef.current = true;
+    lastLoadedBeforeRef.current = null;
+    isLoadingOlderRef.current = false;
+    setIsLoadingOlder(false);
+    bumpChatEndReachedGrace();
+  }, [threadId, bumpChatEndReachedGrace]);
+
+  const loadOlderMessages = useCallback(async () => {
+    if (!threadId) return;
+    if (Date.now() < suppressChatEndReachedUntilMsRef.current) return;
+    if (isLoadingOlderRef.current) return;
+    if (!hasMoreRef.current) return;
+    if (!messages || messages.length === 0) return;
+
+    const oldest = messages[0];
+    if (!oldest?.createdAt) return;
+    const beforeIso = oldest.createdAt;
+    // Tie-breaker: aynı CreatedAt'a sahip 2+ mesajda MessageId ile sıkı sıralama.
+    const beforeMsgId = oldest.messageId;
+    const cursorKey = `${beforeIso}|${beforeMsgId ?? ""}`;
+    if (lastLoadedBeforeRef.current === cursorKey) return; // aynı cursor: skip
+
+    isLoadingOlderRef.current = true;
+    lastLoadedBeforeRef.current = cursorKey;
+    setIsLoadingOlder(true);
+    try {
+      const result = await dispatch(
+        api.endpoints.getChatMessagesByThread.initiate(
+          { threadId, before: beforeIso, beforeId: beforeMsgId, limit: MESSAGES_PAGE_SIZE },
+          { subscribe: false, forceRefetch: true },
+        ),
+      ).unwrap();
+      const fetchedCount = Array.isArray(result) ? result.length : 0;
+      if (fetchedCount < MESSAGES_PAGE_SIZE) {
+        hasMoreRef.current = false;
+      }
+    } catch {
+      // Hata: cursor'u geri al ki kullanıcı tekrar deneyebilsin.
+      lastLoadedBeforeRef.current = null;
+    } finally {
+      isLoadingOlderRef.current = false;
+      setIsLoadingOlder(false);
+    }
+  }, [threadId, messages, dispatch]);
 
   const [toggleFavorite, { isLoading: isTogglingFavorite }] = useToggleFavoriteMutation();
 
@@ -550,6 +700,8 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({
   const markReadInFlightRef = useRef(false);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastTypingNotificationRef = useRef(false);
+  // F5: Önceki input length — paste-detection için (delta büyükse JSON.parse çalıştır).
+  const prevMessageTextLenRef = useRef(0);
   const autoReadTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const markThreadRead = useCallback(async () => {
@@ -565,6 +717,47 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({
       markThreadRead();
     }
   }, [threadId, currentThread?.unreadCount, markThreadRead]);
+
+  /**
+   * F6: Tek bir clipboard cache dosyasını sessizce sil.
+   * Kullanım: yapıştırma gönderildikten veya iptal edildikten sonra.
+   */
+  const deleteClipboardCacheFile = useCallback((fileUri: string | null | undefined) => {
+    if (!fileUri) return;
+    try {
+      const f = new ExpoFsFile(fileUri);
+      if (f.exists) f.delete();
+    } catch {
+      /* silme hatası sessiz — sweep bir sonraki mount'ta yakalar */
+    }
+  }, []);
+
+  /**
+   * F6: Mount'ta orphan clipboard-paste-*.jpg dosyalarını temizle.
+   * Daha önce yapıştırılmış ama gönderilmeden/iptal edilmeden uygulama öldürülmüş olabilir;
+   * cache'te birikip disk alanını yer. 1 saatten eski olanları sil.
+   */
+  useEffect(() => {
+    try {
+      const dir = new ExpoFsDirectory(Paths.cache);
+      if (!dir.exists) return;
+      const entries = dir.list();
+      const ONE_HOUR_MS = 60 * 60 * 1000;
+      const now = Date.now();
+      for (const entry of entries) {
+        if (!(entry instanceof ExpoFsFile)) continue;
+        const name = entry.name ?? "";
+        if (!name.startsWith("clipboard-paste-")) continue;
+        const match = /clipboard-paste-(\d+)\.jpg$/.exec(name);
+        const ts = match ? Number(match[1]) : NaN;
+        if (Number.isFinite(ts) && now - ts > ONE_HOUR_MS) {
+          try { entry.delete(); } catch { /* ignore */ }
+        }
+      }
+    } catch {
+      /* cache okunamazsa önemli değil */
+    }
+  }, []);
 
   useEffect(() => {
     if (!threadId) return;
@@ -633,8 +826,19 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({
 
   const handleTextChange = useCallback((text: string) => {
     let nextText = text;
+    // F5: JSON clipboard payload parse'ı SADECE gerçek paste olduğunda çalıştır.
+    // Paste detection: text uzunluğu bir anda büyük artış + `{` ile başlayıp `}` ile bitiyor.
+    // Kullanıcı `{` karakteri yazarken her tuş vuruşunda JSON.parse çağrılmasın.
+    const prevLen = prevMessageTextLenRef.current;
+    const delta = text.length - prevLen;
     const trimmed = text.trim();
-    if (trimmed.startsWith("{")) {
+    const looksLikePayloadPaste =
+      delta >= 8 &&
+      trimmed.length >= 12 &&
+      trimmed.startsWith("{") &&
+      trimmed.endsWith("}") &&
+      trimmed.includes("_chatClip");
+    if (looksLikePayloadPaste) {
       const parsed = parseChatClipboardPayload(trimmed);
       if (parsed) {
         if (parsed.messageType === ChatMessageType.Text) {
@@ -651,6 +855,7 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({
         }
       }
     }
+    prevMessageTextLenRef.current = nextText.length;
     setMessageText(nextText);
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
     const shouldNotify = nextText.trim().length > 0 && canSendMessage && isConnected;
@@ -688,8 +893,13 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({
       return;
     }
 
-    // Medya yapıştırma: önizleme kartı, uzun basma veya girişe düz yapıştırılan _chatClip JSON
-    const parsedFromInput = parseChatClipboardPayload(messageText.trim());
+    // F5: Medya yapıştırma — önizleme kartı veya girişe düz yapıştırılan _chatClip JSON.
+    // `pendingPaste` dolu ise payload'ı tekrar parse etmeye gerek yok (gereksiz JSON.parse).
+    const trimmedForSend = messageText.trim();
+    const parsedFromInput =
+      pendingPaste || !trimmedForSend.startsWith("{") || !trimmedForSend.includes("_chatClip")
+        ? null
+        : parseChatClipboardPayload(trimmedForSend);
     const effectiveMediaPaste: AppClipboard | null =
       pendingPaste && pendingPaste.messageType !== ChatMessageType.Text
         ? pendingPaste
@@ -709,6 +919,7 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({
       setPendingPaste(null);
       setAppClipboard(null);
       setMessageText("");
+      prevMessageTextLenRef.current = 0;
       let mediaUrl = paste.mediaUrl;
       if (!mediaUrl && paste.localPastedFileUri && token && currentUserId) {
         try {
@@ -747,13 +958,17 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({
       } else {
         alertError(t("common.error"), paste.localPastedFileUri ? t("chat.imageUploadFailed") : t("chat.messageSendFailed"));
       }
+      // F6: Yapıştırma gönderimi tamamlandı (başarı veya hata fark etmeksizin) —
+      // cache'teki geçici clipboard dosyasını sil. Mount-sweep fallback olarak kalır.
+      deleteClipboardCacheFile(paste.localPastedFileUri);
       return;
     }
 
     let textToSend = pendingPaste?.text?.trim() || messageText.trim();
-    const parsedLine = parseChatClipboardPayload(messageText.trim());
-    if (parsedLine && parsedLine.messageType === ChatMessageType.Text && (parsedLine.text ?? "").trim()) {
-      textToSend = (parsedLine.text ?? "").trim();
+    // F5: Üstte hesaplanan `parsedFromInput`'ı yeniden kullan. pendingPaste varsa zaten null,
+    // o durumda da pendingPaste.text üzerinden devam ediyoruz. İkinci JSON.parse çağrısı yok.
+    if (parsedFromInput && parsedFromInput.messageType === ChatMessageType.Text && (parsedFromInput.text ?? "").trim()) {
+      textToSend = (parsedFromInput.text ?? "").trim();
     }
     if (!textToSend || !threadId || isSending) return;
 
@@ -776,6 +991,7 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({
     };
     setOptimisticMessages((prev) => [...prev, optimisticMsg]);
     setMessageText("");
+    prevMessageTextLenRef.current = 0;
     setReplyingTo(null);
 
     let sendResult;
@@ -785,19 +1001,30 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({
       sendResult = await sendMessageByThread({ threadId, text: textToSend, replyToMessageId: replyToId });
     }
 
+    // Çift animasyon fix: mutation başarılıysa backend'den dönen confirmed messageId'yi
+    // animated-set'e pre-emptively ekle. Optimistic (temp-<ts>) tick işaretlenirken zaten
+    // animate edilmişti; confirmed mesaj farklı ID ile cache'e girdiği için normalde bubble
+    // yeniden "ilk kez görüyormuş gibi" slide-in oynatıyordu. Render sırasında animatedSet'te
+    // bulunduğu için `from` undefined kalır ve ikinci animasyon oynamaz.
+    if (!("error" in sendResult)) {
+      const confirmedId = (sendResult.data as any)?.data?.messageId as string | undefined;
+      if (confirmedId) animatedMessageIds.current.add(confirmedId);
+    }
     setOptimisticMessages((prev) => prev.filter((m) => m.messageId !== tempId));
 
     if ("error" in sendResult) {
       setMessageText(textToSend);
+      prevMessageTextLenRef.current = textToSend.length;
       const errorMessage = (sendResult.error as any)?.data?.message || t("chat.messageSendFailed");
       alertError(t("common.error"), errorMessage);
-    } else {
-      setTimeout(() => refetch(), 300);
     }
+    // NOT: Başarı durumunda refetch çağrılmıyor; RTK Query `sendChatMessage*` mutation'ı
+    // kendi `onQueryStarted` bloğunda mesajı cache'e yazıyor, ek olarak SignalR `chat.message`
+    // eventi tüm istemcileri (sender dahil) canlı olarak güncelliyor. Gereksiz tam liste çağrısı.
   }), [
     guard, messageText, pendingPaste, threadId, isSending, canSendMessage, isConnected, currentUserId, token,
     currentThread, replyingTo, sendMessageByThread, sendMessageByAppointment,
-    sendChatMedia, stopTyping, t, alertError, refetch,
+    sendChatMedia, stopTyping, t, alertError,
   ]);
 
   // --- Image picker ---
@@ -850,8 +1077,18 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({
     try {
       const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced, timeInterval: 10000 });
       const { latitude, longitude } = loc.coords;
-      const mediaUrl = `geo:${latitude},${longitude}`;
-      await sendChatMedia({ threadId, messageType: ChatMessageType.Location, mediaUrl, replyToMessageId: replyingTo?.messageId ?? null });
+      const mediaUrl = buildLocationMediaPayload(latitude, longitude);
+      const result = await sendChatMedia({
+        threadId,
+        messageType: ChatMessageType.Location,
+        mediaUrl,
+        replyToMessageId: replyingTo?.messageId ?? null,
+      });
+      if ("error" in result) {
+        const errorMessage = (result.error as any)?.data?.message || t("chat.locationFailed");
+        alertError(t("common.error"), errorMessage);
+        return;
+      }
       setReplyingTo(null);
     } catch {
       alertError(t("common.error"), t("chat.locationFailed"));
@@ -1226,12 +1463,39 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({
     try { return [...messages].reverse(); } catch { return []; }
   }, [messages]);
 
+  /**
+   * F4: Typing label'ı memo'da hesapla — typingUsers veya participants değişmedikçe
+   * aynı string döner. Daha sonra `TypingIndicatorBar` içine prop olarak geçer, yani
+   * normal mesaj geldiğinde bu component yeniden render olmaz.
+   */
+  const typingLabel = useMemo<string | null>(() => {
+    if (typingUsers.size === 0) return null;
+    const names: string[] = [];
+    typingUsers.forEach((uid) => {
+      const p = participants.find((x) => x.userId === uid);
+      names.push(p?.displayName || t("chat.someone"));
+    });
+    return names.join(", ");
+  }, [typingUsers, participants, t]);
+
   /** inverted FlatList: dizi başı = ekranın altı (en yeni); optimistic üstte */
   const displayMessages = useMemo<Array<ChatMessageItemDto | OptimisticMessage>>(() => {
     if (optimisticMessages.length === 0) return sortedMessages;
     const confirmedTexts = new Set(
       sortedMessages.filter((m) => m.senderUserId === currentUserId).map((m) => m.text),
     );
+    // Çift-animasyon yedek güvence: SignalR `chat.message` eventi mutation response'tan
+    // önce gelirse confirmed mesaj cache'e yazılır ve optimistic hâlâ listede olur. Bu
+    // anda confirmed'in `messageId`'sini animated-set'e senkron ekleyerek bubble'ın
+    // renderItem içinde `isNewMessage=true` dönmesini (ve slide-in'i tekrar oynatmasını)
+    // engelliyoruz. Eşleşme senderUserId + metin üzerinden yapılıyor.
+    for (const opt of optimisticMessages) {
+      if (!confirmedTexts.has(opt.text)) continue;
+      const confirmed = sortedMessages.find(
+        (m) => m.senderUserId === currentUserId && m.text === opt.text,
+      );
+      if (confirmed) animatedMessageIds.current.add(confirmed.messageId);
+    }
     const stillPending = optimisticMessages.filter((o) => !confirmedTexts.has(o.text));
     if (stillPending.length === 0) return sortedMessages;
     return [...[...stillPending].reverse(), ...sortedMessages];
@@ -1463,11 +1727,27 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({
         <FlatList
           ref={flatListRef}
           data={messageRows}
-        keyExtractor={(item) => item.key}
+        keyExtractor={messageRowKeyExtractor}
         contentContainerStyle={{ flexGrow: 1, padding: 16, gap: 12, backgroundColor: colors.screenBg }}
         inverted
         scrollEventThrottle={16}
         keyboardShouldPersistTaps="handled"
+        // F2: Performans propları — uzun thread'lerde scroll jank'ini azaltır
+        initialNumToRender={15}
+        maxToRenderPerBatch={10}
+        windowSize={11}
+        updateCellsBatchingPeriod={50}
+        removeClippedSubviews={Platform.OS === "android"}
+        // Pagination: inverted listede "end" = en eski mesaj. Yukarı scroll'da tetiklenir.
+        onEndReached={loadOlderMessages}
+        onEndReachedThreshold={0.5}
+        ListFooterComponent={
+          isLoadingOlder ? (
+            <View style={{ paddingVertical: 12, alignItems: "center" }}>
+              <ActivityIndicator size="small" color={brandColor} />
+            </View>
+          ) : null
+        }
         onScrollToIndexFailed={() => {
           /* offset: 0 tüm listeyi alta sıçratıyordu; sessiz bırak */
         }}
@@ -1611,19 +1891,17 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({
                       <TouchableOpacity
                         activeOpacity={0.85}
                         onPress={async () => {
-                          const coords = message.mediaUrl!.replace("geo:", "").split(",");
-                          if (coords.length === 2) {
-                            const lat = coords[0];
-                            const lng = coords[1];
-                            const nativeUrl = Platform.OS === "ios"
-                              ? `maps://?q=${lat},${lng}`
-                              : `geo:${lat},${lng}?q=${lat},${lng}`;
-                            const webUrl = `https://www.google.com/maps?q=${lat},${lng}`;
-                            const canOpen = await Linking.canOpenURL(nativeUrl).catch(() => false);
-                            Linking.openURL(canOpen ? nativeUrl : webUrl).catch(() => {
-                              Linking.openURL(webUrl);
-                            });
-                          }
+                          const parsed = parseLocationMediaUrl(message.mediaUrl);
+                          if (!parsed) return;
+                          const { lat, lng } = parsed;
+                          const nativeUrl = Platform.OS === "ios"
+                            ? `maps://?q=${lat},${lng}`
+                            : `geo:${lat},${lng}?q=${lat},${lng}`;
+                          const webUrl = `https://www.google.com/maps?q=${lat},${lng}`;
+                          const canOpen = await Linking.canOpenURL(nativeUrl).catch(() => false);
+                          Linking.openURL(canOpen ? nativeUrl : webUrl).catch(() => {
+                            Linking.openURL(webUrl);
+                          });
                         }}
                       >
                         <View className="flex-row items-center gap-2 px-1 py-1">
@@ -1810,14 +2088,11 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({
           </View>
         }
         ListHeaderComponent={
-          typingUsers.size > 0 ? (
-            <View className="flex-row items-center px-4 py-2">
-              <Text className="text-xs italic" style={{ color: mutedTextColor }}>
-                {Array.from(typingUsers).map((uid) => participants.find((p) => p.userId === uid)?.displayName || t("chat.someone")).join(", ")}{" "}
-                {t("chat.typing")}
-              </Text>
-            </View>
-          ) : null
+          <TypingIndicatorBar
+            label={typingLabel}
+            typingSuffix={t("chat.typing")}
+            mutedTextColor={mutedTextColor}
+          />
         }
         />
       </GestureDetector>
@@ -1945,17 +2220,24 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({
                           : ""}
               </Text>
             </View>
-            <TouchableOpacity onPress={() => { setPendingPaste(null); setAppClipboard(null); }} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <TouchableOpacity
+              onPress={() => {
+                // F6: İptal edilen yapıştırma için cache dosyasını sil.
+                deleteClipboardCacheFile(pendingPaste?.localPastedFileUri ?? null);
+                setPendingPaste(null);
+                setAppClipboard(null);
+              }}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
               <Icon source="close" size={18} color={mutedTextColor} />
             </TouchableOpacity>
           </View>
         )}
 
-        {/* Main input row */}
-        <View className="flex-row items-end gap-2 px-4 pt-3">
+        {/* Main input row — GlobalKeyboardDismisser bu satırı hariç tutar */}
+        <KeyboardDismissExclusionView className="flex-row items-end gap-2 px-4 pt-3">
           {/* Text input */}
-          <TouchableOpacity
-            activeOpacity={1}
+          <Pressable
             onLongPress={handleInputLongPress}
             delayLongPress={500}
             className="flex-1 flex-row items-end rounded-3xl px-4 py-1"
@@ -1988,7 +2270,7 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({
                 color: colors.sectionHeaderText,
               }}
             />
-          </TouchableOpacity>
+          </Pressable>
 
           {/* Mic or Send button */}
           {(messageText.trim() || pendingPaste) ? (
@@ -2115,7 +2397,7 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({
               </Pressable>
             </View>
           )}
-        </View>
+        </KeyboardDismissExclusionView>
         {isSendingMedia && (
           <View className="mx-4 mt-2 flex-row items-center gap-2">
             <ActivityIndicator size="small" color={brandColor} />

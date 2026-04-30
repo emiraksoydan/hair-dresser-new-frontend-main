@@ -4,7 +4,8 @@ import { Text } from '../../components/common/Text'
 import { Avatar, HelperText, Icon, IconButton, Modal as PaperModal, Portal, Switch, TextInput } from "react-native-paper";
 import { OtpInput } from 'react-native-otp-entry';
 import { Button } from '../../components/common/Button';
-import { useRevokeMutation, useGetMeQuery, useUpdateProfileMutation, useUploadImageMutation, useUpdateImageBlobMutation, useGetSettingQuery, useUpdateSettingMutation, useGetSubscriptionStatusQuery, useSendPhoneChangeOtpMutation, useUpdatePhoneMutation, useGetMineStoresQuery, useSendDeleteAccountOtpMutation, useDeleteAccountMutation, useDeleteImageMutation } from '../../store/api';
+import { useRevokeMutation, useGetMeQuery, useUpdateProfileMutation, useUploadImageMutation, useUpdateImageBlobMutation, useGetSettingQuery, useUpdateSettingMutation, useGetSubscriptionStatusQuery, useSendPhoneChangeOtpMutation, useUpdatePhoneMutation, useGetMineStoresQuery, useSendDeleteAccountOtpMutation, useDeleteAccountMutation, useDeleteImageMutation, useUnregisterFcmTokenMutation } from '../../store/api';
+import { getCurrentFcmToken } from '../../hook/useFcmToken';
 import { tokenStore } from '../../lib/tokenStore';
 import { clearStoredTokens, saveTokens } from '../../lib/tokenStorage';
 import { resetSignalRState } from '../../store/signalrSlice';
@@ -13,6 +14,7 @@ import { useForm, Controller } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { handlePickImage } from '../../utils/form/pick-document';
+import { ImageUploadHint } from '../../components/common/ImageUploadHint';
 import { ImageOwnerType } from '../../types';
 import { useAppDispatch } from '../../store/hook';
 import { showSnack } from '../../store/snackbarSlice';
@@ -25,10 +27,12 @@ import { useLanguage } from '../../hook/useLanguage';
 import { LanguageSelector } from '../../components/common/LanguageSelector';
 import { useThemeContext } from '../../context/ThemeContext';
 import { usePermissionSwitches } from '../../hook/usePermissionSwitches';
+import { useSerialAsyncQueue } from '../../hook/useSerialAsyncQueue';
 import { useTheme } from '../../hook/useTheme';
 import { DEFAULT_AVATAR } from '../../constants/images';
 import { useSafeNavigation } from '../../hook/useSafeNavigation';
 import { useActionGuard } from '../../hook/useActionGuard';
+import { useAlert } from '../../hook/useAlert';
 import { getTabFabScrollPadding } from '../../components/layout/panelBottomOverlays';
 import { getProfilePaperSwitchProps } from '../../constants/colors';
 import { jwtDecode } from 'jwt-decode';
@@ -61,9 +65,11 @@ const Index = () => {
     const resolver = useMemo(() => zodResolver(profileSchema), [profileSchema]);
     const router = useSafeNavigation();
     const guard = useActionGuard();
+    const { confirm } = useAlert();
     const insets = useSafeAreaInsets();
     const scrollBottomPad = useMemo(() => getTabFabScrollPadding(insets.bottom), [insets.bottom]);
     const [logout, { isLoading: isLoggingOut }] = useRevokeMutation();
+    const [unregisterFcmToken] = useUnregisterFcmTokenMutation();
     const [deleteAccount, { isLoading: isDeletingAccount }] = useDeleteAccountMutation();
     const [sendDeleteAccountOtp, { isLoading: isSendingDeleteOtp }] = useSendDeleteAccountOtpMutation();
     const [deleteAccountModalVisible, setDeleteAccountModalVisible] = useState(false);
@@ -74,16 +80,21 @@ const Index = () => {
     const [updateProfile, { isLoading: isUpdating }] = useUpdateProfileMutation();
     const [uploadImage] = useUploadImageMutation();
     const [updateImageBlob] = useUpdateImageBlobMutation();
-    const [deleteImage] = useDeleteImageMutation();
+    const [deleteImage, { isLoading: isDeletingImage }] = useDeleteImageMutation();
     const { data: settingData, isLoading: isLoadingSetting } = useGetSettingQuery();
     const { data: subscriptionData } = useGetSubscriptionStatusQuery();
     const { data: mineStores = [] } = useGetMineStoresQuery();
-    const [updateSetting, { isLoading: isUpdatingSetting }] = useUpdateSettingMutation();
+    const [updateSetting] = useUpdateSettingMutation();
     const [sendPhoneChangeOtp, { isLoading: isSendingOtp }] = useSendPhoneChangeOtpMutation();
     const [updatePhone, { isLoading: isUpdatingPhone }] = useUpdatePhoneMutation();
     const dispatch = useAppDispatch();
     const [refreshing, setRefreshing] = useState(false);
-    const isUpdatingSettingRef = useRef(false);
+    const latestSettingPayloadRef = useRef({
+        showImageAnimation: true,
+        showPriceAnimation: true,
+        enableNotificationSound: true,
+    });
+    const [isProfileImageFlowBusy, setIsProfileImageFlowBusy] = useState(false);
     const [phoneModalVisible, setPhoneModalVisible] = useState(false);
     const [phoneChangeStep, setPhoneChangeStep] = useState<'input' | 'otp'>('input');
     const [newPhoneInput, setNewPhoneInput] = useState('');
@@ -96,13 +107,52 @@ const Index = () => {
     const displayEnableNotificationSound = localEnableNotificationSound !== null ? localEnableNotificationSound : (settingData?.data?.enableNotificationSound ?? true);
     const { switchAccount } = useMultiAccount();
 
+    const enqueueSettingsPersist = useSerialAsyncQueue();
+
     useEffect(() => {
         if (settingData?.data) {
-            setLocalShowImageAnimation(settingData.data.showImageAnimation);
-            setLocalShowPriceAnimation(settingData.data.showPriceAnimation);
-            setLocalEnableNotificationSound(settingData.data.enableNotificationSound);
+            const d = settingData.data;
+            latestSettingPayloadRef.current = {
+                showImageAnimation: d.showImageAnimation ?? true,
+                showPriceAnimation: d.showPriceAnimation ?? true,
+                enableNotificationSound: d.enableNotificationSound ?? true,
+            };
+            setLocalShowImageAnimation(d.showImageAnimation);
+            setLocalShowPriceAnimation(d.showPriceAnimation);
+            setLocalEnableNotificationSound(d.enableNotificationSound);
         }
     }, [settingData?.data?.showImageAnimation, settingData?.data?.showPriceAnimation, settingData?.data?.enableNotificationSound]);
+
+    const persistSettings = useCallback(() => {
+        enqueueSettingsPersist(async () => {
+            const payload = { ...latestSettingPayloadRef.current };
+            try {
+                const settingResult = await updateSetting(payload).unwrap();
+                dispatch(showSnack({ message: settingResult.message || t('settings.updateSuccess'), isError: false }));
+            } catch (error: any) {
+                const errorMessage = error?.data?.message || getErrorMessage(error);
+                dispatch(showSnack({ message: errorMessage || t('profile.settingUpdateError'), isError: true }));
+                try {
+                    const refreshed = await dispatch(
+                        api.endpoints.getSetting.initiate(undefined, { forceRefetch: true }),
+                    ).unwrap();
+                    if (refreshed?.data) {
+                        const d = refreshed.data;
+                        latestSettingPayloadRef.current = {
+                            showImageAnimation: d.showImageAnimation ?? true,
+                            showPriceAnimation: d.showPriceAnimation ?? true,
+                            enableNotificationSound: d.enableNotificationSound ?? true,
+                        };
+                        setLocalShowImageAnimation(d.showImageAnimation);
+                        setLocalShowPriceAnimation(d.showPriceAnimation);
+                        setLocalEnableNotificationSound(d.enableNotificationSound);
+                    }
+                } catch {
+                    /* ignore */
+                }
+            }
+        });
+    }, [enqueueSettingsPersist, updateSetting, dispatch, t]);
 
     // Memoize theme objects
     const textInputTheme = useMemo(() => ({
@@ -245,6 +295,7 @@ const Index = () => {
     }, [newPhoneInput, otpCode, updatePhone, dispatch, t, closePhoneModal, refetch]);
 
     const handleImagePick = useCallback(() => guard(async () => {
+        setIsProfileImageFlowBusy(true);
         try {
             const file = await handlePickImage();
             if (!file || !userData?.data?.id) return;
@@ -285,24 +336,39 @@ const Index = () => {
             }
         } catch (error: any) {
             dispatch(showSnack({ message: error?.message ?? t('profile.photoUploadError'), isError: true }));
+        } finally {
+            setIsProfileImageFlowBusy(false);
         }
-    }), [guard, userData?.data?.id, userData?.data?.imageId, uploadImage, updateImageBlob, dispatch, t]);
+    }), [guard, userData?.data?.id, userData?.data?.imageId, uploadImage, updateImageBlob, dispatch, t, refetch]);
 
-    const handleDeleteImage = useCallback(async () => {
+    const handleDeleteImagePress = useCallback(() => {
         const imageId = userData?.data?.imageId;
         if (!imageId) return;
-        try {
-            const result = await deleteImage(imageId);
-            if ('error' in result) {
-                dispatch(showSnack({ message: (result.error as any)?.data?.message ?? t('profile.photoUploadError'), isError: true }));
-                return;
-            }
-            dispatch(showSnack({ message: t('profile.photoDeleted'), isError: false }));
-            await refetch();
-        } catch (error: any) {
-            dispatch(showSnack({ message: error?.message ?? t('profile.photoUploadError'), isError: true }));
-        }
-    }, [userData?.data?.imageId, deleteImage, dispatch, t, refetch]);
+        confirm(
+            t('profile.confirmDeletePhotoTitle'),
+            t('profile.confirmDeletePhotoMessage'),
+            () => {
+                void guard(async () => {
+                    try {
+                        const result = await deleteImage(imageId);
+                        if ('error' in result) {
+                            dispatch(showSnack({ message: (result.error as any)?.data?.message ?? t('profile.photoUploadError'), isError: true }));
+                            return;
+                        }
+                        dispatch(showSnack({ message: t('profile.photoDeleted'), isError: false }));
+                        await refetch();
+                    } catch (error: any) {
+                        dispatch(showSnack({ message: error?.message ?? t('profile.photoUploadError'), isError: true }));
+                    }
+                });
+            },
+            undefined,
+            t('common.delete'),
+            t('common.cancel')
+        );
+    }, [userData?.data?.imageId, confirm, t, guard, deleteImage, dispatch, refetch]);
+
+    const avatarImageActionsLocked = isProfileImageFlowBusy || isDeletingImage;
 
     const handleRefresh = useCallback(async () => {
         setRefreshing(true);
@@ -332,6 +398,12 @@ const Index = () => {
                     const decoded = jwtDecode<JwtPayload>(currentAccessToken);
                     loggedOutUserId = decoded.identifier || (decoded as any).sub || null;
                 } catch {}
+            }
+
+            // FCM token'ı auth temizlenmeden önce sil (auth gerektirir).
+            const fcmTok = getCurrentFcmToken();
+            if (fcmTok) {
+                await unregisterFcmToken({ fcmToken: fcmTok }).catch(() => {});
             }
 
             if (tokenLoad !== null && tokenLoad !== undefined) {
@@ -510,6 +582,8 @@ const Index = () => {
                         size={20}
                         iconColor={colors.sectionHeaderText}
                         style={{ position: 'absolute', bottom: -5, right: -0, backgroundColor: isDark ? '#38393b' : '#d1d5db', }}
+                        loading={isProfileImageFlowBusy}
+                        disabled={avatarImageActionsLocked}
                         onPress={handleImagePick}
                     />
                     {userData?.data?.imageId && (
@@ -518,10 +592,13 @@ const Index = () => {
                             size={18}
                             iconColor="#ef4444"
                             style={{ position: 'absolute', bottom: -5, left: -0, backgroundColor: isDark ? '#38393b' : '#d1d5db', }}
-                            onPress={handleDeleteImage}
+                            loading={isDeletingImage}
+                            disabled={avatarImageActionsLocked}
+                            onPress={handleDeleteImagePress}
                         />
                     )}
                 </View>
+                <ImageUploadHint className="mt-3" align="center" />
                 <View className="flex-row items-center justify-center mt-4">
                     <Icon source="account" size={22} color={colors.sectionHeaderText} />
                     <Text className='font-century-gothic ml-2 text-2xl' style={{ color: colors.sectionHeaderText }}>
@@ -655,7 +732,7 @@ const Index = () => {
                         style={{ borderBottomColor: colors.borderColor, borderBottomWidth: 1 }}
                     >
                         <View className='flex-row items-center flex-1'>
-                            <Icon source="store-outline" size={24} color="#ffb900" />
+                            <Icon source="store-outline" size={24} color="#FACC15" />
                             <View className='ml-3 flex-1'>
                                 <Text className='text-lg font-century-gothic-bold' style={{ color: colors.sectionHeaderText }}>{t('panel.viewMyBusinesses')}</Text>
                                 <Text className='text-sm mt-0.5' style={{ color: colors.textSecondary, fontFamily: 'CenturyGothic' }}>{t('panel.myStores')}</Text>
@@ -686,7 +763,7 @@ const Index = () => {
                         style={{ borderBottomColor: colors.borderColor, borderBottomWidth: 0 }}
                     >
                         <View className='flex-row items-center flex-1'>
-                            <Icon source="compare-horizontal" size={24} color="#ffb900" />
+                            <Icon source="compare-horizontal" size={24} color="#FACC15" />
                             <View className='ml-3 flex-1'>
                                 <Text className='text-base' style={{ color: colors.sectionHeaderText }}>{t('profile.compareStores')}</Text>
                                 <Text className='text-xs mt-0.5' style={{ color: colors.textSecondary }}>{t('profile.compareStoresSubtitle')}</Text>
@@ -740,7 +817,31 @@ const Index = () => {
                     </TouchableOpacity>
                 </View>
 
-                <Text className='text-lg mb-4 font-century-gothic-bold' style={{ color: colors.sectionHeaderText }}>{t('profile.settings')}</Text>
+                <Text className='text-lg mb-2 font-century-gothic-bold' style={{ color: colors.sectionHeaderText }}>{t('profile.settings')}</Text>
+
+                <Text className='text-sm mb-2' style={{ color: colors.textSecondary }}>{t('profile.appearanceSection')}</Text>
+                <View className='rounded-xl p-4 mb-4' style={{ backgroundColor: colors.cardBg }}>
+                    <View className='flex-row items-center justify-between'>
+                        <Text className='text-base font-century-gothic-bold' style={{ color: colors.sectionHeaderText }}>{t('profile.language')}</Text>
+                        <LanguageSelector showLabel={false} />
+                    </View>
+                    <View style={{ height: 1, backgroundColor: colors.borderColor, marginVertical: 8 }} />
+                    <View className='flex-row items-center justify-between'>
+                        <View className='flex-row items-center gap-2'>
+                            <Icon source={themeMode === 'dark' ? 'weather-night' : 'weather-sunny'} size={20} color={themeMode === 'dark' ? '#60a5fa' : '#f59e0b'} />
+                            <Text className='text-base font-century-gothic-bold' style={{ color: colors.sectionHeaderText }}>
+                                {themeMode === 'dark' ? t('profile.darkMode') : t('profile.lightMode')}
+                            </Text>
+                        </View>
+                        <Switch
+                            value={themeMode === 'dark'}
+                            onValueChange={toggleTheme}
+                            {...getProfilePaperSwitchProps(isDark)}
+                        />
+                    </View>
+                </View>
+
+                <Text className='text-sm mb-2' style={{ color: colors.textSecondary }}>{t('profile.preferencesSection')}</Text>
                 <View className='rounded-xl p-4 mb-6' style={{ backgroundColor: colors.cardBg }}>
                     <View className='flex-row items-center justify-between'>
                         <View className='flex-1 mr-4'>
@@ -749,27 +850,12 @@ const Index = () => {
                         </View>
                         <Switch
                             value={displayShowImageAnimation}
-                            onValueChange={async (value) => {
-                                if (isUpdatingSettingRef.current) return;
-                                isUpdatingSettingRef.current = true;
+                            onValueChange={(value) => {
                                 setLocalShowImageAnimation(value);
-                                try {
-                                    const settingResult = await updateSetting({
-                                        showImageAnimation: value,
-                                        showPriceAnimation: displayShowPriceAnimation,
-                                        enableNotificationSound: displayEnableNotificationSound,
-                                    }).unwrap();
-                                    // refetchSetting çağrısını kaldırdık - RTK Query otomatik güncelliyor
-                                    dispatch(showSnack({ message: settingResult.message || t('settings.updateSuccess'), isError: false }));
-                                } catch (error: any) {
-                                    setLocalShowImageAnimation(!value);
-                                    const errorMessage = error?.data?.message || getErrorMessage(error);
-                                    dispatch(showSnack({ message: errorMessage || t('profile.settingUpdateError'), isError: true }));
-                                } finally {
-                                    isUpdatingSettingRef.current = false;
-                                }
+                                latestSettingPayloadRef.current = { ...latestSettingPayloadRef.current, showImageAnimation: value };
+                                persistSettings();
                             }}
-                            disabled={isUpdatingSetting || isLoadingSetting}
+                            disabled={isLoadingSetting}
                             {...getProfilePaperSwitchProps(isDark)}
                         />
                     </View>
@@ -780,79 +866,35 @@ const Index = () => {
                         </View>
                         <Switch
                             value={displayShowPriceAnimation}
-                            onValueChange={async (value) => {
-                                if (isUpdatingSettingRef.current) return;
-                                isUpdatingSettingRef.current = true;
+                            onValueChange={(value) => {
                                 setLocalShowPriceAnimation(value);
-                                try {
-                                    const settingResult = await updateSetting({
-                                        showImageAnimation: displayShowImageAnimation,
-                                        showPriceAnimation: value,
-                                        enableNotificationSound: displayEnableNotificationSound,
-                                    }).unwrap();
-                                    dispatch(showSnack({ message: settingResult.message || t('settings.updateSuccess'), isError: false }));
-                                } catch (error: any) {
-                                    setLocalShowPriceAnimation(!value);
-                                    const errorMessage = error?.data?.message || getErrorMessage(error);
-                                    dispatch(showSnack({ message: errorMessage || t('profile.settingUpdateError'), isError: true }));
-                                } finally {
-                                    isUpdatingSettingRef.current = false;
-                                }
+                                latestSettingPayloadRef.current = { ...latestSettingPayloadRef.current, showPriceAnimation: value };
+                                persistSettings();
                             }}
-                            disabled={isUpdatingSetting || isLoadingSetting}
+                            disabled={isLoadingSetting}
                             {...getProfilePaperSwitchProps(isDark)}
                         />
                     </View>
                     <View className='flex-row items-center justify-between mt-4'>
-                        <Text className='text-base font-century-gothic-bold' style={{ color: colors.sectionHeaderText }}>{t('profile.language')}</Text>
-                        <LanguageSelector showLabel={false} />
-                    </View>
-                    <View style={{ height: 1, backgroundColor: colors.borderColor, marginVertical: 8 }} />
-                    <View className='flex-row items-center justify-between'>
-                        <View className='flex-row items-center gap-2'>
-                            <Icon source={themeMode === 'dark' ? 'weather-night' : 'weather-sunny'} size={20} color={themeMode === 'dark' ? '#60a5fa' : '#f59e0b'} />
-                            <Text className='text-base font-century-gothic-bold' style={{ color: colors.sectionHeaderText }}>
-                                {themeMode === 'dark' ? 'Koyu Mod' : 'Açık Mod'}
-                            </Text>
-                        </View>
-                        <Switch
-                            value={themeMode === 'dark'}
-                            onValueChange={toggleTheme}
-                            {...getProfilePaperSwitchProps(isDark)}
-                        />
-                    </View>
-                    <View style={{ height: 1, backgroundColor: colors.borderColor, marginVertical: 8 }} />
-                    <View className='flex-row items-center justify-between'>
                         <View className='flex-1 mr-4'>
-                            <Text className='text-base font-century-gothic-bold' style={{ color: colors.sectionHeaderText }}>Bildirim Sesleri</Text>
-                            <Text className='text-sm' style={{ color: colors.textSecondary }}>Randevu ve mesaj bildirim seslerini aç/kapat.</Text>
+                            <Text className='text-base font-century-gothic-bold' style={{ color: colors.sectionHeaderText }}>{t('profile.notificationSounds')}</Text>
+                            <Text className='text-sm' style={{ color: colors.textSecondary }}>{t('profile.notificationSoundsDescription')}</Text>
                         </View>
                         <Switch
                             value={displayEnableNotificationSound}
-                            onValueChange={async (value) => {
-                                if (isUpdatingSettingRef.current) return;
-                                isUpdatingSettingRef.current = true;
+                            onValueChange={(value) => {
                                 setLocalEnableNotificationSound(value);
-                                try {
-                                    const settingResult = await updateSetting({
-                                        showImageAnimation: displayShowImageAnimation,
-                                        showPriceAnimation: displayShowPriceAnimation,
-                                        enableNotificationSound: value,
-                                    }).unwrap();
-                                    dispatch(showSnack({ message: settingResult.message || t('settings.updateSuccess'), isError: false }));
-                                } catch (error: any) {
-                                    setLocalEnableNotificationSound(!value);
-                                    const errorMessage = error?.data?.message || getErrorMessage(error);
-                                    dispatch(showSnack({ message: errorMessage || t('profile.settingUpdateError'), isError: true }));
-                                } finally {
-                                    isUpdatingSettingRef.current = false;
-                                }
+                                latestSettingPayloadRef.current = { ...latestSettingPayloadRef.current, enableNotificationSound: value };
+                                persistSettings();
                             }}
-                            disabled={isUpdatingSetting || isLoadingSetting}
+                            disabled={isLoadingSetting}
                             {...getProfilePaperSwitchProps(isDark)}
                         />
                     </View>
-                    <View style={{ height: 1, backgroundColor: colors.borderColor, marginVertical: 8 }} />
+                </View>
+
+                <Text className='text-sm mb-2' style={{ color: colors.textSecondary }}>{t('profile.permissionsSection')}</Text>
+                <View className='rounded-xl p-4 mb-6' style={{ backgroundColor: colors.cardBg }}>
                     <View className='flex-row items-center justify-between'>
                         <View className='flex-1 mr-4'>
                             <Text className='text-base font-century-gothic-bold' style={{ color: colors.sectionHeaderText }}>{t('profile.locationPermission')}</Text>

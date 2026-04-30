@@ -20,21 +20,36 @@ const withNotificationChannel = (config) => {
       application['meta-data'] = [];
     }
 
-    const META_NAME = 'com.google.firebase.messaging.default_notification_channel_id';
+    const upsertMetaData = (name, attrs) => {
+      const existing = application['meta-data'].find(
+        (m) => m.$?.['android:name'] === name
+      );
 
-    const alreadyAdded = application['meta-data'].some(
-      (m) => m.$?.['android:name'] === META_NAME
-    );
+      if (existing) {
+        existing.$ = {
+          ...existing.$,
+          ...attrs,
+        };
+        return;
+      }
 
-    if (!alreadyAdded) {
       application['meta-data'].push({
         $: {
-          'android:name': META_NAME,
-          'android:value': 'fcm_fallback_notification_channel',
-          'tools:replace': 'android:value',
+          'android:name': name,
+          ...attrs,
         },
       });
-    }
+    };
+
+    upsertMetaData('com.google.firebase.messaging.default_notification_channel_id', {
+      'android:value': 'default',
+      'tools:replace': 'android:value',
+    });
+
+    upsertMetaData('com.google.firebase.messaging.default_notification_color', {
+      'android:resource': '@color/notification_icon_color',
+      'tools:replace': 'android:resource',
+    });
 
     return mod;
   });

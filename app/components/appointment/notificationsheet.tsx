@@ -14,7 +14,7 @@ import {
 import { useAppDispatch } from "../../store/hook";
 import { useLanguage } from "../../hook/useLanguage";
 import { BottomSheetFlatList } from "@gorhom/bottom-sheet";
-import React, { useCallback, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   AppointmentStatus,
   DecisionStatus,
@@ -30,6 +30,9 @@ import { useSafeNavigation } from "../../hook/useSafeNavigation";
 import { useAlert } from "../../hook/useAlert";
 import { useActionGuard } from "../../hook/useActionGuard";
 import { useTheme } from "../../hook/useTheme";
+
+/** RN `onEndReached` ilk layout'ta yanlış tetiklenebilir — footer spinner flash'ını önler. */
+const NOTIFICATIONS_END_REACHED_GRACE_MS = 450;
 
 // ---------------------------------------------------------------------------
 // 2. Ana NotificationsSheet Bileşeni
@@ -55,8 +58,62 @@ export function NotificationsSheet({
   const router = useSafeNavigation();
   const guard = useActionGuard();
   const dispatch = useAppDispatch();
-  const { data, isFetching, isLoading, refetch } = useGetAllNotificationsQuery();
+  const NOTIFICATIONS_PAGE_SIZE = 30;
+  const { data, isFetching, isLoading, refetch } = useGetAllNotificationsQuery({
+    limit: NOTIFICATIONS_PAGE_SIZE,
+  });
   const [isPullRefreshing, setIsPullRefreshing] = useState(false);
+
+  // Infinite scroll state — aynı pattern ChatDetailScreen'de kullanıldı.
+  // Liste DESC sıralı (en yeniden eskiye) → `onEndReached` aşağı scroll'da tetiklenir
+  // ve en eski bildirimin createdAt'i cursor olarak server'a gönderilir.
+  const [isLoadingOlder, setIsLoadingOlder] = React.useState(false);
+  const isLoadingOlderRef = useRef(false);
+  const hasMoreRef = useRef(true);
+  const lastLoadedBeforeRef = useRef<string | null>(null);
+  const suppressEndReachedUntilMsRef = useRef(0);
+  const bumpEndReachedGrace = useCallback(() => {
+    suppressEndReachedUntilMsRef.current = Date.now() + NOTIFICATIONS_END_REACHED_GRACE_MS;
+  }, []);
+
+  useEffect(() => {
+    bumpEndReachedGrace();
+  }, [bumpEndReachedGrace]);
+
+  const loadOlderNotifications = useCallback(async () => {
+    if (Date.now() < suppressEndReachedUntilMsRef.current) return;
+    if (isLoadingOlderRef.current) return;
+    if (!hasMoreRef.current) return;
+    if (!data || data.length === 0) return;
+    const oldest = data[data.length - 1];
+    if (!oldest?.createdAt) return;
+    const beforeIso = oldest.createdAt;
+    // Tie-breaker: aynı CreatedAt'a sahip 2+ bildirimde NotificationId ile sıkı sıralama.
+    const beforeNotifId = oldest.id;
+    const cursorKey = `${beforeIso}|${beforeNotifId ?? ""}`;
+    if (lastLoadedBeforeRef.current === cursorKey) return;
+
+    isLoadingOlderRef.current = true;
+    lastLoadedBeforeRef.current = cursorKey;
+    setIsLoadingOlder(true);
+    try {
+      const result = await dispatch(
+        api.endpoints.getAllNotifications.initiate(
+          { before: beforeIso, beforeId: beforeNotifId, limit: NOTIFICATIONS_PAGE_SIZE },
+          { subscribe: false, forceRefetch: true },
+        ),
+      ).unwrap();
+      const fetched = Array.isArray(result) ? result.length : 0;
+      if (fetched < NOTIFICATIONS_PAGE_SIZE) {
+        hasMoreRef.current = false;
+      }
+    } catch {
+      lastLoadedBeforeRef.current = null;
+    } finally {
+      isLoadingOlderRef.current = false;
+      setIsLoadingOlder(false);
+    }
+  }, [data, dispatch]);
   const [markRead] = useMarkNotificationReadMutation();
   const [deleteNotification, { isLoading: isDeletingNotification }] =
     useDeleteNotificationMutation();
@@ -420,12 +477,16 @@ export function NotificationsSheet({
 
   const handleRefresh = useCallback(async () => {
     setIsPullRefreshing(true);
+    bumpEndReachedGrace();
     try {
+      // Refresh → pagination state'i sıfırla
+      hasMoreRef.current = true;
+      lastLoadedBeforeRef.current = null;
       await refetch();
     } finally {
       setIsPullRefreshing(false);
     }
-  }, [refetch]);
+  }, [refetch, bumpEndReachedGrace]);
 
   return (
     <View className="flex-1 px-3">
@@ -470,6 +531,15 @@ export function NotificationsSheet({
         extraData={data?.map(n => `${n.id}-${n._updatedAt || 0}`).join(',')}
         refreshing={isPullRefreshing}
         onRefresh={handleRefresh}
+        onEndReached={loadOlderNotifications}
+        onEndReachedThreshold={0.5}
+        ListFooterComponent={
+          isLoadingOlder ? (
+            <View className="py-3 items-center">
+              <ActivityIndicator size="small" color={isDark ? "#fbbf24" : "#f59e0b"} />
+            </View>
+          ) : null
+        }
         style={{ flex: 1 }}
         contentContainerStyle={{
           flexGrow: 1, // Liste boş olsa bile kaydırma davranışını korur

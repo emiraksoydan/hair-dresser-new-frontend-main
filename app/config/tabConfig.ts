@@ -1,4 +1,5 @@
 import { TabConfig } from "../components/layout/BaseTabLayout";
+import { COLORS } from "../constants/colors";
 
 /**
  * Generates common tabs configuration for all user types.
@@ -24,6 +25,7 @@ export const getCommonTabs = (
     {
       name: "(appointment)",
       headerTitle: t("navigation.myAppointments"),
+      headerTitleAlign: "left",
       icon: "clock-outline",
       iconFocused: "clock",
       label: t("navigation.appointments"),
@@ -73,10 +75,10 @@ export const panelTabConfigs = {
 };
 
 /**
- * Accent colors for each user type
+ * BaseTabLayout `accentColor` (AI sheet, yükleniyor vb.) — panel altın sarısı
  */
 export const accentColors = {
-  customer: "#ffb900",
-  barberStore: "#ffb900",
-  freeBarber: "#ffb900",
+  customer: COLORS.UI.ACCENT_GOLD,
+  barberStore: COLORS.UI.ACCENT_GOLD,
+  freeBarber: COLORS.UI.ACCENT_GOLD,
 };

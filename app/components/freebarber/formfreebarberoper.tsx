@@ -20,6 +20,8 @@ import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Dropdown } from "react-native-element-dropdown";
 import { CategoryListSelect } from "../common/CategoryListSelect";
+import { OutlinedImagePickField } from "../common/OutlinedImagePickField";
+import { ImageUploadHint } from "../common/ImageUploadHint";
 import {
   handlePickMultipleImages,
   handlePickImage,
@@ -1621,6 +1623,7 @@ export const FormFreeBarberOperation = React.memo(
                               </HelperText>
                             </View>
                           )}
+                          <ImageUploadHint className="mt-1 px-2" />
                         </View>
                       )}
                     />
@@ -1636,9 +1639,21 @@ export const FormFreeBarberOperation = React.memo(
                         name="certificateImage"
                         render={({ field: { value, onChange } }) => (
                           <>
-                            <TouchableOpacity
-                              activeOpacity={0.85}
-                              disabled={isCertificateLoading}
+                            <OutlinedImagePickField
+                              label={t("form.certificateImage")}
+                              valueText={
+                                value?.name
+                                  ? truncateFileName(value.name)
+                                  : t("form.imageNotSelected")
+                              }
+                              error={!!errors.certificateImage}
+                              borderColor={errors.certificateImage ? "#b00020" : colors.borderColor2}
+                              colors={{
+                                cardBg: colors.cardBg,
+                                sectionHeaderText: colors.sectionHeaderText,
+                                textSecondary: colors.textSecondary,
+                              }}
+                              loading={isCertificateLoading}
                               onPress={async () => {
                                 setIsCertificateLoading(true);
                                 try {
@@ -1648,43 +1663,14 @@ export const FormFreeBarberOperation = React.memo(
                                   setIsCertificateLoading(false);
                                 }
                               }}
+                            />
+                            <HelperText
+                              type="error"
+                              visible={!!errors.certificateImage}
                             >
-                              <TextInput
-                                label={t("form.certificateImage")}
-                                mode="outlined"
-                                value={
-                                  value?.name
-                                    ? truncateFileName(value.name)
-                                    : t("form.imageNotSelected")
-                                }
-                                editable={false}
-                                dense
-                                pointerEvents="none"
-                                textColor={colors.sectionHeaderText}
-                                outlineColor={
-                                  errors.certificateImage ? "#b00020" : colors.borderColor2
-                                }
-                                right={
-                                  isCertificateLoading ? (
-                                    <ActivityIndicator
-                                      size="small"
-                                      color="#888"
-                                      style={{ marginRight: 12 }}
-                                    />
-                                  ) : (
-                                    <TextInput.Icon icon="image" color={colors.sectionHeaderText} />
-                                  )
-                                }
-                                theme={{
-                                  roundness: 10,
-                                  colors: {
-                                    onSurfaceVariant: "gray",
-                                    primary: colors.sectionHeaderText,
-                                  },
-                                }}
-                                style={{ backgroundColor: colors.cardBg }}
-                              />
-                            </TouchableOpacity>
+                              {errors?.certificateImage?.message as string}
+                            </HelperText>
+                            {!errors.certificateImage && <ImageUploadHint className="px-1" />}
                             {value?.uri && !isCertificateLoading && (
                               <View className="mt-2 mb-2 w-full relative">
                                 <Image
@@ -1705,12 +1691,6 @@ export const FormFreeBarberOperation = React.memo(
                                 </TouchableOpacity>
                               </View>
                             )}
-                            <HelperText
-                              type="error"
-                              visible={!!errors.certificateImage}
-                            >
-                              {errors?.certificateImage?.message as string}
-                            </HelperText>
                           </>
                         )}
                       />
@@ -1733,12 +1713,12 @@ export const FormFreeBarberOperation = React.memo(
                                 onBlur={onBlur}
                                 textColor={colors.sectionHeaderText}
                                 outlineColor={errors.name ? "#b00020" : colors.borderColor2}
-                                activeOutlineColor={errors.name ? "#b00020" : "#ffb900"}
+                                activeOutlineColor={errors.name ? "#b00020" : "#FACC15"}
                                 theme={{
                                   roundness: 10,
                                   colors: {
                                     onSurfaceVariant: "gray",
-                                    primary: "#ffb900",
+                                    primary: "#FACC15",
                                   },
                                 }}
                                 style={{ backgroundColor: colors.cardBg }}
@@ -1765,12 +1745,12 @@ export const FormFreeBarberOperation = React.memo(
                                 onBlur={onBlur}
                                 textColor={colors.sectionHeaderText}
                                 outlineColor={errors.surname ? "#b00020" : colors.borderColor2}
-                                activeOutlineColor={errors.surname ? "#b00020" : "#ffb900"}
+                                activeOutlineColor={errors.surname ? "#b00020" : "#FACC15"}
                                 theme={{
                                   roundness: 10,
                                   colors: {
                                     onSurfaceVariant: "gray",
-                                    primary: "#ffb900",
+                                    primary: "#FACC15",
                                   },
                                 }}
                                 style={{ backgroundColor: colors.cardBg }}
@@ -1984,9 +1964,21 @@ export const FormFreeBarberOperation = React.memo(
                           name="beautySalonCertificateImage"
                           render={({ field: { value, onChange } }) => (
                             <>
-                              <TouchableOpacity
-                                activeOpacity={0.85}
-                                disabled={isCertificateLoading}
+                              <OutlinedImagePickField
+                                label={t("form.beautySalonCertificate")}
+                                valueText={
+                                  value?.name
+                                    ? truncateFileName(value.name)
+                                    : t("form.imageNotSelected")
+                                }
+                                error={!!errors.beautySalonCertificateImage}
+                                borderColor={errors.beautySalonCertificateImage ? "#b00020" : colors.borderColor2}
+                                colors={{
+                                  cardBg: colors.cardBg,
+                                  sectionHeaderText: colors.sectionHeaderText,
+                                  textSecondary: colors.textSecondary,
+                                }}
+                                loading={isCertificateLoading}
                                 onPress={async () => {
                                   setIsCertificateLoading(true);
                                   try {
@@ -1996,43 +1988,14 @@ export const FormFreeBarberOperation = React.memo(
                                     setIsCertificateLoading(false);
                                   }
                                 }}
+                              />
+                              <HelperText
+                                type="error"
+                                visible={!!errors.beautySalonCertificateImage}
                               >
-                                <TextInput
-                                  label={t("form.beautySalonCertificate")}
-                                  mode="outlined"
-                                  value={
-                                    value?.name
-                                      ? truncateFileName(value.name)
-                                      : t("form.imageNotSelected")
-                                  }
-                                  editable={false}
-                                  dense
-                                  pointerEvents="none"
-                                  textColor={colors.sectionHeaderText}
-                                  outlineColor={
-                                    errors.beautySalonCertificateImage ? "#b00020" : colors.borderColor2
-                                  }
-                                  right={
-                                    isCertificateLoading ? (
-                                      <ActivityIndicator
-                                        size="small"
-                                        color="#888"
-                                        style={{ marginRight: 12 }}
-                                      />
-                                    ) : (
-                                      <TextInput.Icon icon="image" color={colors.sectionHeaderText} />
-                                    )
-                                  }
-                                  theme={{
-                                    roundness: 10,
-                                    colors: {
-                                      onSurfaceVariant: "gray",
-                                      primary: colors.sectionHeaderText,
-                                    },
-                                  }}
-                                  style={{ backgroundColor: colors.cardBg }}
-                                />
-                              </TouchableOpacity>
+                                {errors?.beautySalonCertificateImage?.message as string}
+                              </HelperText>
+                              {!errors.beautySalonCertificateImage && <ImageUploadHint className="px-1" />}
                               {value?.uri && !isCertificateLoading && (
                                 <View className="mt-2 mb-2 w-full relative">
                                   <Image
@@ -2053,12 +2016,6 @@ export const FormFreeBarberOperation = React.memo(
                                   </TouchableOpacity>
                                 </View>
                               )}
-                              <HelperText
-                                type="error"
-                                visible={!!errors.beautySalonCertificateImage}
-                              >
-                                {errors?.beautySalonCertificateImage?.message as string}
-                              </HelperText>
                             </>
                           )}
                         />
@@ -2368,7 +2325,7 @@ export const FormFreeBarberOperation = React.memo(
                                     {categoryLabelMap.get(displayName) ?? displayName}
                                     {isBs ? ` (${t("form.beautySalonCategories")})` : ""}
                                   </Text>
-                                  <Text className="text-lg text-[#ffb900]">{typeof price === "string" ? price : ""}</Text>
+                                  <Text className="text-lg text-[#FACC15]">{typeof price === "string" ? price : ""}</Text>
                                 </View>
                               );
                             })}
@@ -2415,8 +2372,8 @@ export const FormFreeBarberOperation = React.memo(
                   className="flex-1 font-century-gothic"
                   mode="outlined"
                   onPress={handlePrevStep}
-                  buttonColor="#ffb900"
-                  textColor="#ffb900"
+                  buttonColor="#FACC15"
+                  textColor="#FACC15"
                   labelStyle={{ fontSize: 16 }}
                 >
                   {t("form.stepPrev")}
@@ -2427,7 +2384,7 @@ export const FormFreeBarberOperation = React.memo(
                   className="font-century-gothic flex-1"
                   mode="contained"
                   onPress={handleNextStep}
-                  buttonColor="#ffb900"
+                  buttonColor="#FACC15"
                   textColor="#1F2937"
                   labelStyle={{ fontSize: 16 }}
                 >

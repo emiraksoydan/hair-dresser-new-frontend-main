@@ -237,7 +237,7 @@ export function AIAssistantSheet({ sheetRef, accentColor, onClose }: Props) {
             </View>
           )}
 
-          {/* Error */}
+          {/* Error / kota (Gemini veya Whisper) */}
           {phase === "error" && (() => {
             // i18next "key yoksa key'in kendisini döndürür" şeklinde çalıştığı için
             // `||` fallback çalışmaz. Elle bakıp yoksa ai.error_unknown'a düşüyoruz.
@@ -245,10 +245,17 @@ export function AIAssistantSheet({ sheetRef, accentColor, onClose }: Props) {
             const key = `ai.error_${code}`;
             const resolved = t(key);
             const errorText = resolved === key ? t("ai.error_unknown") : resolved;
+            const isQuota =
+              code === "ai_rate_limit" || code === "whisper_rate_limit";
+            const accent = isQuota ? "#f59e0b" : "#ef4444";
             return (
-              <View style={[styles.errorBox, { borderColor: "#ef4444" }]}>
-                <Ionicons name="warning-outline" size={18} color="#ef4444" />
-                <Text style={[styles.errorText, { color: "#ef4444" }]}>
+              <View style={[styles.errorBox, { borderColor: accent }]}>
+                <Ionicons
+                  name={isQuota ? "hourglass-outline" : "warning-outline"}
+                  size={18}
+                  color={accent}
+                />
+                <Text style={[styles.errorText, { color: accent }]}>
                   {errorText}
                 </Text>
               </View>

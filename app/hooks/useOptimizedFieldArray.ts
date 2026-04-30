@@ -8,7 +8,12 @@ import { Control, useWatch } from 'react-hook-form';
  * without triggering full form re-renders on every change.
  */
 
-type BarberOption = { label: string; value: string };
+type BarberOption = {
+    label: string;
+    value: string;
+    ratingAvg?: number | null;
+    ratingCount?: number | null;
+};
 
 export function useOptimizedChairOptions(
     control: Control<any>,
@@ -51,7 +56,9 @@ export function useOptimizedChairOptions(
                 })
                 .map((barber: any) => ({
                     label: barber.name!.trim(),
-                    value: barber.id
+                    value: barber.id,
+                    ratingAvg: barber.averageRating ?? barber.rating ?? null,
+                    ratingCount: barber.ratingCount ?? barber.totalRatingCount ?? null,
                 }));
 
             optionsMap.set(chair.id, availableForThisChair);

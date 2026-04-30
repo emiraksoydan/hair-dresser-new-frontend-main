@@ -45,6 +45,8 @@ import {
   getDayInfo,
 } from "../../utils/time/time-helper";
 import { useAuth } from "../../hook/useAuth";
+import { useAppSelector } from "../../store/hook";
+import { getGlobalConnection } from "../../store/signalrSlice";
 import { getCurrentLocationSafe } from "../../utils/location/location-helper";
 import { useAppointmentBooking } from "../../hook/useAppointmentBooking";
 import { useAppointmentPricing } from "../../hook/useAppointmentPricing";
@@ -60,6 +62,10 @@ import { useAlert } from "../../hook/useAlert";
 import { useTheme } from "../../hook/useTheme";
 import { OwnerAvatar } from "../common/owneravatar";
 import { ImageOwnerType } from "../../types";
+import { COLORS } from "../../constants/colors";
+
+/** Randevu ekranı vurgu rengi — bottom tab / FAB ile aynı altın sarısı */
+const GOLD = COLORS.UI.ACCENT_GOLD;
 
 const toLocalIso = (dateStr: string, hhmm: string) =>
   `${dateStr}T${normalizeTime(hhmm)}:00`;
@@ -115,6 +121,29 @@ const StoreBookingContent = ({
     useAddStoreToAppointmentMutation();
 
   const { userType: currentUserType } = useAuth();
+  const isSignalRConnected = useAppSelector((s) => s.signalr.isConnected);
+
+  // Bu dükkanın koltuk/slot müsaitliği — tüm o dükkan randevu ekranındaki kullanıcılara anlık tazeleme
+  useEffect(() => {
+    if (!storeId || !isSignalRConnected) return;
+    const join = async () => {
+      const c = getGlobalConnection();
+      if (c?.state === "Connected") {
+        try {
+          await c.invoke("JoinStoreAvailabilityGroup", storeId);
+        } catch {
+          /* ignore */
+        }
+      }
+    };
+    join();
+    return () => {
+      const c = getGlobalConnection();
+      if (c?.state === "Connected") {
+        c.invoke("LeaveStoreAvailabilityGroup", storeId).catch(() => {});
+      }
+    };
+  }, [storeId, isSignalRConnected]);
 
   const handleBookingBack = useCallback(() => {
     if (navigation.canGoBack()) {
@@ -314,11 +343,17 @@ const StoreBookingContent = ({
   ]);
 
   const ScrollContainer = isBottomSheet ? BottomSheetScrollView : ScrollView;
+  const submitLabel = useMemo(() => {
+    if (appointmentId) return "Dukkanı Ekle";
+    if (isAddStoreMode || isCustomer) return "Randevu Talebi Gönder";
+    return "Randevu Al";
+  }, [appointmentId, isAddStoreMode, isCustomer]);
 
   return (
     <ScrollContainer
+      style={isBottomSheet ? { flex: 1 } : undefined}
       nestedScrollEnabled
-      contentContainerStyle={{ paddingBottom: 140 }}
+      contentContainerStyle={{ paddingBottom: isBottomSheet ? 220 : 140 }}
       showsVerticalScrollIndicator={false}
       stickyHeaderIndices={isBottomSheet ? undefined : [0]}
     >
@@ -333,6 +368,11 @@ const StoreBookingContent = ({
               enableSwipe={!disableHeaderImageSwipe}
             />
             <View className="absolute top-0 left-0 right-0 bottom-0 bg-black opacity-50" />
+            {isBottomSheet && (
+              <View style={{ position: "absolute", top: 8, left: 0, right: 0, alignItems: "center", zIndex: 30 }}>
+                <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: "rgba(255,255,255,0.65)" }} />
+              </View>
+            )}
             <View className="absolute bottom-0 left-0 right-0 px-4 pb-3">
               <View className="flex-row justify-between items-start">
                 <View className="flex-shrink flex-wrap gap-2 flex-row">
@@ -409,7 +449,7 @@ const StoreBookingContent = ({
         >
           <View className="flex-row justify-between items-center">
             <Text className="font-century-gothic text-xl" style={{ color: colors.sectionHeaderText }}>
-              Randevu Al
+              {isAddStoreMode ? t("booking.appointmentRequestDetailsTitle") : t("card.bookAppointment")}
             </Text>
           </View>
 
@@ -418,6 +458,11 @@ const StoreBookingContent = ({
               <Text className="text-sm font-century-gothic" style={{ color: "#b91c1c" }}>
                 {getErrorMessage(availabilityError)}
               </Text>
+              <TouchableOpacity onPress={() => refetch()} className="mt-2 self-start">
+                <Text className="text-sm font-century-gothic-bold" style={{ color: "#3b82f6" }}>
+                  {t("common.retry")}
+                </Text>
+              </TouchableOpacity>
             </View>
           ) : null}
 
@@ -444,13 +489,13 @@ const StoreBookingContent = ({
                       disabled
                         ? { backgroundColor: isDark ? "#1a1a2e" : "#fef2f2", borderColor: "#ef4444", borderWidth: 1.5 }
                         : active
-                          ? { backgroundColor: isDark ? "rgba(254,166,14,0.25)" : "rgba(254,166,14,0.15)", borderColor: "#fea60e", borderWidth: 1.5 }
+                          ? { backgroundColor: isDark ? "rgba(250, 204, 21,0.25)" : "rgba(250, 204, 21,0.15)", borderColor: GOLD, borderWidth: 1.5 }
                           : { backgroundColor: colors.cardBg2, borderColor: colors.borderColor, borderWidth: 1 }
                     }
                   >
                     <Text
                       className="text-xs font-century-gothic"
-                      style={{ color: disabled ? "#ef4444" : active ? "#fea60e" : colors.textSecondary }}
+                      style={{ color: disabled ? "#ef4444" : active ? GOLD : colors.textSecondary }}
                     >
                       {info.isToday ? t("booking.today") : info.dayShort}
                     </Text>
@@ -462,7 +507,7 @@ const StoreBookingContent = ({
                     </Text>
                     <Text
                       className="text-xs font-century-gothic"
-                      style={{ color: disabled ? "#ef4444" : active ? "#fea60e" : colors.textSecondary }}
+                      style={{ color: disabled ? "#ef4444" : active ? GOLD : colors.textSecondary }}
                     >
                       {info.monthShort}
                     </Text>
@@ -470,7 +515,7 @@ const StoreBookingContent = ({
                       <Icon
                         source="calendar-month"
                         size={14}
-                        color={disabled ? "#ef4444" : active ? "#fea60e" : "#60a5fa"}
+                        color={disabled ? "#ef4444" : active ? GOLD : "#60a5fa"}
                       />
                     </View>
                     {disabled && (
@@ -487,6 +532,32 @@ const StoreBookingContent = ({
       </View>
 
       <View className="px-4 pt-3 z-0 gap-3">
+          {(isAddStoreMode || isCustomer) && (
+            <View
+              style={{
+                borderRadius: 14,
+                borderWidth: 1,
+                borderColor: isDark ? "rgba(59,130,246,0.3)" : "rgba(59,130,246,0.22)",
+                backgroundColor: isDark ? "rgba(59,130,246,0.12)" : "rgba(219,234,254,0.6)",
+                paddingHorizontal: 12,
+                paddingVertical: 10,
+              }}
+            >
+              <View style={{ flexDirection: "row", alignItems: "center" }}>
+                <Icon source="information-outline" size={16} color="#3b82f6" />
+                <Text
+                  style={{
+                    marginLeft: 6,
+                    fontSize: 12,
+                    color: colors.textSecondary,
+                    fontFamily: "CenturyGothic",
+                  }}
+                >
+                  {t("booking.requestSummaryHint")}
+                </Text>
+              </View>
+            </View>
+          )}
           {(isLoading || (isFetching && !availabilityByDay)) && (
             <View className="py-10">
               <ActivityIndicator />
@@ -528,7 +599,7 @@ const StoreBookingContent = ({
                         className="items-center min-w-[110px] px-3 py-3 rounded-2xl"
                         style={
                           isSelected
-                            ? { backgroundColor: isDark ? "rgba(254,166,14,0.25)" : "rgba(254,166,14,0.15)", borderColor: "#fea60e", borderWidth: 1.5 }
+                            ? { backgroundColor: isDark ? "rgba(250, 204, 21,0.25)" : "rgba(250, 204, 21,0.15)", borderColor: GOLD, borderWidth: 1.5 }
                             : { backgroundColor: colors.cardBg2, borderColor: colors.borderColor, borderWidth: 1 }
                         }
                       >
@@ -538,19 +609,19 @@ const StoreBookingContent = ({
                             ownerType={ImageOwnerType.ManuelBarber}
                             imageClassName="w-12 h-12 rounded-full"
                             iconSource="account"
-                            wrapperStyle={{ marginBottom: 6, borderWidth: isSelected ? 2 : 1, borderColor: isSelected ? "#fea60e" : "transparent", borderRadius: 9999 }}
+                            wrapperStyle={{ marginBottom: 6, borderWidth: isSelected ? 2 : 1, borderColor: isSelected ? GOLD : "transparent", borderRadius: 9999 }}
                           />
                         ) : (
                           <View
                             className="rounded-full p-2 mb-1.5"
-                            style={isSelected ? { backgroundColor: "rgba(254,166,14,0.2)" } : { backgroundColor: isDark ? "#334155" : "#e2e8f0" }}
+                            style={isSelected ? { backgroundColor: "rgba(250, 204, 21,0.2)" } : { backgroundColor: isDark ? "#334155" : "#e2e8f0" }}
                           >
-                            <Icon source="seat" size={22} color={isSelected ? "#fea60e" : "#94a3b8"} />
+                            <Icon source="seat" size={22} color={isSelected ? GOLD : "#94a3b8"} />
                           </View>
                         )}
                         <Text
                           className="font-century-gothic-bold text-sm"
-                          style={{ color: isSelected ? "#fea60e" : colors.sectionHeaderText }}
+                          style={{ color: isSelected ? GOLD : colors.sectionHeaderText }}
                           numberOfLines={1}
                         >
                           {chairName}
@@ -558,7 +629,7 @@ const StoreBookingContent = ({
                         {hasBarber && (
                           <Text
                             className="font-century-gothic text-xs mt-0.5"
-                            style={{ color: isSelected ? "#fea60e" : colors.textSecondary }}
+                            style={{ color: isSelected ? GOLD : colors.textSecondary }}
                             numberOfLines={1}
                           >
                             {barberName}
@@ -590,7 +661,7 @@ const StoreBookingContent = ({
                     {/* Saat başlığı + istatistik */}
                     <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
                       <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-                        <Icon source="clock-time-four-outline" size={16} color="#fea60e" />
+                        <Icon source="clock-time-four-outline" size={16} color={GOLD} />
                         <Text style={{ fontFamily: "CenturyGothic-Bold", fontSize: 14, color: colors.sectionHeaderText }}>
                           {t("form.selectTime")}
                         </Text>
@@ -635,14 +706,14 @@ const StoreBookingContent = ({
                                 : isPast
                                   ? isDark ? "#1f2937" : "#e5e7eb"
                                   : isSelected
-                                    ? "#fea60e"
+                                    ? GOLD
                                     : colors.borderColor,
                               backgroundColor: isBooked
                                 ? isDark ? "rgba(127,29,29,0.3)" : "rgba(254,202,202,0.4)"
                                 : isPast
                                   ? isDark ? "#111827" : "#f9fafb"
                                   : isSelected
-                                    ? isDark ? "rgba(254,166,14,0.18)" : "rgba(254,166,14,0.12)"
+                                    ? isDark ? "rgba(250, 204, 21,0.18)" : "rgba(250, 204, 21,0.12)"
                                     : colors.cardBg2,
                               opacity: isPast ? 0.45 : 1,
                             }}
@@ -655,7 +726,7 @@ const StoreBookingContent = ({
                                 : isPast
                                   ? isDark ? "#374151" : "#d1d5db"
                                   : isSelected
-                                    ? "#fea60e"
+                                    ? GOLD
                                     : isDark ? "#1f2937" : "#e5e7eb",
                             }} />
 
@@ -666,7 +737,7 @@ const StoreBookingContent = ({
                                   fontSize: 14,
                                   color: isBooked || isPast
                                     ? isDark ? "#4b5563" : "#9ca3af"
-                                    : isSelected ? "#fea60e" : colors.sectionHeaderText,
+                                    : isSelected ? GOLD : colors.sectionHeaderText,
                                 }}
                               >
                                 {normalizeTime(s.start)}
@@ -678,7 +749,7 @@ const StoreBookingContent = ({
                                   marginTop: 1,
                                   color: isBooked || isPast
                                     ? isDark ? "#374151" : "#9ca3af"
-                                    : isSelected ? "rgba(254,166,14,0.7)" : colors.textSecondary,
+                                    : isSelected ? "rgba(250, 204, 21,0.7)" : colors.textSecondary,
                                 }}
                               >
                                 {normalizeTime(s.end)}
@@ -689,7 +760,7 @@ const StoreBookingContent = ({
                                 ) : isPast ? (
                                   <Icon source="clock-remove-outline" size={11} color="#6b7280" />
                                 ) : isSelected ? (
-                                  <Icon source="check-circle" size={13} color="#fea60e" />
+                                  <Icon source="check-circle" size={13} color={GOLD} />
                                 ) : (
                                   <View style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: "#34d399" }} />
                                 )}
@@ -704,7 +775,7 @@ const StoreBookingContent = ({
                     <View style={{ flexDirection: "row", gap: 14, marginTop: 10, flexWrap: "wrap" }}>
                       {[
                         { color: "#34d399", label: t("booking.weekGridFree") },
-                        { color: "#fea60e", label: t("booking.selectedTime") ?? "Seçili" },
+                        { color: GOLD, label: t("booking.selectedTime") ?? "Seçili" },
                         { color: "#ef4444", label: t("booking.weekGridBooked") },
                         { color: isDark ? "#374151" : "#d1d5db", label: t("booking.weekGridPast") },
                       ].map((item) => (
@@ -729,15 +800,15 @@ const StoreBookingContent = ({
               borderRadius: 16,
               overflow: "hidden",
               borderWidth: 1,
-              borderColor: isDark ? "rgba(254,166,14,0.3)" : "rgba(254,166,14,0.25)",
-              backgroundColor: isDark ? "rgba(254,166,14,0.08)" : "rgba(254,166,14,0.06)",
+              borderColor: isDark ? "rgba(250, 204, 21,0.3)" : "rgba(250, 204, 21,0.25)",
+              backgroundColor: isDark ? "rgba(250, 204, 21,0.08)" : "rgba(250, 204, 21,0.06)",
             }}>
               {/* Gold top bar */}
-              <View style={{ height: 3, backgroundColor: "#fea60e" }} />
+              <View style={{ height: 3, backgroundColor: GOLD }} />
               <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", padding: 12 }}>
                 {/* Left: time range */}
                 <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
-                  <View style={{ width: 38, height: 38, borderRadius: 10, backgroundColor: "#fea60e", alignItems: "center", justifyContent: "center" }}>
+                  <View style={{ width: 38, height: 38, borderRadius: 10, backgroundColor: GOLD, alignItems: "center", justifyContent: "center" }}>
                     <Icon source="clock-check-outline" size={20} color="white" />
                   </View>
                   <View>
@@ -746,7 +817,7 @@ const StoreBookingContent = ({
                     </Text>
                     <Text style={{ fontFamily: "CenturyGothic-Bold", fontSize: 17, color: colors.sectionHeaderText, letterSpacing: 0.3 }}>
                       {startHHmm}
-                      <Text style={{ color: "#fea60e" }}> → </Text>
+                      <Text style={{ color: GOLD }}> → </Text>
                       {endHHmm}
                     </Text>
                   </View>
@@ -758,13 +829,13 @@ const StoreBookingContent = ({
                     paddingHorizontal: 10,
                     paddingVertical: 4,
                     borderRadius: 10,
-                    backgroundColor: isDark ? "rgba(254,166,14,0.2)" : "rgba(254,166,14,0.15)",
+                    backgroundColor: isDark ? "rgba(250, 204, 21,0.2)" : "rgba(250, 204, 21,0.15)",
                     flexDirection: "row",
                     alignItems: "center",
                     gap: 4,
                   }}>
-                    <Icon source="timer-outline" size={13} color="#fea60e" />
-                    <Text style={{ fontFamily: "CenturyGothic-Bold", fontSize: 13, color: "#fea60e" }}>
+                    <Icon source="timer-outline" size={13} color={GOLD} />
+                    <Text style={{ fontFamily: "CenturyGothic-Bold", fontSize: 13, color: GOLD }}>
                       {selectedSlotKeys.length} {t("form.hours")}
                     </Text>
                   </View>
@@ -890,7 +961,7 @@ const StoreBookingContent = ({
                   </Text>
                   {serviceSelected && (
                     <View className="px-3 py-1.5 rounded-lg" style={{ backgroundColor: colors.cardBg2 }}>
-                      <Text className="font-century-gothic-bold text-lg" style={{ color: '#fea60e' }}>
+                      <Text className="font-century-gothic-bold text-lg" style={{ color: GOLD }}>
                         {servicePriceTotal} {t("card.currencySymbol")}
                       </Text>
                     </View>
@@ -919,7 +990,7 @@ const StoreBookingContent = ({
                         activeOpacity={isDisabled ? 1 : 0.7}
                         className="flex-row items-center justify-between px-4 py-3 rounded-xl"
                         style={[
-                          isSelected ? { backgroundColor: isDark ? 'rgba(254,166,14,0.2)' : 'rgba(254,166,14,0.1)', borderColor: '#fea60e', borderWidth: 1.5 } : { backgroundColor: colors.cardBg2, borderColor: colors.borderColor, borderWidth: 1 },
+                          isSelected ? { backgroundColor: isDark ? 'rgba(250, 204, 21,0.2)' : 'rgba(250, 204, 21,0.1)', borderColor: GOLD, borderWidth: 1.5 } : { backgroundColor: colors.cardBg2, borderColor: colors.borderColor, borderWidth: 1 },
                           isDisabled && { opacity: 0.45 },
                         ]}
                       >
@@ -927,7 +998,7 @@ const StoreBookingContent = ({
                           <Icon
                             source={isSelected ? "check-circle" : "circle-outline"}
                             size={22}
-                            color={isSelected ? "#fea60e" : (isDark ? "#6b7280" : "#9ca3af")}
+                            color={isSelected ? GOLD : (isDark ? "#6b7280" : "#9ca3af")}
                           />
                           <Text
                             className="ml-3 text-sm flex-1"
@@ -939,7 +1010,7 @@ const StoreBookingContent = ({
                         </View>
                         <Text
                           className="text-sm font-century-gothic-bold"
-                          style={{ color: isSelected ? "#fea60e" : colors.textSecondary }}
+                          style={{ color: isSelected ? GOLD : colors.textSecondary }}
                         >
                           {item.price} {t("card.currencySymbol")}
                         </Text>
@@ -959,6 +1030,16 @@ const StoreBookingContent = ({
             )}
           </View>
 
+          <View
+            style={{
+              marginTop: 4,
+              borderRadius: 18,
+              padding: 3,
+              backgroundColor: canSubmit
+                ? (isDark ? "rgba(250, 204, 21,0.22)" : "rgba(250, 204, 21,0.18)")
+                : "transparent",
+            }}
+          >
           <TouchableOpacity
             disabled={
               !canSubmit ||
@@ -968,7 +1049,7 @@ const StoreBookingContent = ({
               isAddingStore
             }
             className={`py-4 flex-row justify-center gap-2 rounded-2xl mt-2 items-center ${!canSubmit ? "bg-[#4b5563] opacity-60" : "opacity-100"}`}
-            style={canSubmit ? { backgroundColor: '#fea60e', elevation: 6, shadowColor: '#fea60e', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.3, shadowRadius: 6 } : undefined}
+            style={canSubmit ? { backgroundColor: GOLD, elevation: 6, shadowColor: GOLD, shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.3, shadowRadius: 6 } : undefined}
             onPress={() => guard(async () => {
               try {
                 // Error kontrolü: Sunucu çalışmıyorsa işlem yapılamaz
@@ -1173,14 +1254,15 @@ const StoreBookingContent = ({
               isCreatingFreeBarber ||
               isCreatingStore ||
               isAddingStore ? (
-              <ActivityIndicator color="white" />
+              <ActivityIndicator color="#1f2937" />
             ) : (
-              <Icon source="location-enter" size={18} color="white" />
+              <Icon source="location-enter" size={18} color={canSubmit ? "#1f2937" : "white"} />
             )}
-            <Text className="text-white font-century-gothic text-base">
-              {appointmentId ? "Dukkanı Ekle" : "Randevu Al"}
+            <Text className="font-century-gothic text-base" style={{ color: canSubmit ? "#1f2937" : "white" }}>
+              {submitLabel}
             </Text>
           </TouchableOpacity>
+          </View>
         </View>
     </ScrollContainer>
   );

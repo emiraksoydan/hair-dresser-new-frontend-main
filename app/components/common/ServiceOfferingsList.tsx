@@ -190,7 +190,7 @@ export const ServiceOfferingsList: React.FC<ServiceOfferingsListProps> = ({
                     searchQuery={searchQuery}
                     setSearchQuery={setSearchQuery}
                     showButtons={false}
-                    forceBorderColor="#ffb900"
+                    forceBorderColor="#FACC15"
                   />
                 </View>
               </>

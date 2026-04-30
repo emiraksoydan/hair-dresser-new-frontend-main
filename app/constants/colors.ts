@@ -27,9 +27,11 @@ export const COLORS = {
         TEXT_TERTIARY: '#6b7280', // gray-500
         ACCENT: '#22c55e',         // green-500
         ACCENT_DARK: '#16a34a',   // green-600
-        /** Sarı CTA (Tekrar dene, compare şeridi vb.) */
-        ACCENT_GOLD: '#ffb900',
+        /** Klasik sarı vurgu (FAB, bottom tab, randevu sekmeleri, CTA) — altın değil */
+        ACCENT_GOLD: '#FACC15',
         TEXT_ON_GOLD: '#1f2937',
+        /** Daha koyu sarı — isteğe chip kenarı vb.; tab/FAB’da yok */
+        ACCENT_GOLD_BORDER: '#CA8A04',
     },
 
     // Barber Type Colors
@@ -45,12 +47,12 @@ export const COLORS = {
         HEAVY: '60',              // 60% opacity
     },
 
-    /** Profil ve ilgili ekranlardaki Switch bileşenleri — sarı tema, tutarlı track */
+    /** Profil ve ilgili ekranlardaki Switch bileşenleri — klasik sarı */
     PROFILE_SWITCH: {
-        ACTIVE: '#ffb900',
+        ACTIVE: '#FACC15',
         TRACK_OFF_LIGHT: 'rgba(15, 23, 42, 0.14)',
         TRACK_OFF_DARK: 'rgba(255, 255, 255, 0.16)',
-        TRACK_ON: 'rgba(255, 185, 0, 0.45)',
+        TRACK_ON: 'rgba(250, 204, 21, 0.45)',
     },
 } as const;
 

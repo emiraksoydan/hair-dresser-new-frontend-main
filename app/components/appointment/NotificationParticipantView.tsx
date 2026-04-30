@@ -265,10 +265,13 @@ export const NotificationParticipantView: React.FC<
                 <Icon source="seat" size={22} color="#6b7280" />
               </View>
               <View style={styles.body}>
+                <FieldLabel colors={colors}>
+                  {t("appointment.labels.chairName")}
+                </FieldLabel>
                 <Text
                   style={[styles.name, { color: colors.sectionHeaderText }]}
                 >
-                  {payload.chair?.chairName}
+                  {payload.chair?.chairName || t("appointment.labels.chair")}
                 </Text>
               </View>
             </View>
@@ -588,10 +591,13 @@ export const NotificationParticipantView: React.FC<
                 <Icon source="seat" size={22} color="#6b7280" />
               </View>
               <View style={styles.body}>
+                <FieldLabel colors={colors}>
+                  {t("appointment.labels.chairName")}
+                </FieldLabel>
                 <Text
                   style={[styles.name, { color: colors.sectionHeaderText }]}
                 >
-                  {payload.chair?.chairName}
+                  {payload.chair?.chairName || t("appointment.labels.chair")}
                 </Text>
               </View>
             </View>

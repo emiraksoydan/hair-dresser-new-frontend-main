@@ -246,13 +246,24 @@ export const useSignalRV2 = () => {
       );
     });
 
+    conn.on("store.availability.changed", (payload: { storeId?: string; date?: string }) => {
+      if (!payload?.storeId || !payload?.date) return;
+      dispatch(
+        api.util.invalidateTags([
+          { type: "Appointment", id: `availability-${payload.storeId}-${payload.date}` },
+          { type: "Appointment", id: "availability" },
+        ]),
+      );
+    });
+
     conn.on("appointment.updated", (appointment: AppointmentGetDto) => {
 
       const filters = [AppointmentFilter.Active, AppointmentFilter.Pending, AppointmentFilter.Completed, AppointmentFilter.Cancelled];
 
       filters.forEach((filter) => {
         dispatch(
-          api.util.updateQueryData("getAllAppointmentByFilter", filter, (draft) => {
+          // serializeQueryArgs ({ filter }) ile cache'leniyor → updateQueryData için aynı şekil verilmeli.
+          api.util.updateQueryData("getAllAppointmentByFilter", { filter }, (draft) => {
             if (!draft) return;
             const existingIndex = draft.findIndex((a) => a.id === appointment.id);
             const shouldBeInThisFilter =
@@ -416,6 +427,24 @@ export const useSignalRV2 = () => {
           { type: "Chat", id: "LIST" },
           { type: "Appointment", id: "LIST" },
         ]));
+        // F10: Kullanıcı aktif bir thread ekranındaysa, o thread'in mesaj cache'ini
+        // de invalidate et. Aksi halde offline'da kaçırılan `chat.message` event'leri
+        // sadece thread listesinden görülür, açık ekrandaki mesajlar eksik kalır.
+        // `getActiveThreadId` global state'ten ekranın mount'ta yazdığı thread'i okur.
+        const activeThreadId = getActiveThreadId();
+        if (activeThreadId) {
+          // Tag id api.tsx'deki provider ile birebir eşleşmeli: `MESSAGES_THREAD_{id}`.
+          dispatch(
+            api.util.invalidateTags([{ type: "Chat", id: `MESSAGES_THREAD_${activeThreadId}` }]),
+          );
+          // RTK Query endpoint cache'i ayrıca refetch — tag tetiklenmese de güvence.
+          dispatch(
+            api.endpoints.getChatMessagesByThread.initiate(
+              { threadId: activeThreadId },
+              { subscribe: false, forceRefetch: true },
+            ),
+          );
+        }
       });
 
       await connection.start();
@@ -458,6 +487,16 @@ export const useSignalRV2 = () => {
 
   // Reconnection logic
   const attemptReconnect = useCallback((expectedUserId: string) => {
+    // F10: Dedupe — önceki bekleyen reconnect timer'ını iptal et. Birden fazla
+    // event (`onclose`, `createConnection` catch, cascading) eş zamanlı
+    // tetiklediğinde eskiden timer stack'lenip paralel connection deneniyordu;
+    // bu da `isConnectingRef` flip-flopuna ve sunucuda duplicate group join'e
+    // yol açabiliyordu. Tek aktif zamanlayıcı garanti.
+    if (reconnectTimeoutRef.current) {
+      clearTimeout(reconnectTimeoutRef.current);
+      reconnectTimeoutRef.current = null;
+    }
+
     // Token refresh sırasında reconnect yapma
     if (isTokenRefreshingRef.current) {
       reconnectTimeoutRef.current = setTimeout(() => {
@@ -554,9 +593,16 @@ export const useSignalRV2 = () => {
     const conn = connectionRef.current;
     if (conn) {
       try {
+        // F10: Tüm registered event'leri kaldır — önceden `chat.messageRemoved`
+        // ve `chat.messageEdited` listesi eksikti, bu da restart/reconnect sonrası
+        // duplicate handler birikmesine ve aynı event'in iki kez işlenmesine
+        // neden olabilirdi. Tam liste `setupEventHandlers`'daki `conn.on` çağrıları
+        // ile birebir senkronize.
         conn.off("notification.received");
         conn.off("notification.updated");
         conn.off("chat.message");
+        conn.off("chat.messageRemoved");
+        conn.off("chat.messageEdited");
         conn.off("chat.threadCreated");
         conn.off("chat.threadUpdated");
         conn.off("chat.threadRemoved");

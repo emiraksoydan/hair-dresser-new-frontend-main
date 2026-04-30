@@ -164,7 +164,7 @@ export default function MyPanelScreen() {
         >
           <IconButton
             icon="arrow-left"
-            iconColor="#ffb900"
+            iconColor="#FACC15"
             size={20}
             onPress={() => router.back()}
             accessibilityLabel={t("common.goBack")}
@@ -176,7 +176,7 @@ export default function MyPanelScreen() {
         </Text>
         <IconButton
           icon={isList ? "format-list-bulleted" : "view-grid-outline"}
-          iconColor="#ffb900"
+          iconColor="#FACC15"
           size={20}
           onPress={() => setIsList((v) => !v)}
           style={{ margin: 0, marginTop: 8 }}

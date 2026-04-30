@@ -51,9 +51,14 @@ async function getNotificationGranted(): Promise<boolean> {
 
   const messaging = tryLoadMessaging();
   if (!messaging) {
-    // Expo Go veya native Firebase olmayan ortamlarda sadece OS seviyesini baz al
-    // Android 13+ için yukarıdaki check zaten yapıldı; diğer durumlarda "açık" kabul etmiyoruz
-    return Platform.OS === 'android' && Platform.Version >= 33;
+    // Firebase yoksa expo-notifications ile kontrol et (iOS prod dahil)
+    try {
+      const { getPermissionsAsync } = require('expo-notifications');
+      const { status } = await getPermissionsAsync();
+      return status === 'granted';
+    } catch {
+      return false;
+    }
   }
 
   try {
@@ -79,17 +84,23 @@ export function usePermissionSwitches() {
     setNotificationGranted(notif);
   }, []);
 
-  /** Expo Go: Linking.openSettings() Expo Go uygulamasını açar; kullanıcıya uyarı + isteğe bağlı açma. */
   const openSystemSettings = useCallback(
     (_kind: 'notification' | 'location') => {
       if (isExpoGo()) {
         Alert.alert(t('profile.expoGoSettingsTitle'), t('profile.expoGoSettingsBody'), [
           { text: t('common.cancel'), style: 'cancel' },
-          { text: t('profile.openAppSettingsAnyway'), onPress: () => void Linking.openSettings() },
+          { text: t('profile.openAppSettingsAnyway'), onPress: () => Linking.openSettings().catch(() => {}) },
         ]);
         return;
       }
-      void Linking.openSettings();
+
+      // iOS: app-settings: doğrudan uygulamanın Settings sayfasını açar (bildirim switch dahil).
+      // Android: openSettings() → app info ekranı → Notifications satırı görünür.
+      if (Platform.OS === 'ios') {
+        Linking.openURL('app-settings:').catch(() => Linking.openSettings().catch(() => {}));
+      } else {
+        Linking.openSettings().catch(() => {});
+      }
     },
     [t],
   );
@@ -110,73 +121,20 @@ export function usePermissionSwitches() {
 
   const handleLocationToggle = useCallback(
     async (value: boolean) => {
-      if (value) {
-        const before = await Location.getForegroundPermissionsAsync();
-        if (before.status === 'granted') {
-          setLocationGranted(true);
-          return;
-        }
-        // iOS: bir kez reddedildiyse tekrar prompt çıkmaz — doğrudan Ayarlar
-        if (before.status === 'denied' && before.canAskAgain === false) {
-          openSystemSettings('location');
-          return;
-        }
-        const req = await Location.requestForegroundPermissionsAsync();
-        if (req.status === 'granted') {
-          setLocationGranted(true);
-          return;
-        }
-        setLocationGranted(false);
-        openSystemSettings('location');
-      } else {
-        openSystemSettings('location');
-      }
+      // Product beklentisi: switch aç/kapat fark etmeksizin ilgili izin için
+      // kullanıcıyı doğrudan sistem ayarına yönlendir.
+      setLocationGranted(value);
+      openSystemSettings('location');
     },
     [openSystemSettings],
   );
 
   const handleNotificationToggle = useCallback(
     async (value: boolean) => {
-      if (value) {
-        try {
-          const messaging = tryLoadMessaging();
-          let granted = false;
-
-          // Android 13+ için önce POST_NOTIFICATIONS iznini iste
-          if (Platform.OS === 'android' && Platform.Version >= 33) {
-            try {
-              const permissionResult = await PermissionsAndroid.request(
-                PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS,
-              );
-              if (permissionResult !== PermissionsAndroid.RESULTS.GRANTED) {
-                setNotificationGranted(false);
-                return;
-              }
-            } catch {
-              setNotificationGranted(false);
-              return;
-            }
-          }
-
-          if (messaging) {
-            const status = await messaging().requestPermission();
-            granted = status === 1 || status === 2;
-            setNotificationGranted(granted);
-            if (!granted && Platform.OS === 'ios') {
-              openSystemSettings('notification');
-            }
-          } else {
-            // Firebase yoksa (ör. Expo Go): ayarlara yönlendir + uyarı
-            openSystemSettings('notification');
-            const osGranted = await getNotificationGranted();
-            setNotificationGranted(osGranted);
-          }
-        } catch {
-          setNotificationGranted(false);
-        }
-      } else {
-        openSystemSettings('notification');
-      }
+      // Product beklentisi: switch aç/kapat fark etmeksizin ilgili izin için
+      // kullanıcıyı doğrudan sistem ayarına yönlendir.
+      setNotificationGranted(value);
+      openSystemSettings('notification');
     },
     [openSystemSettings],
   );

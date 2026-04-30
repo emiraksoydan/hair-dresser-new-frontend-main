@@ -9,6 +9,9 @@ interface UseNearbyStoresOptions {
     enabled: boolean;
     filter?: FilterRequestDto;
     useFilteredEndpoint?: boolean;
+    /** Filter mode'da infinite-scroll sayfa boyutu (backend limit hard-cap ile korunur). */
+    pageSize?: number;
+    persistKey?: string;
 }
 
 export function useNearbyStores(enabledOrOptions: boolean | UseNearbyStoresOptions) {
@@ -25,10 +28,13 @@ export function useNearbyStores(enabledOrOptions: boolean | UseNearbyStoresOptio
         enabled: options.enabled,
         filter: options.filter,
         useFilteredEndpoint: options.useFilteredEndpoint,
+        pageSize: options.pageSize,
         nearbyTrigger,
         nearbyResult,
         filteredTrigger,
         filteredResult,
+        liveFavoriteEntity: "store",
+        persistKey: options.persistKey,
     });
 
     return {
@@ -44,5 +50,8 @@ export function useNearbyStores(enabledOrOptions: boolean | UseNearbyStoresOptio
         location: result.location,
         manualFetch: result.manualFetch,
         retryPermission: result.retryPermission,
+        loadMore: result.loadMore,
+        hasMore: result.hasMore,
+        loadingMore: result.loadingMore,
     };
 }

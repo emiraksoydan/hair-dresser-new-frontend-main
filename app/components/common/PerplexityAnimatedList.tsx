@@ -18,6 +18,8 @@ type Props<T> = {
   ListEmptyComponent?: React.ComponentType<any> | React.ReactElement | null;
   initialNumToRender?: number;
   windowSize?: number;
+  onEndReached?: (() => void) | null;
+  onEndReachedThreshold?: number;
 };
 
 /**
@@ -37,6 +39,8 @@ export function PerplexityAnimatedList<T>({
   ListEmptyComponent,
   initialNumToRender,
   windowSize,
+  onEndReached,
+  onEndReachedThreshold,
 }: Props<T>): ReactElement {
   return (
     <FlatList
@@ -60,6 +64,8 @@ export function PerplexityAnimatedList<T>({
       ListEmptyComponent={ListEmptyComponent}
       initialNumToRender={initialNumToRender}
       windowSize={windowSize}
+      onEndReached={onEndReached ?? undefined}
+      onEndReachedThreshold={onEndReachedThreshold}
     />
   );
 }

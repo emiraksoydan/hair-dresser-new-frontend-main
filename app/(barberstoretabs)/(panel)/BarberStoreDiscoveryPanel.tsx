@@ -1,6 +1,7 @@
-import React, { useCallback, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useIsFocused } from "@react-navigation/native";
 import {
+  ActivityIndicator,
   Dimensions,
   FlatList,
   RefreshControl,
@@ -13,7 +14,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Text } from "../../components/common/Text";
 import { OsmMapView as MapView } from "../../components/common/OsmMapView";
 import SearchBar from "../../components/common/searchbar";
-import { BottomSheetModal, BottomSheetView } from "@gorhom/bottom-sheet";
+import { BottomSheetModal } from "@gorhom/bottom-sheet";
 import { useBottomSheet } from "../../hook/useBottomSheet";
 import MotiViewExpand from "../../components/common/motiviewexpand";
 import { toggleExpand } from "../../utils/common/expand-toggle";
@@ -44,6 +45,7 @@ import { safeCoord } from "../../utils/location/geo";
 import { BarberMarker } from "../../components/freebarber/barbermarker";
 import { RatingsBottomSheet } from "../../components/rating/ratingsbottomsheet";
 import { useBackendFilters } from "../../hook/useBackendFilters";
+import { DEFAULT_FILTER_RADIUS_KM, DEFAULT_DISTANCE_PRESET_ID } from "../../constants/filterDefaults";
 import { DeferredRender } from "../../components/common/deferredrender";
 import { useLanguage } from "../../hook/useLanguage";
 import { UnifiedStateWrapper } from "../../components/common/UnifiedStateManager";
@@ -55,12 +57,6 @@ import { isOtherUsersFreeBarber } from "../../utils/compare-eligibility";
 import { PanelCollapsibleTop } from "../../components/panel/PanelCollapsibleTop";
 import { useFabOverlayWhenSheetOpen, usePanelMoreFab } from "../../hook/usePanelMoreFab";
 import { useDeferredSheetPresent } from "../../hook/useDeferredSheetPresent";
-import { getCompareStripBottom } from "../../components/layout/panelBottomOverlays";
-import {
-  compareStripCtaStyle,
-  compareStripOuterStyle,
-  useCompareMetrics,
-} from "../../(screens)/compare/compareShared";
 import { PerplexityListItem } from "../../components/panel/PerplexityListItem";
 import { PerplexityHorizontalList } from "../../components/panel/PerplexityHorizontalList";
 import { PanelEmptyCta } from "../../components/common/PanelEmptyCta";
@@ -68,15 +64,10 @@ import { useBarberStoreSheet } from "../../context/BarberStoreSheetContext";
 
 const Index = () => {
   const insets = useSafeAreaInsets();
-  const compareStripBottom = useMemo(
-    () => getCompareStripBottom(insets.bottom),
-    [insets.bottom],
-  );
   const { colors, isDark } = useTheme();
   const router = useSafeNavigation();
   const dispatch = useAppDispatch();
   const { t } = useLanguage();
-  const cmpM = useCompareMetrics();
   const guard = useActionGuard();
   const { withSubscription } = useSubscriptionGuard();
   const barberStoreSheet = useBarberStoreSheet();
@@ -87,6 +78,18 @@ const Index = () => {
   const currentUserId = currentUser?.data?.id;
 
   const [compareFbIds, setCompareFbIds] = useState<string[]>([]);
+  const compareNavFiredRef = useRef(false);
+  useEffect(() => {
+    if (compareFbIds.length === 2) {
+      if (compareNavFiredRef.current) return;
+      compareNavFiredRef.current = true;
+      const [a, b] = compareFbIds;
+      setCompareFbIds([]);
+      router.push({ pathname: "/(screens)/compare/public-freebarbers", params: { left: a, right: b } });
+    } else {
+      compareNavFiredRef.current = false;
+    }
+  }, [compareFbIds, router]);
   const toggleCompareFb = useCallback((id: string) => {
     setCompareFbIds((prev) => {
       if (prev.includes(id)) return prev.filter((x) => x !== id);
@@ -138,13 +141,17 @@ const Index = () => {
     location,
     error: freeBarbersError,
     manualFetch,
+    loadMore: loadMoreFreeBarbers,
+    hasMore: hasMoreFreeBarbers,
+    loadingMore: loadingMoreFreeBarbers,
   } = useNearbyStoresControl({
     enabled: true,
     stores,
     hardRefreshMs: 15000,
-    radiusKm: 10,
+    radiusKm: DEFAULT_FILTER_RADIUS_KM,
     filter: freeBarberFilterDto,
     currentUserId,
+    persistKey: "barberstore-freebarbers",
   });
 
   // Ayarlar
@@ -158,13 +165,11 @@ const Index = () => {
   const [selectedMapItem, setSelectedMapItem] = useState<FreeBarGetDto | null>(
     null,
   );
+  const mapRef = useRef<any>(null);
 
   const manualFetchRef = React.useRef(manualFetch);
   manualFetchRef.current = manualFetch;
-  React.useEffect(() => {
-    if (!isFocused || locationStatus !== "granted") return;
-    manualFetchRef.current();
-  }, [isFocused, locationStatus]);
+  // Sekme odağında tam liste + skeleton yenilemesi kaldırıldı; periyodik arka plan yenilemesi hook içinde.
 
   const panelMapFabItems = useMemo(
     () => [
@@ -181,8 +186,9 @@ const Index = () => {
 
   // Bottom sheet hooks
   const mapDetailSheet = useBottomSheet({
-    snapPoints: ["90%", "100%"],
+    snapPoints: ["92%", "100%"],
     enablePanDownToClose: true,
+    enableOverDrag: true,
   });
   const ratingsSheet = useBottomSheet({
     snapPoints: ["50%", "85%"],
@@ -435,9 +441,9 @@ const Index = () => {
 
     push({ id: "freebarbers-header", type: "freebarbers-header" }, H.header);
 
-    if (isFreeBarbersLoading) {
+    if (isFreeBarbersLoading && filteredFreeBarbers.length === 0) {
       push({ id: "freebarbers-loading", type: "freebarbers-loading" }, H.loading);
-    } else if (showFreeBarbersConnectivityError) {
+    } else if (showFreeBarbersConnectivityError && filteredFreeBarbers.length === 0) {
       push({ id: "freebarbers-error", type: "freebarbers-error" }, H.error);
     } else {
       const freeBarbersToDisplay = filteredFreeBarbers;
@@ -479,6 +485,16 @@ const Index = () => {
   ]);
 
   const mapInitialRegion = useMemo(() => {
+    const userCoord = safeCoord(location?.latitude, location?.longitude);
+    if (userCoord) {
+      return {
+        latitude: userCoord.lat,
+        longitude: userCoord.lon,
+        latitudeDelta: 0.03,
+        longitudeDelta: 0.03,
+      };
+    }
+
     const fbCandidate = displayFreeBarbers
       .map((b) => safeCoord((b as any).latitude, (b as any).longitude))
       .find(Boolean);
@@ -507,7 +523,26 @@ const Index = () => {
       latitudeDelta: 0.08,
       longitudeDelta: 0.08,
     };
-  }, [displayFreeBarbers, displayStores]);
+  }, [location?.latitude, location?.longitude, displayFreeBarbers, displayStores]);
+
+  useEffect(() => {
+    if (!isMapMode) return;
+    const userCoord = safeCoord(location?.latitude, location?.longitude);
+    if (!userCoord) return;
+    try {
+      mapRef.current?.animateToRegion(
+        {
+          latitude: userCoord.lat,
+          longitude: userCoord.lon,
+          latitudeDelta: 0.03,
+          longitudeDelta: 0.03,
+        },
+        450,
+      );
+    } catch {
+      // ignore
+    }
+  }, [isMapMode, location?.latitude, location?.longitude]);
   const freeBarberMarkers = useMemo(() => {
     return filteredFreeBarbers.map((barber) => (
       <BarberMarker
@@ -519,7 +554,7 @@ const Index = () => {
   }, [filteredFreeBarbers, handleMarkerPress]); // Sadece liste değişirse render et
 
   return (
-    <View className="flex flex-1 pl-4 pr-2" style={{ backgroundColor: colors.screenBg }}>
+    <View className="flex flex-1 px-3" style={{ backgroundColor: colors.screenBg, overflow: "hidden" }}>
       <View
         className={
           isMapMode
@@ -590,6 +625,7 @@ const Index = () => {
       {isMapMode && (
         <View className="absolute inset-0" style={{ zIndex: 5, elevation: 5 }}>
           <MapView
+            ref={mapRef}
             style={{ flex: 1 }}
             userInterfaceStyle={isDark ? "dark" : "light"}
             initialRegion={mapInitialRegion}
@@ -615,6 +651,18 @@ const Index = () => {
           }
           initialNumToRender={10}
           windowSize={21}
+          // Infinite-scroll: mağaza bazında keyset pagination — her store kendi
+          // hasMore'unu takip eder, loadMore yalnızca hâlâ sayfa alabilen store'lar
+          // için paralel fetch yapar. Duplicate barber'lar hook içinde Map dedupe.
+          onEndReached={hasMoreFreeBarbers ? loadMoreFreeBarbers : undefined}
+          onEndReachedThreshold={0.5}
+          ListFooterComponent={
+            loadingMoreFreeBarbers ? (
+              <View style={{ paddingVertical: 16 }}>
+                <ActivityIndicator size="small" color="#f05e23" />
+              </View>
+            ) : null
+          }
           renderItem={({ item }) => {
             if (item.type === "freebarbers-header") {
               return (
@@ -731,29 +779,11 @@ const Index = () => {
         />
       </View>
 
-      {compareFbIds.length === 2 && (
-        <View style={[{ zIndex: 30 }, compareStripOuterStyle(isDark, cmpM, compareStripBottom)]}>
-          <TouchableOpacity
-            onPress={() => {
-              const [a, b] = compareFbIds;
-              setCompareFbIds([]);
-              router.push({
-                pathname: "/(screens)/compare/public-freebarbers",
-                params: { left: a, right: b },
-              });
-            }}
-            style={compareStripCtaStyle(cmpM)}
-          >
-            <Text style={{ fontFamily: "CenturyGothic-Bold", fontSize: cmpM.rowFont + 2, color: "#1f2937" }}>
-              {t("compare.continue")}
-            </Text>
-          </TouchableOpacity>
-        </View>
-      )}
-
       <FilterDrawer
         visible={filterDrawerVisible}
         onClose={() => setFilterDrawerVisible(false)}
+        selectedDistancePreset={filterCriteria.distancePreset ?? DEFAULT_DISTANCE_PRESET_ID}
+        onChangeDistancePreset={(preset) => updateFilterCriteria({ distancePreset: preset })}
         selectedUserType={filterCriteria.userType || "all"}
         onChangeUserType={(value) => updateFilterCriteria({ userType: value })}
         showUserTypeFilter={true}
@@ -835,11 +865,11 @@ const Index = () => {
         onChange={mapDetailSheet.handleChange}
         snapPoints={mapDetailSheet.snapPoints}
         enablePanDownToClose={mapDetailSheet.enablePanDownToClose}
-        handleIndicatorStyle={{ backgroundColor: colors.sheetHandle }}
+        handleComponent={() => null}
         backgroundStyle={{ backgroundColor: colors.sheetBg }}
         backdropComponent={mapDetailSheet.makeBackdrop()}
       >
-        <BottomSheetView style={{ flex: 1, padding: 0, margin: 0, backgroundColor: colors.sheetBg }}>
+        <View style={{ flex: 1 }}>
           <DeferredRender
             active={mapDetailSheet.isOpen && !!selectedMapItem}
             placeholder={
@@ -857,7 +887,7 @@ const Index = () => {
               />
             )}
           </DeferredRender>
-        </BottomSheetView>
+        </View>
       </BottomSheetModal>
 
       {/* Yorumlar Bottom Sheet */}

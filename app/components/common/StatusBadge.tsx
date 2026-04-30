@@ -60,10 +60,14 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({
   const iconSize = isList ? 16 : 14;
 
   return (
-    <View className={`${config.bgColor} ${pad} rounded-xl flex-row items-center justify-center ${className}`}>
+    <View className={`${config.bgColor} ${pad} rounded-xl flex-row items-center justify-center max-w-full ${className}`}>
       {config.icon && <Icon source={config.icon} color="white" size={iconSize} />}
       {config.text && (
-        <Text className={`text-white font-century-gothic-sans-medium ${textSize} ${config.icon ? 'ml-0.5' : ''}`}>
+        <Text
+          className={`text-white font-century-gothic-sans-medium ${textSize} ${config.icon ? 'ml-0.5' : ''}`}
+          numberOfLines={1}
+          ellipsizeMode="tail"
+        >
           {config.text}
         </Text>
       )}

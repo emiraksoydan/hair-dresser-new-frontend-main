@@ -32,12 +32,16 @@ export type UseNearbyControlParams = {
   onFetch: (lat: number, lon: number) => Promise<void>;
   /** Arka plan konum takibini başlatır. Sadece useTrackFreeBarberLocation'da true olmalı. */
   enableBackgroundTracking?: boolean;
+  /** Tab remount'larında fetchedOnce bayrağını korumak için benzersiz anahtar. */
+  persistKey?: string;
 };
 
 export type NearbyRequest = {
   lat: number;
   lon: number;
   radiusKm?: number;
+  /** Server clamps to [1, 200]. Default 100. Set explicitly only for paginated screens. */
+  limit?: number;
 };
 
 export type UpdateLocationDto = {

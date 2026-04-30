@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { useThemeContext } from '../context/ThemeContext';
+import { COLORS } from '../constants/colors';
 
 export type ColorScheme = 'light' | 'dark';
 
@@ -64,7 +65,7 @@ export const useTheme = () => {
         border: '#333333',
         inputBackground: '#2a2a2a',
         inputBorder: '#444444',
-        primary: '#ffb900',
+        primary: COLORS.UI.ACCENT_GOLD,
         primaryText: '#1f2937',
         tagline: '#c2a523',
         taglineLine: '#c2a523',
@@ -98,7 +99,7 @@ export const useTheme = () => {
         border: '#d0d0d0',
         inputBackground: '#ffffff',
         inputBorder: '#d0d0d0',
-        primary: '#ffb900',
+        primary: COLORS.UI.ACCENT_GOLD,
         primaryText: '#1f2937',
         tagline: '#8b7355',
         taglineLine: '#8b7355',

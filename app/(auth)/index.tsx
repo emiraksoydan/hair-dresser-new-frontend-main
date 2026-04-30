@@ -371,7 +371,7 @@ const Index = () => {
     return `+90 ··· ${last4.slice(0, 2)} ${last4.slice(2)}`;
   }, [phone]);
 
-  const otpAccentPrimary = isDark ? "#ffb900" : "#d97706";
+  const otpAccentPrimary = isDark ? "#FACC15" : "#d97706";
   const otpAccentSecondary = isDark ? "#c2a523" : "#f59e0b";
 
   const { width: screenWidth } = useWindowDimensions();
@@ -959,7 +959,7 @@ const Index = () => {
               style={{
                 backgroundColor: colors.primary,
                 opacity: isLoading ? 0.6 : 1,
-                shadowColor: '#ffb900',
+                shadowColor: '#FACC15',
                 shadowOffset: { width: 0, height: 3 },
                 shadowOpacity: 0.35,
                 shadowRadius: 6,
@@ -1083,7 +1083,7 @@ const Index = () => {
                           borderRadius: 10,
                           alignItems: "center",
                           justifyContent: "center",
-                          backgroundColor: isDark ? "rgba(255,185,0,0.12)" : "rgba(217,119,6,0.1)",
+                          backgroundColor: isDark ? "rgba(250, 204, 21,0.12)" : "rgba(217,119,6,0.1)",
                         }}
                       >
                         <Icon source="shield-key" size={20} color={otpAccentPrimary} />
@@ -1143,7 +1143,7 @@ const Index = () => {
                       focusedPinCodeContainerStyle: {
                         borderColor: otpAccentPrimary,
                         borderWidth: 2,
-                        backgroundColor: isDark ? "rgba(255,185,0,0.08)" : "rgba(217,119,6,0.06)",
+                        backgroundColor: isDark ? "rgba(250, 204, 21,0.08)" : "rgba(217,119,6,0.06)",
                       },
                       pinCodeTextStyle: {
                         fontSize: Math.min(otpBoxSize * 0.44, 22),
@@ -1187,7 +1187,7 @@ const Index = () => {
                         borderWidth: 1.5,
                         borderColor: canResend && !isLoading ? otpAccentPrimary : colors.inputBorder,
                         backgroundColor: canResend && !isLoading
-                          ? isDark ? "rgba(255,185,0,0.1)" : "rgba(217,119,6,0.08)"
+                          ? isDark ? "rgba(250, 204, 21,0.1)" : "rgba(217,119,6,0.08)"
                           : "transparent",
                         opacity: canResend && !isLoading ? 1 : 0.45,
                         flexDirection: "row",

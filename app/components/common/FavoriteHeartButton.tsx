@@ -36,9 +36,9 @@ export const FavoriteHeartButton: React.FC<FavoriteHeartButtonProps> = ({
 
   const handlePress = useCallback(() => {
     if (disabled) return;
-    bump();
+    bump(!active);
     onPress();
-  }, [bump, disabled, onPress]);
+  }, [bump, disabled, onPress, active]);
 
   return (
     <Pressable

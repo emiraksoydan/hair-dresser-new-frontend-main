@@ -13,6 +13,8 @@ interface CardHeaderProps {
   className?: string;
   /** Panel listelerinde başlık ve ikon biraz küçük */
   compact?: boolean;
+  /** false: yan yana aksiyon (chip) için flex-1 kullanma; başlık doğal genişlikte kalır */
+  fillRow?: boolean;
 }
 
 /**
@@ -25,6 +27,7 @@ export const CardHeader: React.FC<CardHeaderProps> = ({
   icon,
   className = '',
   compact = false,
+  fillRow = true,
 }) => {
   const { colors } = useTheme();
   const titleSize = compact ? 19 : 23;
@@ -38,7 +41,7 @@ export const CardHeader: React.FC<CardHeaderProps> = ({
   };
 
   return (
-    <View className={`flex-row flex-1 ${isList ? 'items-center' : ''} ${className}`}>
+    <View className={`flex-row ${fillRow ? 'flex-1' : ''} ${isList ? 'items-center' : ''} ${className}`}>
       <Text
         numberOfLines={1}
         ellipsizeMode="tail"

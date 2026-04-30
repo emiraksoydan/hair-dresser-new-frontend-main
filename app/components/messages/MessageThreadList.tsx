@@ -4,16 +4,18 @@
  */
 
 import { Icon } from "react-native-paper";
-import React, { useMemo, useCallback, useState } from 'react';
+import React, { useMemo, useCallback, useEffect, useRef, useState } from 'react';
 import { View, TouchableOpacity, RefreshControl, ActivityIndicator } from 'react-native';
 import { Text } from '../common/Text';
-import { useAnimatedScrollHandler, useSharedValue } from 'react-native-reanimated';
+import Animated, { useAnimatedScrollHandler, useSharedValue } from 'react-native-reanimated';
+import { useFavoriteHeartPulse } from '../common/useFavoriteHeartPulse';
 import { AnimatedLegendList } from '../common/AnimatedLegendList';
 import { ScrollStackItem } from '../common/ScrollStackItem';
 import { useSafeNavigation } from '../../hook/useSafeNavigation';
 
-import { useGetChatThreadsQuery, useToggleFavoriteMutation } from '../../store/api';
-import { ChatThreadListItemDto, ChatThreadParticipantDto, AppointmentStatus, UserType, BarberType, ImageOwnerType } from '../../types';
+import { api, useGetChatThreadsQuery, useToggleFavoriteMutation } from '../../store/api';
+import { useAppDispatch } from '../../store/hook';
+import { ChatThreadListItemDto, ChatThreadParticipantDto, AppointmentStatus, UserType, BarberType, ImageOwnerType, FavoriteTargetType } from '../../types';
 import { SkeletonComponent } from '../common/skeleton';
 import { UnifiedStateWrapper } from '../common/UnifiedStateManager';
 import { OwnerAvatar } from '../common/owneravatar';
@@ -27,12 +29,51 @@ import { useTheme } from '../../hook/useTheme';
 
 const CHAT_AVATAR_PLACEHOLDER = require('../../../assets/images/profileempty.webp');
 
+/** Kısıtlı favori satırında: kalp tıklanınca her zaman “favoriye ekle” animasyonu. */
+const RestrictedFavoriteHeartAction = React.memo(function RestrictedFavoriteHeartAction({
+  busy,
+  hasUnread,
+  mutedTextColor,
+  unreadAccent,
+  onPress,
+}: {
+  busy: boolean;
+  hasUnread: boolean;
+  mutedTextColor: string;
+  unreadAccent: string;
+  onPress: () => void;
+}) {
+  const { animatedStyle, bump } = useFavoriteHeartPulse();
+  return (
+    <TouchableOpacity
+      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+      disabled={busy}
+      onPress={() => {
+        bump(true);
+        onPress();
+      }}
+      className="items-center justify-center"
+    >
+      {busy ? (
+        <ActivityIndicator size="small" color={unreadAccent} />
+      ) : (
+        <Animated.View style={animatedStyle}>
+          <Icon source="heart-outline" size={22} color={hasUnread ? unreadAccent : mutedTextColor} />
+        </Animated.View>
+      )}
+    </TouchableOpacity>
+  );
+});
+
 interface MessageThreadListProps {
     routePrefix: string; // e.g., '/(customertabs)/(messages)' or '/(barberstoretabs)/(messages)'
     iconSource: string; // Icon name for the avatar (react-native-paper icon name)
 }
 
 const THREAD_ROW_STRIDE = 152;
+const THREADS_PAGE_SIZE = 30;
+/** RN `onEndReached` ilk layout'ta yanlış tetiklenebilir — footer spinner flash'ını önler. */
+const END_REACHED_GRACE_MS = 450;
 
 export const MessageThreadList: React.FC<MessageThreadListProps> = ({ routePrefix, iconSource }) => {
     const router = useSafeNavigation();
@@ -45,12 +86,64 @@ export const MessageThreadList: React.FC<MessageThreadListProps> = ({ routePrefi
         },
     });
     const { token: authToken, userType: currentUserType } = useAuth();
-    const { data: threads, isLoading, refetch, error, isError } = useGetChatThreadsQuery(undefined, {
-        skip: !authToken,
-    });
+    const dispatch = useAppDispatch();
+    const { data: threads, isLoading, refetch, error, isError } = useGetChatThreadsQuery(
+        { limit: THREADS_PAGE_SIZE },
+        { skip: !authToken },
+    );
     const [toggleFavorite, { isLoading: favoriteToggleBusy }] = useToggleFavoriteMutation();
     const formatTime = useFormatTime();
     const [isPullRefreshing, setIsPullRefreshing] = useState(false);
+
+    // Infinite scroll state
+    const [isLoadingOlder, setIsLoadingOlder] = useState(false);
+    const hasMoreRef = useRef(true);
+    const lastLoadedBeforeRef = useRef<string | null>(null);
+    const suppressEndReachedUntilMsRef = useRef(0);
+    const bumpEndReachedGrace = useCallback(() => {
+        suppressEndReachedUntilMsRef.current = Date.now() + END_REACHED_GRACE_MS;
+    }, []);
+
+    useEffect(() => {
+        bumpEndReachedGrace();
+    }, [bumpEndReachedGrace]);
+
+    const loadOlderThreads = useCallback(async () => {
+        if (Date.now() < suppressEndReachedUntilMsRef.current) return;
+        if (isLoadingOlder || !hasMoreRef.current) return;
+        if (!threads || threads.length === 0) return;
+
+        // Cursor: en eski thread'in (LastMessageAt, ThreadId) çifti — tie-breaker için beforeId.
+        const withTs = threads.filter((t) => !!t.lastMessageAt);
+        if (withTs.length === 0) { hasMoreRef.current = false; return; }
+        const oldest = withTs[withTs.length - 1];
+        const before = oldest.lastMessageAt as string | undefined;
+        const beforeId = oldest.threadId as string | undefined;
+        if (!before) return;
+        const cursorKey = `${before}|${beforeId ?? ""}`;
+        if (lastLoadedBeforeRef.current === cursorKey) return;
+        lastLoadedBeforeRef.current = cursorKey;
+
+        setIsLoadingOlder(true);
+        try {
+            const result = await dispatch(
+                api.endpoints.getChatThreads.initiate(
+                    { before, beforeId, limit: THREADS_PAGE_SIZE },
+                    // subscribe:false — pagination dispatch'leri yeni subscriber yaratmasın.
+                    // Aksi takdirde her sayfa için kalıcı anonim subscriber birikir; SignalR
+                    // updateQueryData veya tag invalidation hepsini refetch tetikler.
+                    { subscribe: false, forceRefetch: true },
+                ),
+            ).unwrap();
+            if (!Array.isArray(result) || result.length < THREADS_PAGE_SIZE) {
+                hasMoreRef.current = false;
+            }
+        } catch {
+            lastLoadedBeforeRef.current = null;
+        } finally {
+            setIsLoadingOlder(false);
+        }
+    }, [dispatch, threads, isLoadingOlder]);
     const mutedTextColor = isDark ? '#94a3b8' : '#64748b';
     const tertiaryTextColor = isDark ? '#64748b' : '#94a3b8';
     const unreadAccent = '#f05e23';
@@ -330,25 +423,29 @@ export const MessageThreadList: React.FC<MessageThreadListProps> = ({ routePrefi
                             )}
                             <View className="relative items-center justify-center mt-1">
                                 {isRestricted && item.isFavoriteThread && item.participants[0]?.userId ? (
-                                    <TouchableOpacity
-                                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                                        disabled={favoriteToggleBusy}
+                                    <RestrictedFavoriteHeartAction
+                                        busy={favoriteToggleBusy}
+                                        hasUnread={hasUnread}
+                                        mutedTextColor={mutedTextColor}
+                                        unreadAccent={unreadAccent}
                                         onPress={() => {
                                             const otherParticipant = item.participants[0];
                                             const targetId =
                                                 otherParticipant?.userType === UserType.BarberStore
                                                     ? (item.favoriteStoreId ?? otherParticipant.userId)
                                                     : otherParticipant.userId;
-                                            toggleFavorite({ targetId }).unwrap().then(() => refetch()).catch(() => { });
+                                            const targetType =
+                                                otherParticipant?.userType === UserType.BarberStore
+                                                    ? FavoriteTargetType.Store
+                                                    : otherParticipant?.userType === UserType.FreeBarber
+                                                      ? FavoriteTargetType.FreeBarber
+                                                      : FavoriteTargetType.Customer;
+                                            toggleFavorite({ targetId, targetType })
+                                                .unwrap()
+                                                .then(() => refetch())
+                                                .catch(() => {});
                                         }}
-                                        className="items-center justify-center"
-                                    >
-                                        {favoriteToggleBusy ? (
-                                            <ActivityIndicator size="small" color={unreadAccent} />
-                                        ) : (
-                                            <Icon source="heart-outline" size={22} color={hasUnread ? unreadAccent : mutedTextColor} />
-                                        )}
-                                    </TouchableOpacity>
+                                    />
                                 ) : (
                                     <Icon source="message-text" size={20} color={hasUnread ? unreadAccent : mutedTextColor} />
                                 )}
@@ -379,12 +476,15 @@ export const MessageThreadList: React.FC<MessageThreadListProps> = ({ routePrefi
     }, [refetch]);
     const handleRefresh = useCallback(async () => {
         setIsPullRefreshing(true);
+        bumpEndReachedGrace();
+        hasMoreRef.current = true;
+        lastLoadedBeforeRef.current = null;
         try {
             await refetch();
         } finally {
             setIsPullRefreshing(false);
         }
-    }, [refetch]);
+    }, [refetch, bumpEndReachedGrace]);
 
     // Loading durumu — hook'ların hepsi yukarıda; erken return sadece JSX için (Rules of Hooks)
     if (isLoading) {
@@ -403,7 +503,15 @@ export const MessageThreadList: React.FC<MessageThreadListProps> = ({ routePrefi
                 estimatedItemSize={100}
                 scrollEventThrottle={16}
                 onScroll={onThreadScroll}
-                contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 16, paddingBottom: 28, gap: 4 }}
+                style={{ flex: 1, backgroundColor: colors.screenBg }}
+                contentContainerStyle={{
+                    paddingHorizontal: 16,
+                    paddingTop: 16,
+                    paddingBottom: 28,
+                    gap: 4,
+                    flexGrow: 1,
+                    backgroundColor: colors.screenBg,
+                }}
                 recycleItems={true}
                 drawDistance={250}
                 renderItem={renderItem as any}
@@ -430,7 +538,18 @@ export const MessageThreadList: React.FC<MessageThreadListProps> = ({ routePrefi
                         refreshing={isPullRefreshing}
                         onRefresh={handleRefresh}
                         tintColor="#f05e23"
+                        colors={["#f05e23"]}
+                        progressBackgroundColor={isDark ? colors.cardBg2 : colors.screenBg}
                     />
+                }
+                onEndReached={loadOlderThreads as any}
+                onEndReachedThreshold={0.3}
+                ListFooterComponent={
+                    isLoadingOlder ? (
+                        <View style={{ paddingVertical: 12 }}>
+                            <ActivityIndicator size="small" color="#f05e23" />
+                        </View>
+                    ) : null
                 }
             />
         </View>

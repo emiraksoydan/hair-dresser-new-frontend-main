@@ -1,4 +1,5 @@
 import {
+  ActivityIndicator,
   Dimensions,
   FlatList,
   RefreshControl,
@@ -10,7 +11,6 @@ import { Icon } from "react-native-paper";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Text } from "../../components/common/Text";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useIsFocused } from "@react-navigation/native";
 import { useBottomSheet } from "../../hook/useBottomSheet";
 import SearchBar from "../../components/common/searchbar";
 import { SkeletonComponent } from "../../components/common/skeleton";
@@ -18,7 +18,7 @@ import MotiViewExpand from "../../components/common/motiviewexpand";
 import { MotiView } from "moti";
 import { toggleExpand } from "../../utils/common/expand-toggle";
 import { FilterDrawer } from "../../components/common/filterdrawer";
-import { BottomSheetModal, BottomSheetView } from "@gorhom/bottom-sheet";
+import { BottomSheetModal } from "@gorhom/bottom-sheet";
 import { StoreCardInner } from "../../components/store/storecard";
 import { useLanguage } from "../../hook/useLanguage";
 import { useTheme } from "../../hook/useTheme";
@@ -57,6 +57,7 @@ import {
 import { SavedFilterChips } from "../../components/common/savedfilterchips";
 import { RatingsBottomSheet } from "../../components/rating/ratingsbottomsheet";
 import { useBackendFilters } from "../../hook/useBackendFilters";
+import { DEFAULT_DISTANCE_PRESET_ID } from "../../constants/filterDefaults";
 import { useActionGuard } from "../../hook/useActionGuard";
 import { useSubscriptionGuard } from "../../hook/useSubscriptionGuard";
 import { StoreMarker } from "../../components/common/storemarker";
@@ -65,26 +66,15 @@ import { isOtherUsersStore } from "../../utils/compare-eligibility";
 import { PanelCollapsibleTop } from "../../components/panel/PanelCollapsibleTop";
 import { useFabOverlayWhenSheetOpen, usePanelMoreFab } from "../../hook/usePanelMoreFab";
 import { useDeferredSheetPresent } from "../../hook/useDeferredSheetPresent";
-import { getCompareStripBottom } from "../../components/layout/panelBottomOverlays";
-import {
-  compareStripCtaStyle,
-  compareStripOuterStyle,
-  useCompareMetrics,
-} from "../../(screens)/compare/compareShared";
 import { PerplexityListItem } from "../../components/panel/PerplexityListItem";
 import { PerplexityHorizontalList } from "../../components/panel/PerplexityHorizontalList";
 import { PanelEmptyCta } from "../../components/common/PanelEmptyCta";
 import { useFreeBarberPanelSheet } from "../../context/FreeBarberPanelSheetContext";
 const Index = () => {
   const insets = useSafeAreaInsets();
-  const compareStripBottom = useMemo(
-    () => getCompareStripBottom(insets.bottom),
-    [insets.bottom],
-  );
   const { colors, isDark } = useTheme();
   const dispatch = useAppDispatch();
   const { t } = useLanguage();
-  const cmpM = useCompareMetrics();
   const router = useSafeNavigation();
   const guard = useActionGuard();
   const { withSubscription } = useSubscriptionGuard();
@@ -181,6 +171,18 @@ const Index = () => {
   const currentUserId = currentUser?.data?.id;
 
   const [compareStoreIds, setCompareStoreIds] = useState<string[]>([]);
+  const compareNavFiredRef = useRef(false);
+  useEffect(() => {
+    if (compareStoreIds.length === 2) {
+      if (compareNavFiredRef.current) return;
+      compareNavFiredRef.current = true;
+      const [a, b] = compareStoreIds;
+      setCompareStoreIds([]);
+      router.push({ pathname: "/(screens)/compare/public-stores", params: { left: a, right: b } });
+    } else {
+      compareNavFiredRef.current = false;
+    }
+  }, [compareStoreIds, router]);
   const toggleCompareStore = useCallback((storeId: string) => {
     setCompareStoreIds((prev) => {
       if (prev.includes(storeId)) return prev.filter((x) => x !== storeId);
@@ -213,10 +215,14 @@ const Index = () => {
     fetchedOnce,
     location,
     manualFetch,
+    loadMore: loadMoreStores,
+    hasMore: hasMoreStores,
+    loadingMore: loadingMoreStores,
   } = useNearbyStores({
     enabled: hasFreeBarberPanel,
     filter: storeFilterDto,
     useFilteredEndpoint: true,
+    persistKey: "freebarber-stores",
   });
   const displayStores = useMemo(() => {
     // Backend'de zaten kontrol ediliyor, ama frontend'de de ekstra kontrol
@@ -229,7 +235,6 @@ const Index = () => {
   // Ayarlar
   const { data: settingData } = useGetSettingQuery();
   const panelTopCollapsedHint = t("panel.topSectionCollapsedHint");
-  const isFocused = useIsFocused();
 
   const [panelTopExpanded, setPanelTopExpanded] = useState(true);
 
@@ -284,13 +289,9 @@ const Index = () => {
   const [isMapMode, setIsMapMode] = useState(false);
   const [selectedMapItem, setSelectedMapItem] =
     useState<BarberStoreGetDto | null>(null);
+  const mapRef = useRef<any>(null);
 
-  const manualFetchRef = React.useRef(manualFetch);
-  manualFetchRef.current = manualFetch;
-  useEffect(() => {
-    if (!isFocused || !hasFreeBarberPanel || locationStatus !== "granted") return;
-    manualFetchRef.current();
-  }, [isFocused, hasFreeBarberPanel, locationStatus]);
+  // Sekme odağında manualFetch kaldırıldı — skeleton flicker. Pull-to-refresh + arka plan yenileme hook'ta.
 
   // Bildirimden gelen focusRegion varsa harita moduna geç
   useEffect(() => {
@@ -314,8 +315,9 @@ const Index = () => {
 
   // Bottom sheet hooks
   const mapDetailSheet = useBottomSheet({
-    snapPoints: ["90%", "100%"],
+    snapPoints: ["92%", "100%"],
     enablePanDownToClose: true,
+    enableOverDrag: true,
   });
   const ratingsSheet = useBottomSheet({
     snapPoints: ["50%", "85%"],
@@ -547,9 +549,9 @@ const Index = () => {
     // Panel yoksa lokasyon beklenmeden CTA'yı göster
     if (!hasFreeBarberPanel) {
       push({ id: "stores-empty", type: "stores-empty" }, H.empty);
-    } else if (!fetchedOnce || (isStoresLoading && filteredStores.length === 0)) {
+    } else if (!fetchedOnce && isStoresLoading) {
       push({ id: "stores-loading", type: "stores-loading" }, H.loading);
-    } else if (showStoresConnectivityError) {
+    } else if (showStoresConnectivityError && filteredStores.length === 0) {
       push({ id: "stores-error", type: "stores-error" }, H.error);
     } else {
       const storesToDisplay = filteredStores;
@@ -622,8 +624,70 @@ const Index = () => {
     });
   }, [filteredStores, hasStoreBarbers, handleMarkerPress]);
 
+  const mapInitialRegion = useMemo(() => {
+    if (focusRegion) return focusRegion;
+
+    const userCoord = safeCoord(location?.latitude, location?.longitude);
+    if (userCoord) {
+      return {
+        latitude: userCoord.lat,
+        longitude: userCoord.lon,
+        latitudeDelta: 0.03,
+        longitudeDelta: 0.03,
+      };
+    }
+
+    const storeCandidate = filteredStores
+      .map((s) => safeCoord(s.latitude, s.longitude))
+      .find(Boolean);
+    if (storeCandidate) {
+      return {
+        latitude: storeCandidate.lat,
+        longitude: storeCandidate.lon,
+        latitudeDelta: 0.04,
+        longitudeDelta: 0.04,
+      };
+    }
+
+    return {
+      latitude: 41.0082,
+      longitude: 28.9784,
+      latitudeDelta: 0.08,
+      longitudeDelta: 0.08,
+    };
+  }, [focusRegion, location?.latitude, location?.longitude, filteredStores]);
+
+  useEffect(() => {
+    if (!isMapMode) return;
+    const target = focusRegion
+      ? focusRegion
+      : (() => {
+        const userCoord = safeCoord(location?.latitude, location?.longitude);
+        if (!userCoord) return null;
+        return {
+          latitude: userCoord.lat,
+          longitude: userCoord.lon,
+          latitudeDelta: 0.03,
+          longitudeDelta: 0.03,
+        };
+      })();
+    if (!target) return;
+    try {
+      mapRef.current?.animateToRegion(target, 450);
+    } catch {
+      // ignore
+    }
+  }, [isMapMode, focusRegion, location?.latitude, location?.longitude]);
+
   return (
-    <View className="flex flex-1 pl-4 pr-2" style={{ backgroundColor: colors.screenBg }}>
+    <View className="flex flex-1 px-3" style={{ backgroundColor: colors.screenBg, overflow: "hidden" }}>
+      <View
+        className={
+          isMapMode
+            ? "absolute top-0 left-0 right-0 z-10 px-4 pt-0 pb-2 bg-transparent"
+            : ""
+        }
+      >
       <PanelCollapsibleTop
         expanded={panelTopExpanded}
         onToggle={() => setPanelTopExpanded((v) => !v)}
@@ -682,13 +746,15 @@ const Index = () => {
           )}
         </View>
       </PanelCollapsibleTop>
+      </View>
 
       {isMapMode && (
         <View className="absolute inset-0" style={{ zIndex: 5, elevation: 5 }}>
           <MapView
+            ref={mapRef}
             style={{ flex: 1 }}
             userInterfaceStyle={isDark ? "dark" : "light"}
-            initialRegion={focusRegion ?? undefined}
+            initialRegion={mapInitialRegion}
           >
             {storeMarkers}
             {focusRegion && (
@@ -720,6 +786,17 @@ const Index = () => {
           updateCellsBatchingPeriod={100}
           initialNumToRender={5}
           windowSize={3}
+          // Infinite-scroll: filtered endpoint'te offset ile bir sonraki sayfayı iste.
+          // `hasMore=false` veya `loadingMore=true` iken loadMore kendi içinde no-op.
+          onEndReached={hasMoreStores ? loadMoreStores : undefined}
+          onEndReachedThreshold={0.5}
+          ListFooterComponent={
+            loadingMoreStores ? (
+              <View style={{ paddingVertical: 16 }}>
+                <ActivityIndicator size="small" color="#f05e23" />
+              </View>
+            ) : null
+          }
           renderItem={({ item }) => {
             if (item.type === "stores-header") {
               return (
@@ -862,29 +939,11 @@ const Index = () => {
         />
       </View>
 
-      {compareStoreIds.length === 2 && (
-        <View style={[{ zIndex: 30 }, compareStripOuterStyle(isDark, cmpM, compareStripBottom)]}>
-          <TouchableOpacity
-            onPress={() => {
-              const [a, b] = compareStoreIds;
-              setCompareStoreIds([]);
-              router.push({
-                pathname: "/(screens)/compare/public-stores",
-                params: { left: a, right: b },
-              });
-            }}
-            style={compareStripCtaStyle(cmpM)}
-          >
-            <Text style={{ fontFamily: "CenturyGothic-Bold", fontSize: cmpM.rowFont + 2, color: "#1f2937" }}>
-              {t("compare.continue")}
-            </Text>
-          </TouchableOpacity>
-        </View>
-      )}
-
       <FilterDrawer
         visible={filterDrawerVisible}
         onClose={() => setFilterDrawerVisible(false)}
+        selectedDistancePreset={filterCriteria.distancePreset ?? DEFAULT_DISTANCE_PRESET_ID}
+        onChangeDistancePreset={(preset) => updateFilterCriteria({ distancePreset: preset })}
         selectedUserType={filterCriteria.userType || "all"}
         onChangeUserType={(value) => updateFilterCriteria({ userType: value })}
         showUserTypeFilter={true}
@@ -966,11 +1025,11 @@ const Index = () => {
         onChange={mapDetailSheet.handleChange}
         snapPoints={mapDetailSheet.snapPoints}
         enablePanDownToClose={mapDetailSheet.enablePanDownToClose}
-        handleIndicatorStyle={{ backgroundColor: colors.sheetHandle }}
+        handleComponent={() => null}
         backgroundStyle={{ backgroundColor: colors.sheetBg }}
         backdropComponent={mapDetailSheet.makeBackdrop()}
       >
-        <BottomSheetView style={{ flex: 1, padding: 0, margin: 0 }}>
+        <View style={{ flex: 1 }}>
           <DeferredRender
             active={mapDetailSheet.isOpen && !!selectedMapItem}
             placeholder={
@@ -989,7 +1048,7 @@ const Index = () => {
               />
             )}
           </DeferredRender>
-        </BottomSheetView>
+        </View>
       </BottomSheetModal>
 
       {/* Yorumlar Bottom Sheet */}

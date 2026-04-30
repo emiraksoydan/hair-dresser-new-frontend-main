@@ -202,7 +202,7 @@ const styles = StyleSheet.create({
   },
   thumbFrameActive: {
     borderWidth: 2,
-    borderColor: "#ffb900",
+    borderColor: "#FACC15",
     padding: 2,
   },
   thumbImg: {

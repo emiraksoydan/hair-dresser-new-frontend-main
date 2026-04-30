@@ -2,6 +2,7 @@ import React from 'react';
 import { TouchableOpacity, View } from 'react-native';
 import { Text } from './Text';
 import { useTheme } from '../../hook/useTheme';
+import { COLORS } from '../../constants/colors';
 
 interface FilterChipProps {
     itemKey: any
@@ -24,8 +25,10 @@ const FilterChip: React.FC<FilterChipProps> = ({ itemKey, selected, className = 
             disabled={isDisabled}
             onPress={onPress}
             style={{
-                backgroundColor: selected ? '#ffb900' : colors.cardBg,
-                borderColor: selected ? '#ffb900' : '#fb9400'
+                backgroundColor: selected ? COLORS.UI.ACCENT_GOLD : colors.cardBg,
+                borderColor: selected
+                    ? COLORS.UI.ACCENT_GOLD
+                    : "rgba(234, 179, 8, 0.45)"
             }}
             className={`items-center justify-center   ${className}`}
         >

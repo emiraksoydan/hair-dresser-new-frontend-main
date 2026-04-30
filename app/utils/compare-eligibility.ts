@@ -8,9 +8,9 @@ export function shouldFilterStoresToOthersOnly(userType: UserType | undefined): 
   return userType === UserType.FreeBarber;
 }
 
-/** Serbest berber favorileri: müşteri tümünü görür; serbest berber / dükkan sahibi kendi profilini karşılaştırmaya dahil edemez. */
+/** Serbest berber favorileri: müşteri ve serbest berber tümünü görür; dükkan sahibi kendi profilini karşılaştırmaya dahil edemez. */
 export function shouldFilterOwnFreeBarberFromCompare(userType: UserType | undefined): boolean {
-  return userType === UserType.FreeBarber || userType === UserType.BarberStore;
+  return userType === UserType.BarberStore;
 }
 
 export function isOtherUsersStore(store: StoreLike, currentUserId: string | undefined | null): boolean {

@@ -43,7 +43,7 @@ export const RatingSection: React.FC<RatingSectionProps> = ({
       <StarRatingDisplay
         rating={rating || 0}
         starSize={starSize}
-        color="#ffb900"
+        color="#FACC15"
         starStyle={{ marginHorizontal: 0 }}
       />
       <Text style={{ color: colors.sectionHeaderText, fontSize: ratingFont, lineHeight: ratingLineHeight, fontFamily: 'CenturyGothic-Bold' }} className="flex-1">

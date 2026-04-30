@@ -40,7 +40,7 @@ const SearchBar: React.FC<ExtendedSearchBarProps> = ({
     const shouldShowLayoutToggle = showButtons && !!setIsList;
     const shouldShowFilter = showButtons && !!onFilterPress;
 
-    const borderColor = forceBorderColor ?? (isFocused ? "#ffb900" : colors.cardBg);
+    const borderColor = forceBorderColor ?? (isFocused ? "#FACC15" : colors.cardBg);
 
     return (
         <View

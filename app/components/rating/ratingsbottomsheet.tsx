@@ -1,5 +1,5 @@
 import { Icon } from "react-native-paper";
-import React, { useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   View,
   Image,
@@ -10,12 +10,17 @@ import {
 import { Text } from "../common/Text";
 import { BottomSheetView, BottomSheetFlatList } from "@gorhom/bottom-sheet";
 
-import { useGetRatingsByTargetQuery } from "../../store/api";
+import { api, useGetRatingsByTargetQuery } from "../../store/api";
+import { useAppDispatch } from "../../store/hook";
 import { RatingGetDto, UserType, BarberType } from "../../types";
 import { useAuth } from "../../hook/useAuth";
 import { useLanguage } from "../../hook/useLanguage";
 import { getBarberTypeName } from "../../utils/store/barber-type";
 import { useTheme } from "../../hook/useTheme";
+
+const RATINGS_PAGE_SIZE = 30;
+/** RN `onEndReached` ilk layout'ta yanlış tetiklenebilir — footer spinner flash'ını önler. */
+const RATINGS_END_REACHED_GRACE_MS = 450;
 
 type RatingsBottomSheetProps = {
   targetId: string;
@@ -31,15 +36,78 @@ export const RatingsBottomSheet: React.FC<RatingsBottomSheetProps> = ({
   const { userId } = useAuth();
   const { t } = useLanguage();
   const { colors } = useTheme();
+  const dispatch = useAppDispatch();
 
   // Query'yi normal şekilde çalıştır - sheet açıldığında component mount olur ve query otomatik tetiklenir
   const {
     data: ratings,
     isLoading,
     refetch,
-  } = useGetRatingsByTargetQuery(targetId, {
-    skip: !targetId, // targetId yoksa query yapma
-  });
+  } = useGetRatingsByTargetQuery(
+    { targetId, limit: RATINGS_PAGE_SIZE },
+    { skip: !targetId },
+  );
+
+  // Infinite scroll state
+  const [isLoadingOlder, setIsLoadingOlder] = useState(false);
+  const hasMoreRef = useRef(true);
+  const lastLoadedBeforeRef = useRef<string | null>(null);
+  const suppressEndReachedUntilMsRef = useRef(0);
+  const bumpEndReachedGrace = useCallback(() => {
+    suppressEndReachedUntilMsRef.current = Date.now() + RATINGS_END_REACHED_GRACE_MS;
+  }, []);
+
+  useEffect(() => {
+    bumpEndReachedGrace();
+  }, [bumpEndReachedGrace]);
+
+  const loadOlderRatings = useCallback(async () => {
+    if (!targetId) return;
+    if (Date.now() < suppressEndReachedUntilMsRef.current) return;
+    if (isLoadingOlder || !hasMoreRef.current) return;
+    if (!ratings || ratings.length === 0) return;
+
+    // En eski rating'in (CreatedAt, Id) çifti cursor — tie-breaker için beforeId.
+    const oldest = ratings[ratings.length - 1];
+    const before = oldest?.createdAt;
+    const beforeId = oldest?.id;
+    if (!before) return;
+
+    // Aynı cursor'u tekrar fetch etme (onEndReached double-fire guard).
+    const cursorKey = `${before}|${beforeId ?? ""}`;
+    if (lastLoadedBeforeRef.current === cursorKey) return;
+    lastLoadedBeforeRef.current = cursorKey;
+
+    setIsLoadingOlder(true);
+    try {
+      const result = await dispatch(
+        api.endpoints.getRatingsByTarget.initiate(
+          { targetId, before, beforeId, limit: RATINGS_PAGE_SIZE },
+          // subscribe:false ÖNEMLİ — initiate default'ta yeni subscriber yaratır ve
+          // unwrap edilse bile unsubscribe etmez. Her sayfa scroll'unda yeni anonim
+          // subscriber birikir; mutation invalidate ettiğinde hepsi refetch tetikler
+          // (ekstra ağ + memory leak). Sadece bir-defalık fetch + cache merge istiyoruz.
+          { subscribe: false, forceRefetch: true },
+        ),
+      ).unwrap();
+      // Daha az sayfa geldiyse sona ulaşıldı.
+      if (!Array.isArray(result) || result.length < RATINGS_PAGE_SIZE) {
+        hasMoreRef.current = false;
+      }
+    } catch {
+      // Ağ hatası — bir sonraki denemeye kadar bu cursor'u tekrar kullanılabilir kıl.
+      lastLoadedBeforeRef.current = null;
+    } finally {
+      setIsLoadingOlder(false);
+    }
+  }, [dispatch, targetId, ratings, isLoadingOlder]);
+
+  const handleRefresh = useCallback(() => {
+    bumpEndReachedGrace();
+    hasMoreRef.current = true;
+    lastLoadedBeforeRef.current = null;
+    refetch();
+  }, [refetch, bumpEndReachedGrace]);
 
   const [selectedRatingFilter, setSelectedRatingFilter] = useState<
     number | null
@@ -109,7 +177,7 @@ export const RatingsBottomSheet: React.FC<RatingsBottomSheetProps> = ({
             />
             {/* "Sizin yorumunuz" badge */}
             {isMyComment && (
-              <View className="absolute -top-1 -right-1 bg-[#ffb900] rounded-full px-1.5 py-0.5">
+              <View className="absolute -top-1 -right-1 bg-[#FACC15] rounded-full px-1.5 py-0.5">
                 <Text className="text-white text-[8px] font-bold">
                   {t("rating.yourBadge")}
                 </Text>
@@ -173,7 +241,7 @@ export const RatingsBottomSheet: React.FC<RatingsBottomSheetProps> = ({
           </View>
 
           {/* Rating badge - sağ tarafta */}
-          <View className="bg-[#ffb900] rounded-full w-10 h-10 items-center justify-center">
+          <View className="bg-[#FACC15] rounded-full w-10 h-10 items-center justify-center">
             <Text className="text-white font-bold text-sm">
               ★ {roundedScore}
             </Text>
@@ -204,11 +272,11 @@ export const RatingsBottomSheet: React.FC<RatingsBottomSheetProps> = ({
         {!isLoading && safeRatings.length > 0 && (
           <TouchableOpacity
             onPress={() => setShowOnlyMine(v => !v)}
-            className={`self-start mb-3 flex-row items-center gap-1.5 rounded-full px-3 py-1.5 ${showOnlyMine ? 'bg-[#ffb900]' : 'border border-[#ffb900] bg-transparent'}`}
+            className={`self-start mb-3 flex-row items-center gap-1.5 rounded-full px-3 py-1.5 ${showOnlyMine ? 'bg-[#FACC15]' : 'border border-[#FACC15] bg-transparent'}`}
             activeOpacity={0.8}
           >
-            <Icon source="account-heart" size={14} color={showOnlyMine ? '#fff' : '#ffb900'} />
-            <Text className={`text-xs font-semibold ${showOnlyMine ? 'text-white' : 'text-[#ffb900]'}`}>
+            <Icon source="account-heart" size={14} color={showOnlyMine ? '#fff' : '#FACC15'} />
+            <Text className={`text-xs font-semibold ${showOnlyMine ? 'text-white' : 'text-[#FACC15]'}`}>
               {t("rating.myReviews")}
             </Text>
           </TouchableOpacity>
@@ -230,13 +298,13 @@ export const RatingsBottomSheet: React.FC<RatingsBottomSheetProps> = ({
                     onPress={() => setSelectedRatingFilter(filter.value)}
                     className={`rounded-full px-4 py-2 ${
                       isSelected
-                        ? "bg-[#ffb900]"
-                        : "bg-transparent border border-[#ffb900]"
+                        ? "bg-[#FACC15]"
+                        : "bg-transparent border border-[#FACC15]"
                     }`}
                   >
                     <Text
                       className={`text-sm font-medium ${
-                        isSelected ? "text-white" : "text-[#ffb900]"
+                        isSelected ? "text-white" : "text-[#FACC15]"
                       }`}
                     >
                       {filter.label}
@@ -252,7 +320,7 @@ export const RatingsBottomSheet: React.FC<RatingsBottomSheetProps> = ({
       {/* Yorumlar listesi */}
       {isLoading ? (
         <View className="flex-1 items-center justify-center">
-          <ActivityIndicator size="large" color="#ffb900" />
+          <ActivityIndicator size="large" color="#FACC15" />
         </View>
       ) : safeRatings.length === 0 ? (
         <View className="flex-1 items-center justify-center px-4">
@@ -275,7 +343,16 @@ export const RatingsBottomSheet: React.FC<RatingsBottomSheetProps> = ({
           renderItem={renderRatingItem}
           contentContainerStyle={{ padding: 16 }}
           refreshing={isLoading}
-          onRefresh={refetch}
+          onRefresh={handleRefresh}
+          onEndReached={loadOlderRatings}
+          onEndReachedThreshold={0.3}
+          ListFooterComponent={
+            isLoadingOlder ? (
+              <View style={{ paddingVertical: 12 }}>
+                <ActivityIndicator size="small" color="#FACC15" />
+              </View>
+            ) : null
+          }
         />
       )}
     </BottomSheetView>

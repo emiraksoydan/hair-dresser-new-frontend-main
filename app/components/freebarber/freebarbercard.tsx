@@ -20,6 +20,7 @@ import { useAlert } from "../../hook/useAlert";
 import { useTheme } from "../../hook/useTheme";
 import { PanelImageOverflowMenu } from "../panel/PanelImageOverflowMenu";
 import { useActionGuard } from "../../hook/useActionGuard";
+import { COLORS } from "../../constants/colors";
 
 type Props = {
   freeBarber: FreeBarGetDto;
@@ -37,6 +38,17 @@ type Props = {
   showImageAnimation?: boolean;
   panelCompare?: { selected: boolean; onPress: () => void; hidden?: boolean };
   compactMeta?: boolean;
+};
+
+/** “Berberi çağır” / “Randevu al” — tema sarısı (#FACC15), kenarlık yok, siyah metin */
+const CHIP_CTA_TEXT = COLORS.UI.TEXT_ON_GOLD;
+
+const chipCallStyle = {
+  backgroundColor: COLORS.UI.ACCENT_GOLD,
+};
+
+const chipBookStyle = {
+  backgroundColor: COLORS.UI.ACCENT_GOLD,
 };
 
 const FreeBarberCard: React.FC<Props> = ({
@@ -218,9 +230,13 @@ const FreeBarberCard: React.FC<Props> = ({
                 <TouchableOpacity
                   onPress={handleCallFreeBarber}
                   disabled={isCalling}
-                  className="bg-[#ffb900] flex-row items-center px-2 py-0.5 rounded-xl"
+                  className="flex-row items-center px-2 py-0.5 rounded-xl"
+                  style={chipCallStyle}
                 >
-                  <Text className="text-white text-sm font-century-gothic-sans-medium">
+                  <Text
+                    className="text-sm font-century-gothic-sans-medium"
+                    style={{ color: CHIP_CTA_TEXT }}
+                  >
                     {isCalling ? t("card.calling") : t("card.callBarber")}
                   </Text>
                 </TouchableOpacity>
@@ -229,9 +245,13 @@ const FreeBarberCard: React.FC<Props> = ({
                 <TouchableOpacity
                   onPress={handlePressAppointment}
                   activeOpacity={0.8}
-                  className="bg-[#fea60e] rounded-full px-2 py-0.5"
+                  className="rounded-full px-2 py-0.5"
+                  style={chipBookStyle}
                 >
-                  <Text className="text-white font-century-gothic-sans-semibold text-sm">
+                  <Text
+                    className="font-century-gothic-sans-semibold text-sm"
+                    style={{ color: CHIP_CTA_TEXT }}
+                  >
                     {t("card.bookAppointment")}
                   </Text>
                 </TouchableOpacity>
@@ -283,28 +303,6 @@ const FreeBarberCard: React.FC<Props> = ({
                     type={isAvailable ? "available" : "busy"}
                     isList={true}
                   />
-                  {mode === "barbershop" && isAvailable && !hasCalled && (
-                    <TouchableOpacity
-                      onPress={handleCallFreeBarber}
-                      disabled={isCalling}
-                      className="bg-[#ffb900] flex-row items-center rounded-full px-2.5 py-1"
-                    >
-                      <Text className="text-white font-century-gothic-sans-semibold text-sm">
-                        {isCalling ? t("card.calling") : t("card.callBarber")}
-                      </Text>
-                    </TouchableOpacity>
-                  )}
-                  {mode !== "barbershop" && (
-                    <TouchableOpacity
-                      onPress={handlePressAppointment}
-                      activeOpacity={0.8}
-                      className="bg-[#fea60e] rounded-full px-2.5 py-1"
-                    >
-                      <Text className="text-white font-century-gothic-sans-semibold text-sm">
-                        {t("card.bookAppointment")}
-                      </Text>
-                    </TouchableOpacity>
-                  )}
                 </View>
               )}
             </View>
@@ -314,14 +312,58 @@ const FreeBarberCard: React.FC<Props> = ({
               style={{ marginTop: isList ? 8 : 0 }}
             >
               <View
-                className={`flex-row justify-between ${!isList ? "items-start" : "items-center"}`}
+                className={`flex-row justify-between ${!isList ? "items-start" : "items-center"} gap-2`}
               >
-                <CardHeader
-                  title={freeBarber.fullName}
-                  isList={isList}
-                  barberType={freeBarber.type}
-                  compact={compactMeta}
-                />
+                {isList ? (
+                  <View className="flex-1 flex-row items-center min-w-0 pr-1" style={{ flexWrap: "nowrap", gap: 6 }}>
+                    <View style={{ flexShrink: 1, minWidth: 0 }}>
+                      <CardHeader
+                        title={freeBarber.fullName}
+                        isList={isList}
+                        barberType={freeBarber.type}
+                        compact={compactMeta}
+                        fillRow={false}
+                      />
+                    </View>
+                    {mode === "barbershop" && isAvailable && !hasCalled && (
+                      <TouchableOpacity
+                        onPress={handleCallFreeBarber}
+                        disabled={isCalling}
+                        className="flex-row items-center rounded-full px-2.5 py-1 flex-shrink-0"
+                        style={chipCallStyle}
+                      >
+                        <Text
+                          className="font-century-gothic-sans-semibold text-sm"
+                          style={{ color: CHIP_CTA_TEXT }}
+                        >
+                          {isCalling ? t("card.calling") : t("card.callBarber")}
+                        </Text>
+                      </TouchableOpacity>
+                    )}
+                    {mode !== "barbershop" && (
+                      <TouchableOpacity
+                        onPress={handlePressAppointment}
+                        activeOpacity={0.8}
+                        className="rounded-full px-2.5 py-1 flex-shrink-0"
+                        style={chipBookStyle}
+                      >
+                        <Text
+                          className="font-century-gothic-sans-semibold text-sm"
+                          style={{ color: CHIP_CTA_TEXT }}
+                        >
+                          {t("card.bookAppointment")}
+                        </Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                ) : (
+                  <CardHeader
+                    title={freeBarber.fullName}
+                    isList={isList}
+                    barberType={freeBarber.type}
+                    compact={compactMeta}
+                  />
+                )}
                 {isList && (
                   <FavoriteButton
                     isFavorite={isFavorite}

@@ -1,5 +1,5 @@
-import { useEffect, useState, useCallback } from 'react';
-import { Platform, PermissionsAndroid } from 'react-native';
+import { useEffect, useRef, useState, useCallback } from 'react';
+import { NativeModules, Platform, PermissionsAndroid } from 'react-native';
 import Constants from 'expo-constants';
 import { useAuth } from './useAuth';
 import { api } from '../store/api';
@@ -9,6 +9,10 @@ import { api } from '../store/api';
  * Handles FCM token registration and updates
  * Note: Requires native build (expo-dev-client) - does not work in Expo Go
  */
+
+// Module-level ref: auth temizlenmeden önce logout'ta erişilebilmesi için.
+let _currentFcmToken: string | null = null;
+
 export const useFcmToken = () => {
   const { token } = useAuth();
   const [fcmToken, setFcmToken] = useState<string | null>(null);
@@ -16,13 +20,41 @@ export const useFcmToken = () => {
   const [registerFcmToken] = api.useRegisterFcmTokenMutation();
   const [unregisterFcmToken] = api.useUnregisterFcmTokenMutation();
 
-  // appOwnership === 'expo' = Expo Go; null/undefined = native build
-  const isExpoGo = Constants.appOwnership === 'expo';
+  // executionEnvironment === 'storeClient' → Expo Go
+  const isExpoGo = Constants.executionEnvironment === 'storeClient';
+
+  // Kayıtlı olup olmadığını ref ile takip et — effect deps'e fcmToken koymadan erişelim.
+  const fcmTokenRef = useRef<string | null>(null);
+
+  const setFcmTokenSynced = useCallback((t: string | null) => {
+    fcmTokenRef.current = t;
+    _currentFcmToken = t;
+    setFcmToken(t);
+  }, []);
 
   // Get FCM token using React Native Firebase
   const getFcmToken = useCallback(async (): Promise<string | null> => {
     if (isExpoGo) {
       console.log('[FCM] Expo Go detected, skipping');
+      return null;
+    }
+    if (!NativeModules.RNFBAppModule) {
+      console.warn('[FCM] Native Firebase app not available (missing GoogleService-Info.plist / google-services.json or wrong bundle id)');
+      // iOS: Firebase yoksa bile bildirim izni iste → iOS Settings'te "Notifications" satırı görünsün
+      if (Platform.OS === 'ios') {
+        try {
+          const { requestPermissionsAsync } = require('expo-notifications');
+          await requestPermissionsAsync({ ios: { allowAlert: true, allowBadge: true, allowSound: true } });
+        } catch { /* sessizce devam */ }
+      }
+      return null;
+    }
+
+    try {
+      const { getApp } = require('@react-native-firebase/app');
+      getApp('[DEFAULT]');
+    } catch {
+      console.warn('[FCM] Firebase default app not yet initialized, skipping token fetch');
       return null;
     }
 
@@ -60,6 +92,14 @@ export const useFcmToken = () => {
         return null;
       }
 
+      if (Platform.OS === 'ios') {
+        try {
+          await messaging().registerDeviceForRemoteMessages();
+        } catch (regErr: any) {
+          console.warn('[FCM] registerDeviceForRemoteMessages:', regErr?.message ?? regErr);
+        }
+      }
+
       const fcmTok = await messaging().getToken();
       if (!fcmTok) {
         console.warn('[FCM] getToken() returned empty');
@@ -82,30 +122,28 @@ export const useFcmToken = () => {
     try {
       const result = await registerFcmToken({
         fcmToken: tokenToRegister,
-        deviceId: Platform.OS, // Can be enhanced with device-specific ID
+        deviceId: Platform.OS,
         platform: Platform.OS === 'ios' ? 'ios' : 'android',
       });
 
       if ('error' in result) {
-        // Error registering FCM token - silently fail
         return false;
       }
 
       if (result.data?.success) {
-        setFcmToken(tokenToRegister);
+        setFcmTokenSynced(tokenToRegister);
         setIsRegistered(true);
         return true;
       }
       return false;
-    } catch (error) {
-      // Error registering FCM token - silently fail
+    } catch {
       return false;
     }
-  }, [token, registerFcmToken]);
+  }, [token, registerFcmToken, setFcmTokenSynced]);
 
-  // Unregister FCM token
+  // Unregister FCM token — token kontrolü olmadan; auth geçerliyken çağrılmalı.
   const unregisterToken = useCallback(async (tokenToUnregister: string) => {
-    if (!tokenToUnregister || !token) {
+    if (!tokenToUnregister) {
       return false;
     }
 
@@ -115,49 +153,53 @@ export const useFcmToken = () => {
       });
 
       if ('error' in result) {
-        // Error unregistering FCM token - silently fail
         return false;
       }
 
       if (result.data?.success) {
-        setFcmToken(null);
+        setFcmTokenSynced(null);
         setIsRegistered(false);
         return true;
       }
       return false;
-    } catch (error) {
-      // Error unregistering FCM token - silently fail
+    } catch {
       return false;
     }
-  }, [token, unregisterFcmToken]);
+  }, [unregisterFcmToken, setFcmTokenSynced]);
 
-  // Initialize FCM token on mount and when user logs in
+  // Initialize FCM token on mount and when user logs in.
+  // fcmToken intentionally NOT in deps — prevents double-registration loop.
   useEffect(() => {
     if (!token) {
-      // User not logged in, unregister if token exists
-      if (fcmToken) {
-        unregisterToken(fcmToken);
-      }
+      // Auth temizlendi; local state sıfırla (unregister logout'ta yapılır).
+      setFcmTokenSynced(null);
+      setIsRegistered(false);
       return;
     }
 
-    // User logged in, get and register FCM token
-    // 4 saniyelik gecikme: konum izni diyaloğu tamamlanmadan bildirim izni açılmasın
-    // (Android aynı anda iki sistem diyaloğunu gösteremiyor, biri diğerini kapatıyor)
     const initializeFcm = async () => {
+      // 4 saniyelik gecikme: konum izni diyaloğu bitmeden bildirim izni açılmasın.
       await new Promise((resolve) => setTimeout(resolve, 4000));
-      const token = await getFcmToken();
-      if (token) {
-        await registerToken(token);
+      const newFcmToken = await getFcmToken();
+      if (newFcmToken) {
+        await registerToken(newFcmToken);
       }
     };
 
-    initializeFcm();
-  }, [token, getFcmToken, registerToken, unregisterToken, fcmToken]);
+    initializeFcm().catch(() => {});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token]);
 
   // FCM token rotation: backend kaydı güncel kalsın (özellikle iOS).
   useEffect(() => {
-    if (!token || isExpoGo) return; // isExpoGo = appOwnership === 'expo'
+    if (!token || isExpoGo || !NativeModules.RNFBAppModule) return;
+
+    try {
+      const { getApp } = require('@react-native-firebase/app');
+      getApp('[DEFAULT]');
+    } catch {
+      return;
+    }
 
     let messagingModule: any;
     try {
@@ -167,10 +209,15 @@ export const useFcmToken = () => {
       return;
     }
 
-    const unsubscribe = messagingModule.default().onTokenRefresh(async (newToken: string) => {
-      if (!newToken) return;
-      await registerToken(newToken);
-    });
+    let unsubscribe: (() => void) | undefined;
+    try {
+      unsubscribe = messagingModule.default().onTokenRefresh(async (newToken: string) => {
+        if (!newToken) return;
+        await registerToken(newToken);
+      });
+    } catch {
+      return;
+    }
 
     return unsubscribe;
   }, [token, isExpoGo, registerToken]);
@@ -184,3 +231,10 @@ export const useFcmToken = () => {
   };
 };
 
+/**
+ * Logout öncesi FCM token'ı sil. Auth token hâlâ geçerliyken çağrılmalı.
+ * handleLogout içinde `await logout(...)` çağrısından ÖNCE kullanılır.
+ */
+export function getCurrentFcmToken(): string | null {
+  return _currentFcmToken;
+}

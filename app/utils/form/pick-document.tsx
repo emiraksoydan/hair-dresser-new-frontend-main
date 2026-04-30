@@ -1,10 +1,34 @@
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
+import { Alert } from 'react-native';
 import { FileObject } from "../../types";
 import { FieldValues, Path, UseFormSetValue } from 'react-hook-form';
+import { UploadLimits, formatLimitMb } from '../../constants/uploadLimits';
+import i18n from '../../i18n/config';
 
 /** Galeri yükleri ile aynı; çok büyümeden web/API uyumu için yeterli */
 const JPEG_UPLOAD_QUALITY = 0.8;
+
+export type PickImageOptions = {
+    /** Varsayılan: {@link UploadLimits.IMAGE_BYTES}. Aşan dosya reddedilir. */
+    maxBytes?: number;
+    /**
+     * Aşım durumunda gösterilecek özel handler. Verilmezse varsayılan
+     * `Alert.alert` ile i18n çevirisi kullanılarak kullanıcı bilgilendirilir.
+     * (Helper'ı çağıran component'ler için backward-compat: mevcut callerlar
+     * hiç değişiklik yapmadan faydalanır.)
+     */
+    onOversize?: (info: { megabytes: number; fileName?: string | null }) => void;
+};
+
+/** Varsayılan "dosya çok büyük" alerti — i18n key: common.imageTooLarge. */
+function defaultNotifyOversize(megabytes: number) {
+    const title = i18n.t('common.error') || 'Hata';
+    const message =
+        i18n.t('common.imageTooLarge', { size: megabytes }) ||
+        `Bu görsel yüklenemez. Maksimum boyut: ${megabytes} MB.`;
+    Alert.alert(String(title), String(message));
+}
 
 const HEIC_MIMES = new Set(['image/heic', 'image/heif']);
 
@@ -75,18 +99,32 @@ export async function pickImageAndSet<TFieldValues extends FieldValues>(
     }
 }
 
-export const handlePickImage = async (): Promise<FileObject | null> => {
+export const handlePickImage = async (options?: PickImageOptions): Promise<FileObject | null> => {
+    const maxBytes = options?.maxBytes ?? UploadLimits.IMAGE_BYTES;
     const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: false,
         quality: JPEG_UPLOAD_QUALITY,
     });
-    if (!result.canceled) {
-        const file = result.assets[0];
-        const normalized = normalizeImageFile(file.uri, file.fileName, file.mimeType);
-        return ensureJpegForUpload(normalized);
+    if (result.canceled) return null;
+    const file = result.assets[0];
+
+    // Boyut kontrolü: expo-image-picker Asset.fileSize iOS'ta genelde dolu,
+    // Android'de bazı cihazlarda undefined olabilir. Undefined ise server-side
+    // validasyona güveniyoruz; tanımlıysa client-side reject ederek yükleme
+    // bekletmeyi ve fazladan trafik tüketimini önlüyoruz.
+    if (typeof file.fileSize === 'number' && file.fileSize > maxBytes) {
+        const mb = formatLimitMb(maxBytes);
+        if (options?.onOversize) {
+            options.onOversize({ megabytes: mb, fileName: file.fileName });
+        } else {
+            defaultNotifyOversize(mb);
+        }
+        return null;
     }
-    return null;
+
+    const normalized = normalizeImageFile(file.uri, file.fileName, file.mimeType);
+    return ensureJpegForUpload(normalized);
 };
 
 /** type "image" gibi AssetType değerlerini geçerli MIME type'a çevirir.
@@ -96,13 +134,23 @@ export const resolveMimeType = (type: string | undefined, fileName: string | und
   return getMimeFromExt(fileName ?? '');
 };
 
-export const truncateFileName = (name: string, max = 40) =>
+export const truncateFileName = (name: string, max = 28) =>
     name.length > max ? name.slice(0, max - 3) + "..." : name;
 
 /**
- * Pick multiple images from gallery
+ * Pick multiple images from gallery.
+ *
+ * Boyut aşımı: aşan asset'ler diziden elenir. Eğer hiç geçerli kalmadıysa
+ * oversize bildirimi verilir; bazıları geçerliyse yalnızca geçerliler dönülür
+ * ve eleme sessiz yapılır (çok dosya seçen kullanıcıyı sürekli alertle
+ * rahatsız etmemek için). Caller isterse `onOversize` ile custom davranış
+ * yapabilir.
  */
-export const handlePickMultipleImages = async (maxImages: number = 3): Promise<FileObject[]> => {
+export const handlePickMultipleImages = async (
+    maxImages: number = 3,
+    options?: PickImageOptions,
+): Promise<FileObject[]> => {
+    const maxBytes = options?.maxBytes ?? UploadLimits.IMAGE_BYTES;
     const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsMultipleSelection: true,
@@ -110,11 +158,28 @@ export const handlePickMultipleImages = async (maxImages: number = 3): Promise<F
         quality: JPEG_UPLOAD_QUALITY,
     });
 
-    if (!result.canceled && result.assets) {
-        const normalized = result.assets.map((file, index) =>
-            normalizeImageFile(file.uri, file.fileName, file.mimeType, index),
-        );
-        return Promise.all(normalized.map((f) => ensureJpegForUpload(f)));
+    if (result.canceled || !result.assets) return [];
+
+    let oversizeCount = 0;
+    const accepted = result.assets.filter((file) => {
+        if (typeof file.fileSize === 'number' && file.fileSize > maxBytes) {
+            oversizeCount += 1;
+            return false;
+        }
+        return true;
+    });
+
+    if (oversizeCount > 0 && accepted.length === 0) {
+        const mb = formatLimitMb(maxBytes);
+        if (options?.onOversize) {
+            options.onOversize({ megabytes: mb });
+        } else {
+            defaultNotifyOversize(mb);
+        }
     }
-    return [];
+
+    const normalized = accepted.map((file, index) =>
+        normalizeImageFile(file.uri, file.fileName, file.mimeType, index),
+    );
+    return Promise.all(normalized.map((f) => ensureJpegForUpload(f)));
 };

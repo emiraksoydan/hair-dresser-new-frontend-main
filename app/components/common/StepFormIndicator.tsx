@@ -121,14 +121,14 @@ export const StepFormIndicator = React.memo(
                             height: CIRCLE_SIZE,
                             borderRadius: CIRCLE_SIZE / 2,
                             backgroundColor: isActive
-                              ? "#ffb900"
+                              ? "#FACC15"
                               : isCompleted
                                 ? "#10B981"
                                 : colors.cardBg2,
                             alignItems: "center",
                             justifyContent: "center",
                             borderWidth: 2,
-                            borderColor: isActive ? "#ffb900" : "transparent",
+                            borderColor: isActive ? "#FACC15" : "transparent",
                           }}
                         >
                           {step.icon ? (
@@ -174,7 +174,7 @@ export const StepFormIndicator = React.memo(
                         className="font-century-gothic text-center"
                         style={{
                           fontSize: 10,
-                          color: isActive ? "#ffb900" : colors.sectionHeaderText,
+                          color: isActive ? "#FACC15" : colors.sectionHeaderText,
                         }}
                         numberOfLines={1}
                       >

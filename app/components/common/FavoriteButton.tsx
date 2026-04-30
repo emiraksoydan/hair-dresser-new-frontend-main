@@ -53,9 +53,9 @@ export const FavoriteButton: React.FC<FavoriteButtonProps> = ({
 
   const handleRowPress = useCallback(() => {
     if (disabled) return;
-    bump();
+    bump(!isFavorite);
     onPress();
-  }, [bump, disabled, onPress]);
+  }, [bump, disabled, onPress, isFavorite]);
 
   const heartIcon = (
     <Animated.View style={animatedStyle}>

@@ -1,5 +1,7 @@
 import React, { useState, useMemo, useCallback, useRef, useEffect } from "react";
-import { View, Pressable, ActivityIndicator, TouchableOpacity, StyleSheet, Image } from "react-native";
+import { View, Pressable, ActivityIndicator, TouchableOpacity, StyleSheet, Image, Linking, Platform } from "react-native";
+import { MotiView } from "moti";
+import { usePermissionSwitches } from "../../hook/usePermissionSwitches";
 import { AIAssistantSheet } from "../ai/AIAssistantSheet";
 import { useSegments } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -29,6 +31,7 @@ import { useBottomSheet } from "../../hook/useBottomSheet";
 import { useNotificationSound } from "../../hook/useNotificationSound";
 import { useLanguage } from "../../hook/useLanguage";
 import { useTheme } from "../../hook/useTheme";
+import { COLORS } from "../../constants/colors";
 import { useGetBadgeCountsQuery } from "../../store/api";
 import { UserType } from "../../types";
 import { useMultiAccount } from "../../context/MultiAccountContext";
@@ -124,6 +127,10 @@ export const BaseTabLayout: React.FC<BaseTabLayoutProps> = ({
   const [notiSheetOpen, setNotiSheetOpen] = useState(false);
   const [accountSwitcherOpen, setAccountSwitcherOpen] = useState(false);
   const [overlaySheetOpen, setOverlaySheetOpen] = useState(false);
+  const [permDropdownOpen, setPermDropdownOpen] = useState(false);
+
+  const { locationGranted, notificationGranted } = usePermissionSwitches();
+  const hasPermissionIssue = !locationGranted || !notificationGranted;
   const [panelFabItems, setPanelFabItems] = useState<MoreFabMenuItem[] | null>(null);
   const [headerDeleteAction, setHeaderDeleteAction] = useState<HeaderDeleteAction>(null);
   const dispatch = useAppDispatch();
@@ -192,8 +199,17 @@ export const BaseTabLayout: React.FC<BaseTabLayoutProps> = ({
   const unreadNoti = badgeCounts?.data?.notificationUnreadCount || 0;
   const unreadMsg = badgeCounts?.data?.chatUnreadCount || 0;
 
+  // Mesaj detay sayfasındayken ses sustur — thread listesinde çalsın, detayda çalmasın
+  const isInChatDetail = useMemo(() => {
+    const s = segments as string[];
+    if (s.includes("chat")) return true;
+    const msgIdx = s.indexOf("(messages)");
+    if (msgIdx >= 0 && s[msgIdx + 1] && s[msgIdx + 1] !== "index") return true;
+    return false;
+  }, [segments]);
+
   // Play notification sound when badge count changes
-  useNotificationSound(unreadNoti, unreadMsg);
+  useNotificationSound(unreadNoti, unreadMsg, { suppressSound: isInChatDetail });
 
   // Ortak header actions callbacks
   const handleNotificationPress = useCallback(() => {
@@ -266,7 +282,7 @@ export const BaseTabLayout: React.FC<BaseTabLayoutProps> = ({
 
   const renderHeaderRight = useCallback(
     () => (
-      <View className="flex-row items-center justify-center mr-2 h-full gap-1">
+      <View className="flex-row items-center justify-center mr-1 h-full gap-1.5">
         {headerDeleteAction &&
           tabs[activeTabIndex]?.name === "(appointment)" && (
           <Pressable
@@ -290,6 +306,21 @@ export const BaseTabLayout: React.FC<BaseTabLayoutProps> = ({
             )}
           </Pressable>
         )}
+        {hasPermissionIssue && (
+          <TouchableOpacity
+            onPress={() => setPermDropdownOpen((v) => !v)}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 4 }}
+            style={{
+              width: 32,
+              height: 32,
+              borderRadius: 16,
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <Icon source="alert-circle-outline" size={22} color="#c2a523" />
+          </TouchableOpacity>
+        )}
         <BadgeIconButton
           icon="bell-outline"
           iconColor={colors.headerText}
@@ -307,6 +338,7 @@ export const BaseTabLayout: React.FC<BaseTabLayoutProps> = ({
       headerDeleteAction,
       tabs,
       activeTabIndex,
+      hasPermissionIssue,
     ],
   );
 
@@ -410,21 +442,21 @@ export const BaseTabLayout: React.FC<BaseTabLayoutProps> = ({
             activeIndex={activeIndex}
             onTabPress={handleTabPress}
             onTabDoubleTap={handleTabDoubleTap}
-            accentColor={accentColor}
+            chipBackground={COLORS.UI.ACCENT_GOLD}
+            chipForeground={COLORS.UI.ACCENT_GOLD}
             backgroundColor={colors.tabBarBg}
-            activeIconColor="#FFFFFF"
             inactiveIconColor={isDark ? "#9CA3AF" : "#6b7280"}
             height={60}
           />
         </View>
       );
     },
-    [tabs, unreadMsg, accentColor, colors, isDark, accounts, currentUserId, switchAccount, openAccountSwitcherSheet],
+    [tabs, unreadMsg, colors, isDark, accounts, currentUserId, switchAccount, openAccountSwitcherSheet],
   );
 
   return (
     <MoreFabPanelContext.Provider value={moreFabContextValue}>
-      <View style={{ flex: 1, position: "relative" }}>
+      <View style={{ flex: 1, position: "relative", overflow: "visible" }}>
       <Tabs
         tabBar={renderCurvedTabBar}
         screenOptions={{
@@ -433,6 +465,10 @@ export const BaseTabLayout: React.FC<BaseTabLayoutProps> = ({
           tabBarStyle: {
             display: "none",
           },
+          /** İlk dokunuşta tüm sekmeleri mount etme — ilk açılış + RAM. */
+          lazy: true,
+          /** Odakta olmayan sekme React ağacını dondurur; sekme geçişinde daha az arka plan işi. */
+          freezeOnBlur: true,
         }}
       >
         <Tabs.Screen name="index" options={{ href: null }} />
@@ -493,7 +529,10 @@ export const BaseTabLayout: React.FC<BaseTabLayoutProps> = ({
                   </View>
                 ) : (
                   <View className="flex-1 justify-center">
-                    <Text className="text-2xl mr-0" style={{ color: colors.headerText }}>
+                    <Text
+                      className={tabOpt.name === "(appointment)" ? "text-xl mr-0" : "text-2xl mr-0"}
+                      style={{ color: colors.headerText }}
+                    >
                       {tabOpt.showHeaderLeft && userName
                         ? t("navigation.welcomeWithName", { name: userName })
                         : tabOpt.headerTitle}
@@ -535,6 +574,113 @@ export const BaseTabLayout: React.FC<BaseTabLayoutProps> = ({
       </BottomSheetModal>
 
       <HelpGuideOnboardingNudge />
+
+      {/* İzin uyarı dropdown'ı */}
+      {permDropdownOpen && (
+        <>
+          {/* Dışarı tıklanınca kapat */}
+          <Pressable
+            style={[StyleSheet.absoluteFillObject, { zIndex: 996 }]}
+            onPress={() => setPermDropdownOpen(false)}
+          />
+          <MotiView
+            from={{ opacity: 0, translateY: -8 }}
+            animate={{ opacity: 1, translateY: 0 }}
+            transition={{ type: "timing", duration: 220 }}
+            style={[
+              styles.permDropdown,
+              {
+                top: tabs[activeTabIndex]?.hideHeaderTitle
+                  ? Math.max(52, 44 + insets.top)
+                  : Math.max(80, 56 + insets.top),
+                backgroundColor: colors.cardBg,
+                borderColor: colors.borderColor,
+              },
+            ]}
+          >
+            {/* Başlık satırı */}
+            <View style={styles.permDropdownHeader}>
+              <Icon source="alert-circle-outline" size={18} color="#c2a523" />
+              <Text
+                style={[
+                  styles.permDropdownTitle,
+                  { color: colors.text, marginLeft: 6, flex: 1 },
+                ]}
+              >
+                {t("permissionBanner.dropdownTitle")}
+              </Text>
+              <TouchableOpacity
+                onPress={() => setPermDropdownOpen(false)}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Icon source="close" size={18} color={colors.textTertiary} />
+              </TouchableOpacity>
+            </View>
+
+            {/* Bildirim satırı */}
+            {!notificationGranted && (
+              <View style={styles.permRow}>
+                <View style={styles.permRowText}>
+                  <Text style={[styles.permRowLabel, { color: "#c2a523" }]}>
+                    {t("permissionBanner.notificationLabel")}
+                  </Text>
+                  <Text style={[styles.permRowDesc, { color: colors.textSecondary }]}>
+                    {t("permissionBanner.notificationDesc")}
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  onPress={() => {
+                    setPermDropdownOpen(false);
+                    if (Platform.OS === "ios") {
+                      Linking.openURL("app-settings:").catch(() =>
+                        Linking.openSettings().catch(() => {})
+                      );
+                    } else {
+                      Linking.openSettings().catch(() => {});
+                    }
+                  }}
+                  style={styles.permBtn}
+                >
+                  <Text style={styles.permBtnText}>
+                    {t("permissionBanner.goToSettings")}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {/* Konum satırı */}
+            {!locationGranted && (
+              <View style={[styles.permRow, { marginBottom: 0 }]}>
+                <View style={styles.permRowText}>
+                  <Text style={[styles.permRowLabel, { color: "#c2a523" }]}>
+                    {t("permissionBanner.locationLabel")}
+                  </Text>
+                  <Text style={[styles.permRowDesc, { color: colors.textSecondary }]}>
+                    {t("permissionBanner.locationDesc")}
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  onPress={() => {
+                    setPermDropdownOpen(false);
+                    if (Platform.OS === "ios") {
+                      Linking.openURL("app-settings:").catch(() =>
+                        Linking.openSettings().catch(() => {})
+                      );
+                    } else {
+                      Linking.openSettings().catch(() => {});
+                    }
+                  }}
+                  style={styles.permBtn}
+                >
+                  <Text style={styles.permBtnText}>
+                    {t("permissionBanner.goToSettings")}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </MotiView>
+        </>
+      )}
 
       {/* Account Switcher Bottom Sheet */}
       <BottomSheetModal
@@ -582,7 +728,7 @@ export const BaseTabLayout: React.FC<BaseTabLayoutProps> = ({
       {showMainFab ? (
         <MoreActionsFab
           items={mergedFabItems}
-          accentColor={accentColor}
+          chipBackground={COLORS.UI.ACCENT_GOLD}
           fabNudgeDown={fabNudgeDown}
           hidden={
             notiSheetOpen ||
@@ -611,5 +757,59 @@ const styles = StyleSheet.create({
     zIndex: 999,
     alignItems: "center",
     justifyContent: "center",
+  },
+  permDropdown: {
+    position: "absolute",
+    right: 8,
+    zIndex: 998,
+    width: 290,
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 12,
+    paddingTop: 10,
+    paddingBottom: 12,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.18,
+    shadowRadius: 10,
+    elevation: 12,
+  },
+  permDropdownHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 10,
+  },
+  permDropdownTitle: {
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  permRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 10,
+    gap: 8,
+  },
+  permRowText: {
+    flex: 1,
+  },
+  permRowLabel: {
+    fontSize: 12,
+    fontWeight: "600",
+    marginBottom: 2,
+  },
+  permRowDesc: {
+    fontSize: 11,
+    lineHeight: 15,
+  },
+  permBtn: {
+    backgroundColor: "#c2a523",
+    borderRadius: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  permBtnText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#1f2937",
   },
 });

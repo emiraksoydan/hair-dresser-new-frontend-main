@@ -231,8 +231,12 @@ export function useAIAssistant(): AIAssistantState {
         setResponse(result.data);
         setPhase("done");
       } else {
+        const code = normalizeAIErrorCode(result.message);
         setPhase("error");
-        setErrorMessage(normalizeAIErrorCode(result.message));
+        setErrorMessage(code);
+        if (code === "ai_rate_limit") {
+          console.warn("[useAIAssistant][Gemini] Ücretsiz API kotası / limit (ai_rate_limit).");
+        }
       }
     } catch (err: any) {
       // RTK Query FetchBaseQueryError: { status, data: { message, success, data } }
@@ -242,12 +246,18 @@ export function useAIAssistant(): AIAssistantState {
         err?.error?.data?.message ??
         err?.message ??
         undefined;
+      const code = normalizeAIErrorCode(apiMsg);
+      const status = err?.status ?? err?.originalStatus;
       console.warn("[useAIAssistant] mutation error", {
-        status: err?.status ?? err?.originalStatus,
+        status,
         apiMsg,
+        normalizedCode: code,
       });
+      if (code === "ai_rate_limit") {
+        console.warn("[useAIAssistant][Gemini] Ücretsiz API kotası / limit (ai_rate_limit). HTTP=", status);
+      }
       setPhase("error");
-      setErrorMessage(normalizeAIErrorCode(apiMsg));
+      setErrorMessage(code);
     }
   }, [currentLanguage, token, sendToAI]);
 

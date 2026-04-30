@@ -57,7 +57,7 @@ export function PanelEmptyCta({ title, subtitle, buttonLabel, onPress }: Props) 
       >
         <Button
           style={{ marginTop: 12, marginBottom: 16, marginHorizontal: 16 }}
-          buttonColor="#ffb900"
+          buttonColor="#FACC15"
           mode="contained"
           icon="plus"
           onPress={onPress}

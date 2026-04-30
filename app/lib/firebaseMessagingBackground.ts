@@ -15,7 +15,7 @@
 
 import Constants from 'expo-constants';
 import * as Notifications from 'expo-notifications';
-import { Platform } from 'react-native';
+import { NativeModules, Platform } from 'react-native';
 
 const isExpoGo = Constants.appOwnership === 'expo';
 
@@ -39,7 +39,7 @@ if (Platform.OS === 'android' && !isExpoGo) {
     name: 'Default',
     importance: Notifications.AndroidImportance.HIGH,
     vibrationPattern: [0, 250, 250, 250],
-    lightColor: '#fea60e',
+    lightColor: '#FACC15',
     sound: 'default',
   }).catch(() => {
     // Ignore channel errors (dev build yoksa düşebilir).
@@ -47,8 +47,15 @@ if (Platform.OS === 'android' && !isExpoGo) {
 }
 
 // Expo Go'da native FCM yok; module'u yükleme.
-if (!isExpoGo) {
+// Native Firebase app yoksa messaging() JS tarafında patlayabilir.
+if (!isExpoGo && NativeModules.RNFBAppModule) {
   try {
+    // Race condition guard: native modül var ama Firebase app henüz JS tarafına register edilmemiş olabilir.
+    // getApp atarsa tüm blok sessizce atlanır.
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { getApp } = require('@react-native-firebase/app');
+    getApp('[DEFAULT]');
+
     // Require (import değil): native modül yoksa sessizce geç.
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const messagingModule = require('@react-native-firebase/messaging');

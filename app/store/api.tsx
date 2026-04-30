@@ -10,7 +10,7 @@ import {
     ChatThreadListItemDto, ChatMessageItemDto, ChatMessageDto,
     AppointmentGetDto, AppointmentFilter,
     CreateRatingDto, RatingGetDto,
-    ToggleFavoriteDto, ToggleFavoriteResponseDto, FavoriteGetDto,
+    ToggleFavoriteDto, ToggleFavoriteResponseDto, FavoriteGetDto, FavoriteTargetType,
     ImageGetDto, ImageOwnerType,
     AddStoreToAppointmentRequestDto, CreateStoreToFreeBarberRequestDto,
     UpdateUserDto, UserProfileDto, SettingGetDto, SettingUpdateDto, HelpGuideGetDto,
@@ -20,9 +20,10 @@ import {
     CategoryHierarchyDto, EarningsDto, AIAssistantResponseDto,
     ServicePackageCreateDto, ServicePackageUpdateDto, ServicePackageGetDto, AppointmentServicePackageDto
 } from '../types';
-import { FilterRequestDto, SavedFilterGetDto, SavedFilterCreateDto, SavedFilterUpdateDto } from '../types/filter';
+import { FilterRequestDto, SavedFilterGetDto, SavedFilterCreateDto, SavedFilterUpdateDto, DiscoveryFilteredResponseDto } from '../types/filter';
 import { transformArrayResponse, transformObjectResponse, transformBooleanResponse, transformApiResponse } from '../utils/api/transform-response';
 import { lastMessagePreviewFromChatMessage, plainMessageSnapshot } from '../utils/chat/lastMessagePreview';
+import { DEFAULT_FILTER_RADIUS_KM } from '../constants/filterDefaults';
 
 // Cache duration constants (in seconds)
 const CACHE_DURATIONS = {
@@ -67,7 +68,13 @@ function getCachedFavoriteStateForTarget(state: unknown, targetId: string): bool
         }
     }
 
-    const detailEndpoints = new Set(['getFreeBarberForUsers', 'getStoreForUsers', 'getStoreById', 'getFreeBarberMinePanelDetail']);
+    const detailEndpoints = new Set([
+        'getFreeBarberForUsers',
+        'getStoreForUsers',
+        'getStoreById',
+        'getFreeBarberMinePanelDetail',
+        'getFreeBarberMinePanel',
+    ]);
     for (const queryKey of Object.keys(apiState.queries)) {
         const qs = apiState.queries[queryKey];
         if (!qs?.data || !detailEndpoints.has(qs.endpointName)) continue;
@@ -75,7 +82,266 @@ function getCachedFavoriteStateForTarget(state: unknown, targetId: string): bool
         if (d?.id === targetId && typeof d.isFavorited === 'boolean') return d.isFavorited;
     }
 
+    /** Randevu kartları (isFavorite sorgusu olmadan) — beğeni durumunu aynı hedef ID ile oku */
+    for (const queryKey of Object.keys(apiState.queries)) {
+        const qs = apiState.queries[queryKey];
+        if (qs?.endpointName !== 'getAllAppointmentByFilter' || !Array.isArray(qs.data)) continue;
+        for (const apt of qs.data as Array<{
+            barberStoreId?: string;
+            freeBarberId?: string;
+            customerUserId?: string;
+            isStoreFavorite?: boolean;
+            isFreeBarberFavorite?: boolean;
+            isCustomerFavorite?: boolean;
+        }>) {
+            if (!apt) continue;
+            if (apt.barberStoreId === targetId && typeof apt.isStoreFavorite === 'boolean') {
+                return apt.isStoreFavorite;
+            }
+            if (apt.freeBarberId === targetId && typeof apt.isFreeBarberFavorite === 'boolean') {
+                return apt.isFreeBarberFavorite;
+            }
+            if (apt.customerUserId === targetId && typeof apt.isCustomerFavorite === 'boolean') {
+                return apt.isCustomerFavorite;
+            }
+        }
+    }
+
+    /** Müşteri keşif POST cevabı (RTK cache) — useNearbyDiscovery ile aynı payload */
+    for (const queryKey of Object.keys(apiState.queries)) {
+        const qs = apiState.queries[queryKey];
+        if (qs?.endpointName !== 'getDiscoveryFiltered' || !qs?.data) continue;
+        const d = qs.data as { stores?: { id: string; isFavorited?: boolean }[]; freeBarbers?: { id: string; isFavorited?: boolean }[] };
+        for (const s of d.stores ?? []) {
+            if (s.id === targetId && typeof s.isFavorited === 'boolean') return s.isFavorited;
+        }
+        for (const f of d.freeBarbers ?? []) {
+            if (f.id === targetId && typeof f.isFavorited === 'boolean') return f.isFavorited;
+        }
+    }
+
+    /**
+     * Mesaj thread listesi — kısıtlı favori satırında kalp: karşı taraf favori değilse restricted=true.
+     * Buradan okuyunca optimistic toggle yönü ve cache tutarlılığı doğru çalışır.
+     */
+    for (const queryKey of Object.keys(apiState.queries)) {
+        const qs = apiState.queries[queryKey];
+        if (qs?.endpointName !== 'getChatThreads' || !Array.isArray(qs.data)) continue;
+        for (const thread of qs.data as ChatThreadListItemDto[]) {
+            if (!thread.isFavoriteThread || !thread.participants?.[0]) continue;
+            const p = thread.participants[0];
+            const threadTargetId =
+                p.userType === UserType.BarberStore ? (thread.favoriteStoreId ?? p.userId) : p.userId;
+            if (threadTargetId !== targetId) continue;
+            return !thread.isRestrictedForCurrentUser;
+        }
+    }
+
     return undefined;
+}
+
+function resolveRtkQueryArgs(queryState: { originalArgs?: unknown; queryCacheKey?: string }): unknown {
+    let queryArgs: unknown = queryState.originalArgs;
+    if (queryArgs === undefined && queryState.queryCacheKey) {
+        const match = queryState.queryCacheKey.match(/\((.+)\)$/);
+        if (match) {
+            try {
+                queryArgs = JSON.parse(match[1]);
+            } catch {
+                // parse edilemezse bırak
+            }
+        }
+    }
+    return queryArgs;
+}
+
+const OPTIMISTIC_FAV_ID_PREFIX = 'optimistic-fav-';
+
+function getMeUserIdFromRtkState(state: { api?: { queries?: Record<string, any> } }): string | undefined {
+    const queries = state?.api?.queries;
+    if (!queries) return undefined;
+    for (const k of Object.keys(queries)) {
+        const q = queries[k];
+        if (q?.endpointName === 'getMe' && q?.data) {
+            const inner = (q.data as ApiResponse<UserProfileDto>)?.data;
+            if (inner?.id) return inner.id;
+        }
+    }
+    return undefined;
+}
+
+type FavoriteEntityForCache = {
+    targetType: FavoriteTargetType;
+    store?: BarberStoreGetDto;
+    freeBarber?: FreeBarGetDto;
+    customer?: FavoriteGetDto['customer'];
+};
+
+function findFavoriteEntityInCaches(
+    getState: () => unknown,
+    targetId: string,
+    typeHint?: FavoriteTargetType,
+): FavoriteEntityForCache | null {
+    const state = getState() as { api?: { queries?: Record<string, any> } };
+    const queries = state?.api?.queries;
+    if (!queries) return null;
+
+    if (typeHint === FavoriteTargetType.Store || !typeHint) {
+        for (const k of Object.keys(queries)) {
+            const qs = queries[k];
+            if (qs?.endpointName === 'getStoreForUsers' && (qs.data as { id?: string } | undefined)?.id === targetId) {
+                return { targetType: FavoriteTargetType.Store, store: qs.data as BarberStoreGetDto };
+            }
+        }
+        for (const k of Object.keys(queries)) {
+            const qs = queries[k];
+            if (qs?.endpointName === 'getNearbyStores' && Array.isArray(qs.data)) {
+                const s = (qs.data as BarberStoreGetDto[]).find((x) => x.id === targetId);
+                if (s) return { targetType: FavoriteTargetType.Store, store: s };
+            }
+        }
+        for (const k of Object.keys(queries)) {
+            const qs = queries[k];
+            if (qs?.endpointName === 'getMineStores' && Array.isArray(qs.data)) {
+                const s = (qs.data as BarberStoreGetDto[]).find((x) => x.id === targetId);
+                if (s) return { targetType: FavoriteTargetType.Store, store: s };
+            }
+        }
+        for (const k of Object.keys(queries)) {
+            const qs = queries[k];
+            if (qs?.endpointName === 'getDiscoveryFiltered' && qs.data) {
+                const d = qs.data as { stores?: BarberStoreGetDto[] };
+                const s = d.stores?.find((x) => x.id === targetId);
+                if (s) return { targetType: FavoriteTargetType.Store, store: s };
+            }
+        }
+    }
+
+    if (typeHint === FavoriteTargetType.FreeBarber || !typeHint) {
+        for (const k of Object.keys(queries)) {
+            const qs = queries[k];
+            if (qs?.endpointName === 'getFreeBarberForUsers' && (qs.data as { id?: string } | undefined)?.id === targetId) {
+                return { targetType: FavoriteTargetType.FreeBarber, freeBarber: qs.data as FreeBarGetDto };
+            }
+        }
+        for (const k of Object.keys(queries)) {
+            const qs = queries[k];
+            if (qs?.endpointName === 'getNearbyFreeBarber' && Array.isArray(qs.data)) {
+                const f = (qs.data as FreeBarGetDto[]).find((x) => x.id === targetId);
+                if (f) return { targetType: FavoriteTargetType.FreeBarber, freeBarber: f };
+            }
+        }
+        for (const k of Object.keys(queries)) {
+            const qs = queries[k];
+            if (qs?.endpointName === 'getDiscoveryFiltered' && qs.data) {
+                const d = qs.data as { freeBarbers?: FreeBarGetDto[] };
+                const f = d.freeBarbers?.find((x) => x.id === targetId);
+                if (f) return { targetType: FavoriteTargetType.FreeBarber, freeBarber: f };
+            }
+        }
+        for (const k of Object.keys(queries)) {
+            const qs = queries[k];
+            if (qs?.endpointName === 'getFreeBarberMinePanel' && (qs.data as { id?: string } | undefined)?.id === targetId) {
+                return { targetType: FavoriteTargetType.FreeBarber, freeBarber: qs.data as FreeBarGetDto };
+            }
+        }
+    }
+
+    if (typeHint === FavoriteTargetType.Customer || !typeHint) {
+        for (const k of Object.keys(queries)) {
+            const qs = queries[k];
+            if (qs?.endpointName !== 'getAllAppointmentByFilter' || !Array.isArray(qs.data)) continue;
+            const apt = (qs.data as any[]).find(
+                (a) => a?.customerUserId === targetId && typeof a?.isCustomerFavorite === 'boolean',
+            );
+            if (apt) {
+                const name: string = apt.customerName || '';
+                const parts = name.trim().split(/\s+/);
+                return {
+                    targetType: FavoriteTargetType.Customer,
+                    customer: {
+                        id: targetId,
+                        firstName: parts[0] || '—',
+                        lastName: parts.length > 1 ? parts.slice(1).join(' ') : '',
+                        imageUrl: apt.customerImage,
+                        rating: Number(apt.customerAverageRating) || 0,
+                        favoriteCount: 0,
+                        reviewCount: 0,
+                        isFavorited: true,
+                    },
+                };
+            }
+        }
+    }
+
+    return null;
+}
+
+function buildOptimisticFavoriteGetDto(
+    getState: () => unknown,
+    targetId: string,
+    typeHint: FavoriteTargetType | undefined,
+    favoriteCountHint: number | undefined,
+): FavoriteGetDto | null {
+    const fromId = getMeUserIdFromRtkState(getState() as { api?: { queries?: Record<string, any> } });
+    if (!fromId) return null;
+    const ent = findFavoriteEntityInCaches(getState, targetId, typeHint);
+    if (!ent) return null;
+    const now = new Date().toISOString();
+    const rowId = `${OPTIMISTIC_FAV_ID_PREFIX}${targetId}`;
+
+    if (ent.targetType === FavoriteTargetType.Store && ent.store) {
+        const store = { ...ent.store, isFavorited: true as const };
+        if (typeof favoriteCountHint === 'number' && (store as { favoriteCount?: number }).favoriteCount !== favoriteCountHint) {
+            (store as { favoriteCount: number }).favoriteCount = favoriteCountHint;
+        }
+        return {
+            id: rowId,
+            favoritedFromId: fromId,
+            favoritedToId: targetId,
+            targetType: FavoriteTargetType.Store,
+            createdAt: now,
+            store,
+        };
+    }
+    if (ent.targetType === FavoriteTargetType.FreeBarber && ent.freeBarber) {
+        const freeBarber = { ...ent.freeBarber, isFavorited: true as const };
+        if (typeof favoriteCountHint === 'number' && (freeBarber as { favoriteCount?: number }).favoriteCount !== favoriteCountHint) {
+            (freeBarber as { favoriteCount: number }).favoriteCount = favoriteCountHint;
+        }
+        return {
+            id: rowId,
+            favoritedFromId: fromId,
+            favoritedToId: targetId,
+            targetType: FavoriteTargetType.FreeBarber,
+            createdAt: now,
+            freeBarber,
+        };
+    }
+    if (ent.targetType === FavoriteTargetType.Customer && ent.customer) {
+        return {
+            id: rowId,
+            favoritedFromId: fromId,
+            favoritedToId: targetId,
+            targetType: FavoriteTargetType.Customer,
+            createdAt: now,
+            customer: { ...ent.customer, isFavorited: true },
+        };
+    }
+
+    return null;
+}
+
+function favoriteRowAlreadyInList(draft: FavoriteGetDto[] | undefined, targetId: string): boolean {
+    if (!Array.isArray(draft)) return false;
+    return draft.some(
+        (f) =>
+            f.favoritedToId === targetId ||
+            f.id === targetId ||
+            f.store?.id === targetId ||
+            f.freeBarber?.id === targetId ||
+            f.customer?.id === targetId,
+    );
 }
 
 export const api = createApi({
@@ -120,10 +386,10 @@ export const api = createApi({
             ],
         }),
         getNearbyStores: builder.query<BarberStoreGetDto[], NearbyRequest>({
-            query: ({ lat, lon, radiusKm = 10 }) => ({
+            query: ({ lat, lon, radiusKm = DEFAULT_FILTER_RADIUS_KM, limit }) => ({
                 url: 'BarberStore/nearby',
                 method: 'GET',
-                params: { lat, lon, distance: radiusKm },
+                params: { lat, lon, distance: radiusKm, ...(limit !== undefined ? { limit } : {}) },
             }),
             keepUnusedDataFor: CACHE_DURATIONS.REAL_TIME,
             transformResponse: transformArrayResponse<BarberStoreGetDto>,
@@ -190,10 +456,10 @@ export const api = createApi({
             invalidatesTags: ['MineFreeBarberPanel'],
         }),
         getNearbyFreeBarber: builder.query<FreeBarGetDto[], NearbyRequest>({
-            query: ({ lat, lon, radiusKm = 10 }) => ({
+            query: ({ lat, lon, radiusKm = DEFAULT_FILTER_RADIUS_KM, limit }) => ({
                 url: 'FreeBarber/nearby',
                 method: 'GET',
-                params: { lat, lon, distance: radiusKm },
+                params: { lat, lon, distance: radiusKm, ...(limit !== undefined ? { limit } : {}) },
             }),
             keepUnusedDataFor: CACHE_DURATIONS.REAL_TIME,
             transformResponse: transformArrayResponse<FreeBarGetDto>,
@@ -281,16 +547,43 @@ export const api = createApi({
             keepUnusedDataFor: CACHE_DURATIONS.REAL_TIME,
         }),
 
-        // 2. YENİ EKLENEN: Filtreli Randevu Listesi (Active/Completed/Cancelled)
-        getAllAppointmentByFilter: builder.query<AppointmentGetDto[], AppointmentFilter>({
-            query: (filter) => ({
+        // 2. Filtreli Randevu Listesi (Active/Completed/Cancelled) — INFINITE SCROLL
+        //
+        // Pagination stratejisi:
+        //  - `serializeQueryArgs` sadece `filter`'a bakar → her filtre TEK cache entry'sine sahiptir.
+        //  - `loadMore` çağrısı `{ filter, before }` ile yapılır; `forceRefetch` sayesinde server'dan
+        //    yeni sayfa çekilir, `merge` sonuçları ilgili cache'in sonuna ekler (daha eski kayıtlar aşağıda).
+        //  - Invalidation/refetch (before yok) → cache'i sıfırlar (ilk sayfa).
+        //  - Mevcut tüm `useGetAllAppointmentByFilterQuery(filter)` ve `updateQueryData(..., { filter }, ...)`
+        //    çağrıları aynı cache slot'una denk gelir; paged dünyada da tutarlı çalışır.
+        getAllAppointmentByFilter: builder.query<AppointmentGetDto[], { filter: AppointmentFilter; before?: string; beforeId?: string; limit?: number }>({
+            query: ({ filter, before, beforeId, limit }) => ({
                 url: `Appointment/getallbyfilter`,
                 method: 'GET',
-                params: { filter },
+                params: {
+                    filter,
+                    ...(before ? { before } : {}),
+                    ...(beforeId ? { beforeId } : {}),
+                    ...(limit ? { limit } : {}),
+                },
             }),
+            serializeQueryArgs: ({ queryArgs }) => ({ filter: queryArgs.filter }),
+            merge: (currentCache, newItems, { arg }) => {
+                if (!arg?.before) {
+                    // İlk sayfa: cache'i tamamen yeni verilerle değiştir.
+                    return newItems;
+                }
+                const existing = new Set(currentCache.map((a) => a.id));
+                const deduped = newItems.filter((a) => !existing.has(a.id));
+                return [...currentCache, ...deduped];
+            },
+            // forceRefetch: hem `before` hem `beforeId` değişimini tetiklemeli.
+            // (before aynı ama beforeId farklı = aynı timestamp'ta ikinci tie-breaker sayfası.)
+            forceRefetch: ({ currentArg, previousArg }) =>
+                (currentArg?.before ?? null) !== (previousArg?.before ?? null) ||
+                (currentArg?.beforeId ?? null) !== (previousArg?.beforeId ?? null),
             keepUnusedDataFor: CACHE_DURATIONS.DYNAMIC,
             transformResponse: transformArrayResponse<AppointmentGetDto>,
-            // Listeyi 'LIST' etiketiyle ve her öğeyi kendi ID'siyle etiketle
             providesTags: (result) =>
                 result && Array.isArray(result)
                     ? [
@@ -457,8 +750,35 @@ export const api = createApi({
 
         // --- NOTIFICATION API ---
 
-        getAllNotifications: builder.query<NotificationDto[], void>({
-            query: () => 'Notification',
+        // Bildirimler — INFINITE SCROLL.
+        // - `serializeQueryArgs` her zaman `{}` döner → tek cache slot
+        //   (mevcut `useGetAllNotificationsQuery()` ve `updateQueryData(..., undefined, ...)` çağrıları aynen çalışır).
+        // - `before` yok → ilk sayfa (replace); `before` var → eski sayfa (append, çünkü liste DESC sırada).
+        getAllNotifications: builder.query<NotificationDto[], { before?: string; beforeId?: string; limit?: number } | void>({
+            query: (arg) => ({
+                url: 'Notification',
+                params: {
+                    ...(arg && (arg as any).before ? { before: (arg as any).before } : {}),
+                    ...(arg && (arg as any).beforeId ? { beforeId: (arg as any).beforeId } : {}),
+                    ...(arg && (arg as any).limit ? { limit: (arg as any).limit } : {}),
+                },
+            }),
+            serializeQueryArgs: () => ({}),
+            merge: (currentCache, newItems, { arg }) => {
+                const before = (arg as any)?.before as string | undefined;
+                if (!before) return newItems;
+                const seen = new Set(currentCache.map((n) => n.id));
+                const deduped = newItems.filter((n) => !seen.has(n.id));
+                // Liste createdAt DESC → eski sayfa SONA append edilir.
+                return [...currentCache, ...deduped];
+            },
+            forceRefetch: ({ currentArg, previousArg }) => {
+                const cTs = (currentArg as any)?.before ?? null;
+                const pTs = (previousArg as any)?.before ?? null;
+                const cId = (currentArg as any)?.beforeId ?? null;
+                const pId = (previousArg as any)?.beforeId ?? null;
+                return cTs !== pTs || cId !== pId;
+            },
             transformResponse: transformArrayResponse<NotificationDto>,
             providesTags: (result) => {
                 if (!result || !Array.isArray(result)) return [{ type: 'Notification' as const, id: 'LIST' }];
@@ -467,7 +787,7 @@ export const api = createApi({
                     { type: 'Notification' as const, id: 'LIST' },
                 ];
             },
-            keepUnusedDataFor: 60, // 60 saniye cache
+            keepUnusedDataFor: 60,
         }),
         markNotificationRead: builder.mutation<void, string>({
             query: (id) => ({ url: `Notification/read/${id}`, method: 'POST' }),
@@ -506,8 +826,35 @@ export const api = createApi({
         }),
 
         // --- CHAT API ---
-        getChatThreads: builder.query<ChatThreadListItemDto[], void>({
-            query: () => 'Chat/threads',
+        // Thread listesi — INFINITE SCROLL.
+        //  - serializeQueryArgs: () => ({}) → tek cache slot, mevcut `updateQueryData("getChatThreads", undefined, ...)`
+        //    çağrıları (useSignalRV2) aynen çalışır.
+        //  - Liste LastMessageAt DESC sırada döner → eski sayfa SONA append edilir.
+        //  - `before` yok → ilk sayfa (replace); `before` var → eski sayfa (append, dedup).
+        getChatThreads: builder.query<ChatThreadListItemDto[], { before?: string; beforeId?: string; limit?: number } | void>({
+            query: (arg) => ({
+                url: 'Chat/threads',
+                params: {
+                    ...(arg && (arg as any).before ? { before: (arg as any).before } : {}),
+                    ...(arg && (arg as any).beforeId ? { beforeId: (arg as any).beforeId } : {}),
+                    ...(arg && (arg as any).limit ? { limit: (arg as any).limit } : {}),
+                },
+            }),
+            serializeQueryArgs: () => ({}),
+            merge: (currentCache, newItems, { arg }) => {
+                const before = (arg as any)?.before as string | undefined;
+                if (!before) return newItems;
+                const seen = new Set(currentCache.map((t) => t.threadId));
+                const deduped = newItems.filter((t) => !seen.has(t.threadId));
+                return [...currentCache, ...deduped];
+            },
+            forceRefetch: ({ currentArg, previousArg }) => {
+                const cTs = (currentArg as any)?.before ?? null;
+                const pTs = (previousArg as any)?.before ?? null;
+                const cId = (currentArg as any)?.beforeId ?? null;
+                const pId = (previousArg as any)?.beforeId ?? null;
+                return cTs !== pTs || cId !== pId;
+            },
             transformResponse: transformArrayResponse<ChatThreadListItemDto>,
             providesTags: (result) =>
                 result && Array.isArray(result)
@@ -518,12 +865,42 @@ export const api = createApi({
                     : [{ type: 'Chat' as const, id: 'LIST' }],
             keepUnusedDataFor: CACHE_DURATIONS.LIST,
         }),
-        getChatMessages: builder.query<ChatMessageItemDto[], { appointmentId: string; before?: string }>({
-            query: ({ appointmentId, before }) => ({
+        // Chat mesajları — INFINITE SCROLL (cursor-based).
+        //
+        // Backend her sayfayı OLDEST -> NEWEST sırada döner (en eski en başta).
+        // - İlk sayfa: `before` yok → en yeni `limit` adet (default 30) gelir.
+        // - Eski sayfa yükleme: `before = oldestCachedMessage.createdAt` ile çağrılır,
+        //   server eski `limit` adet döner; merge ile cache'in BAŞINA prepend ederiz.
+        //
+        // Tek cache slot stratejisi (`serializeQueryArgs` sadece appointmentId/threadId'ye bakar):
+        //  - Mevcut updateQueryData / SignalR push handler'ları DEĞİŞMEDEN çalışır
+        //    (hepsi `{ appointmentId }` veya `{ threadId }` ile aynı slot'u günceller).
+        //  - Yeni mesajlar (push veya gönderme) cache'in SONUNA append edilir; render
+        //    sırası kronolojik olarak korunur.
+        getChatMessages: builder.query<ChatMessageItemDto[], { appointmentId: string; before?: string; beforeId?: string; limit?: number }>({
+            query: ({ appointmentId, before, beforeId, limit }) => ({
                 url: `Chat/${appointmentId}/messages`,
                 method: 'GET',
-                params: before ? { before } : undefined,
+                params: {
+                    ...(before ? { before } : {}),
+                    ...(beforeId ? { beforeId } : {}),
+                    ...(limit ? { limit } : {}),
+                },
             }),
+            serializeQueryArgs: ({ queryArgs }) => ({ appointmentId: queryArgs.appointmentId }),
+            merge: (currentCache, newItems, { arg }) => {
+                if (!arg.before) {
+                    // İlk sayfa veya yeniden yükleme → cache'i replace et.
+                    return newItems;
+                }
+                // Eski sayfa → cache'in başına prepend (duplicate filter).
+                const seen = new Set(currentCache.map((m) => m.messageId));
+                const deduped = newItems.filter((m) => !seen.has(m.messageId));
+                return [...deduped, ...currentCache];
+            },
+            forceRefetch: ({ currentArg, previousArg }) =>
+                (currentArg?.before ?? null) !== (previousArg?.before ?? null) ||
+                (currentArg?.beforeId ?? null) !== (previousArg?.beforeId ?? null),
             providesTags: (result, error, arg) => [
                 { type: 'Chat' as const, id: 'MESSAGES' },
                 { type: 'Chat' as const, id: `MESSAGES_APPT_${arg.appointmentId}` },
@@ -531,12 +908,28 @@ export const api = createApi({
             keepUnusedDataFor: CACHE_DURATIONS.LIST,
             transformResponse: transformArrayResponse<ChatMessageItemDto>,
         }),
-        getChatMessagesByThread: builder.query<ChatMessageItemDto[], { threadId: string; before?: string }>({
-            query: ({ threadId, before }) => ({
+        getChatMessagesByThread: builder.query<ChatMessageItemDto[], { threadId: string; before?: string; beforeId?: string; limit?: number }>({
+            query: ({ threadId, before, beforeId, limit }) => ({
                 url: `Chat/thread/${threadId}/messages`,
                 method: 'GET',
-                params: before ? { before } : undefined,
+                params: {
+                    ...(before ? { before } : {}),
+                    ...(beforeId ? { beforeId } : {}),
+                    ...(limit ? { limit } : {}),
+                },
             }),
+            serializeQueryArgs: ({ queryArgs }) => ({ threadId: queryArgs.threadId }),
+            merge: (currentCache, newItems, { arg }) => {
+                if (!arg.before) {
+                    return newItems;
+                }
+                const seen = new Set(currentCache.map((m) => m.messageId));
+                const deduped = newItems.filter((m) => !seen.has(m.messageId));
+                return [...deduped, ...currentCache];
+            },
+            forceRefetch: ({ currentArg, previousArg }) =>
+                (currentArg?.before ?? null) !== (previousArg?.before ?? null) ||
+                (currentArg?.beforeId ?? null) !== (previousArg?.beforeId ?? null),
             providesTags: (result, error, arg) => [
                 { type: 'Chat' as const, id: 'MESSAGES' },
                 { type: 'Chat' as const, id: `MESSAGES_THREAD_${arg.threadId}` },
@@ -778,6 +1171,21 @@ export const api = createApi({
                 url: `Chat/thread/${threadId}/read`,
                 method: 'POST',
             }),
+            async onQueryStarted(threadId, { dispatch, queryFulfilled }) {
+                const patchThreads = dispatch(
+                    api.util.updateQueryData("getChatThreads", undefined, (draft) => {
+                        if (!Array.isArray(draft)) return;
+                        const row = draft.find((t) => t.threadId === threadId);
+                        if (!row) return;
+                        row.unreadCount = 0;
+                    }),
+                );
+                try {
+                    await queryFulfilled;
+                } catch {
+                    patchThreads.undo();
+                }
+            },
             // Invalidate both Chat thread and Badge count
             invalidatesTags: (result, error, threadId) => [
                 { type: 'Chat' as const, id: threadId },
@@ -834,12 +1242,33 @@ export const api = createApi({
             keepUnusedDataFor: CACHE_DURATIONS.DYNAMIC,
             transformResponse: (response: any) => transformObjectResponse<RatingGetDto>(response),
         }),
-        getRatingsByTarget: builder.query<RatingGetDto[], string>({
-            query: (targetId) => `Rating/target/${targetId}`,
+        // Rating listesi — INFINITE SCROLL (target bazında).
+        //  - serializeQueryArgs: sadece `targetId`'ye bakar → aynı target için tek cache slot.
+        //  - Liste CreatedAt DESC → eski sayfa SONA append edilir.
+        //  - `before` yok → ilk sayfa (replace); `before` var → eski sayfa (append, dedup).
+        getRatingsByTarget: builder.query<RatingGetDto[], { targetId: string; before?: string; beforeId?: string; limit?: number }>({
+            query: ({ targetId, before, beforeId, limit }) => ({
+                url: `Rating/target/${targetId}`,
+                params: {
+                    ...(before ? { before } : {}),
+                    ...(beforeId ? { beforeId } : {}),
+                    ...(limit ? { limit } : {}),
+                },
+            }),
+            serializeQueryArgs: ({ queryArgs }) => ({ targetId: queryArgs.targetId }),
+            merge: (currentCache, newItems, { arg }) => {
+                if (!arg.before) return newItems;
+                const seen = new Set(currentCache.map((r) => r.id));
+                const deduped = newItems.filter((r) => !seen.has(r.id));
+                return [...currentCache, ...deduped];
+            },
+            forceRefetch: ({ currentArg, previousArg }) =>
+                (currentArg?.before ?? null) !== (previousArg?.before ?? null) ||
+                (currentArg?.beforeId ?? null) !== (previousArg?.beforeId ?? null),
             keepUnusedDataFor: CACHE_DURATIONS.DYNAMIC,
             transformResponse: transformArrayResponse<RatingGetDto>,
-            providesTags: (result, error, targetId) => [
-                { type: 'Rating' as const, id: targetId },
+            providesTags: (result, error, arg) => [
+                { type: 'Rating' as const, id: arg.targetId },
                 { type: 'Rating' as const, id: 'LIST' },
             ],
         }),
@@ -924,6 +1353,282 @@ export const api = createApi({
                 const canOptimisticFavorite = currentIsFavorite !== undefined;
                 const optimisticToggle = canOptimisticFavorite ? !currentIsFavorite : false;
 
+                const refetchMyFavoritesCache = () => {
+                    try {
+                        void dispatch(
+                            api.endpoints.getMyFavorites.initiate(undefined, {
+                                forceRefetch: true,
+                                subscribe: false,
+                            } as any)
+                        );
+                    } catch (e) {
+                        // ignore
+                    }
+                };
+
+                const applyMyFavoritesUnfavorite = () => {
+                    try {
+                        dispatch(
+                            api.util.updateQueryData('getMyFavorites', undefined, (draft) => {
+                                if (!Array.isArray(draft)) return;
+                                return draft.filter((f: FavoriteGetDto) => {
+                                    if (f.favoritedToId === targetId) return false;
+                                    if (f.id?.startsWith(OPTIMISTIC_FAV_ID_PREFIX) && f.favoritedToId === targetId) return false;
+                                    if (f.store && f.store.id === targetId) return false;
+                                    if (f.freeBarber && f.freeBarber.id === targetId) return false;
+                                    if (f.customer && f.customer.id === targetId) return false;
+                                    if (f.manuelBarber && f.manuelBarber.id === targetId) return false;
+                                    return true;
+                                });
+                            }),
+                        );
+                    } catch (e) {
+                        // ignore
+                    }
+                };
+
+                const tryPrependMyFavorites = (fcHint: number | undefined) => {
+                    const row = buildOptimisticFavoriteGetDto(getState, targetId, arg.targetType, fcHint);
+                    if (row) {
+                        try {
+                            dispatch(
+                                api.util.updateQueryData('getMyFavorites', undefined, (draft) => {
+                                    if (!Array.isArray(draft)) return;
+                                    if (favoriteRowAlreadyInList(draft, targetId)) return;
+                                    return [row, ...draft];
+                                }),
+                            );
+                        } catch (e) {
+                            // ignore
+                        }
+                    } else {
+                        refetchMyFavoritesCache();
+                    }
+                };
+
+                const removeStubFavoriteRowOnRollback = () => {
+                    try {
+                        dispatch(
+                            api.util.updateQueryData('getMyFavorites', undefined, (draft) => {
+                                if (!Array.isArray(draft)) return;
+                                return draft.filter(
+                                    (f) => !(f.id === `${OPTIMISTIC_FAV_ID_PREFIX}${targetId}` && f.favoritedToId === targetId),
+                                );
+                            }),
+                        );
+                    } catch (e) {
+                        // ignore
+                    }
+                };
+
+                /** Tüm getAllAppointmentByFilter slot'ları — originalArgs yoksa queryCacheKey parse (randevu listeleri) */
+                const updateAppointmentFavoriteFlag = (isFavoriteVal: boolean) => {
+                    try {
+                        const apiState = (getState() as any).api;
+                        if (!apiState?.queries) return;
+
+                        Object.keys(apiState.queries).forEach((queryKey) => {
+                            const queryState = apiState.queries[queryKey];
+                            if (
+                                queryState?.endpointName !== 'getAllAppointmentByFilter' ||
+                                !queryState?.data ||
+                                !Array.isArray(queryState.data)
+                            ) {
+                                return;
+                            }
+
+                            const argsForUpdate = resolveRtkQueryArgs(queryState);
+                            if (argsForUpdate === undefined || argsForUpdate === null) {
+                                return;
+                            }
+
+                            const hasMatch = queryState.data.some(
+                                (apt: any) =>
+                                    apt.customerUserId === targetId ||
+                                    apt.barberStoreId === targetId ||
+                                    apt.freeBarberId === targetId
+                            );
+                            if (!hasMatch) return;
+
+                            dispatch(
+                                api.util.updateQueryData(
+                                    'getAllAppointmentByFilter' as any,
+                                    argsForUpdate,
+                                    (draft) => {
+                                        if (!draft || !Array.isArray(draft)) return;
+                                        draft.forEach((apt: any) => {
+                                            if (apt.customerUserId === targetId) {
+                                                apt.isCustomerFavorite = isFavoriteVal;
+                                            }
+                                            if (apt.barberStoreId === targetId) {
+                                                apt.isStoreFavorite = isFavoriteVal;
+                                            }
+                                            if (apt.freeBarberId === targetId) {
+                                                apt.isFreeBarberFavorite = isFavoriteVal;
+                                            }
+                                        });
+                                    }
+                                )
+                            );
+                        });
+                    } catch (e) {
+                        // ignore
+                    }
+                };
+
+                const updateDiscoveryFilteredFavorite = (
+                    isFav: boolean,
+                    countDelta?: number,
+                    favoriteCountAbsolute?: number,
+                ) => {
+                    try {
+                        const apiState = (getState() as any).api;
+                        if (!apiState?.queries) return;
+                        Object.keys(apiState.queries).forEach((queryKey) => {
+                            const queryState = apiState.queries[queryKey];
+                            if (queryState?.endpointName !== 'getDiscoveryFiltered' || !queryState?.data) {
+                                return;
+                            }
+                            const d = queryState.data as { stores?: any[]; freeBarbers?: any[] };
+                            const inStores = d.stores?.some((s) => s?.id === targetId);
+                            const inFbs = d.freeBarbers?.some((b) => b?.id === targetId);
+                            if (!inStores && !inFbs) return;
+                            const argsForUpdate = resolveRtkQueryArgs(queryState);
+                            if (argsForUpdate === undefined || argsForUpdate === null) return;
+                            dispatch(
+                                api.util.updateQueryData('getDiscoveryFiltered' as any, argsForUpdate, (draft: any) => {
+                                    if (!draft) return;
+                                    draft.stores?.forEach((s: any) => {
+                                        if (s.id === targetId) {
+                                            s.isFavorited = isFav;
+                                            if (
+                                                favoriteCountAbsolute !== undefined &&
+                                                typeof s.favoriteCount === 'number'
+                                            ) {
+                                                s.favoriteCount = favoriteCountAbsolute;
+                                            } else if (
+                                                countDelta !== undefined &&
+                                                typeof s.favoriteCount === 'number'
+                                            ) {
+                                                s.favoriteCount = Math.max(0, s.favoriteCount + countDelta);
+                                            }
+                                        }
+                                    });
+                                    draft.freeBarbers?.forEach((b: any) => {
+                                        if (b.id === targetId) {
+                                            b.isFavorited = isFav;
+                                            if (
+                                                favoriteCountAbsolute !== undefined &&
+                                                typeof b.favoriteCount === 'number'
+                                            ) {
+                                                b.favoriteCount = favoriteCountAbsolute;
+                                            } else if (
+                                                countDelta !== undefined &&
+                                                typeof b.favoriteCount === 'number'
+                                            ) {
+                                                b.favoriteCount = Math.max(0, b.favoriteCount + countDelta);
+                                            }
+                                        }
+                                    });
+                                })
+                            );
+                        });
+                    } catch (e) {
+                        // ignore
+                    }
+                };
+
+                const patchChatThreadsFavoriteRestriction = (counterpartyIsFavorited: boolean) => {
+                    try {
+                        dispatch(
+                            api.util.updateQueryData('getChatThreads', undefined, (draft: ChatThreadListItemDto[]) => {
+                                if (!Array.isArray(draft)) return;
+                                for (const thread of draft) {
+                                    if (!thread.isFavoriteThread || !thread.participants?.[0]) continue;
+                                    const p = thread.participants[0];
+                                    const tid =
+                                        p.userType === UserType.BarberStore
+                                            ? (thread.favoriteStoreId ?? p.userId)
+                                            : p.userId;
+                                    if (tid !== targetId) continue;
+                                    thread.isRestrictedForCurrentUser = !counterpartyIsFavorited;
+                                }
+                            }),
+                        );
+                    } catch {
+                        // ignore
+                    }
+                };
+
+                /** Sunucu cevabıyla yakınlık / detay önbelleğindeki sayaç ve bayrak (invalidate beklemeden) */
+                const patchAllListCachesFromServer = (isFav: boolean, fc?: number) => {
+                    try {
+                        const apiSt = (getState() as any)?.api;
+                        if (!apiSt?.queries) return;
+                        const listEndpoints = new Set(['getNearbyStores', 'getNearbyFreeBarber']);
+                        Object.keys(apiSt.queries).forEach((qk) => {
+                            const queryState = apiSt.queries[qk];
+                            if (!queryState?.endpointName || !listEndpoints.has(queryState.endpointName)) return;
+                            if (!Array.isArray(queryState.data)) return;
+                            const queryArgs = resolveRtkQueryArgs(queryState);
+                            if (queryArgs === undefined || queryArgs === null) return;
+                            try {
+                                dispatch(
+                                    api.util.updateQueryData(
+                                        queryState.endpointName as 'getNearbyStores' | 'getNearbyFreeBarber',
+                                        queryArgs as NearbyRequest,
+                                        (draft: any[]) => {
+                                            const item = draft.find((x: any) => x?.id === targetId);
+                                            if (item) {
+                                                item.isFavorited = isFav;
+                                                if (typeof fc === 'number') item.favoriteCount = fc;
+                                            }
+                                        },
+                                    ),
+                                );
+                            } catch {
+                                // ignore
+                            }
+                        });
+                        Object.keys(apiSt.queries).forEach((qk) => {
+                            const queryState = apiSt.queries[qk];
+                            if (!queryState?.data) return;
+                            const args = resolveRtkQueryArgs(queryState);
+                            if (args !== targetId) return;
+                            if (queryState.endpointName === 'getStoreForUsers') {
+                                try {
+                                    dispatch(
+                                        api.util.updateQueryData('getStoreForUsers', targetId, (draft: any) => {
+                                            if (draft?.id === targetId) {
+                                                draft.isFavorited = isFav;
+                                                if (typeof fc === 'number') draft.favoriteCount = fc;
+                                            }
+                                        }),
+                                    );
+                                } catch {
+                                    // ignore
+                                }
+                            }
+                            if (queryState.endpointName === 'getFreeBarberForUsers') {
+                                try {
+                                    dispatch(
+                                        api.util.updateQueryData('getFreeBarberForUsers', targetId, (draft: any) => {
+                                            if (draft?.id === targetId) {
+                                                draft.isFavorited = isFav;
+                                                if (typeof fc === 'number') draft.favoriteCount = fc;
+                                            }
+                                        }),
+                                    );
+                                } catch {
+                                    // ignore
+                                }
+                            }
+                        });
+                    } catch {
+                        // ignore
+                    }
+                };
+
                 if (canOptimisticFavorite) {
                     try {
                         dispatch(
@@ -939,58 +1644,15 @@ export const api = createApi({
                     optimisticUpdateCache('getFreeBarberMinePanel', optimisticToggle);
                     optimisticUpdateCache('getStoreForUsers', optimisticToggle);
                     optimisticUpdateCache('getFreeBarberForUsers', optimisticToggle);
-                }
-
-                // Randevu listesi cache'i: aynı hedefle ilgili tüm satırlarda favori bayrakları (refetch şart değil)
-                const updateAppointmentFavoriteFlag = (isFavorite: boolean) => {
-                    try {
-                        const apiState = (state as any).api;
-                        if (!apiState?.queries) return;
-
-                        Object.keys(apiState.queries).forEach((queryKey) => {
-                            const queryState = apiState.queries[queryKey];
-                            if (
-                                queryState?.endpointName !== 'getAllAppointmentByFilter' ||
-                                !queryState?.data ||
-                                !Array.isArray(queryState.data) ||
-                                queryState.originalArgs === undefined
-                            ) {
-                                return;
-                            }
-
-                            const hasMatch = queryState.data.some(
-                                (apt: any) =>
-                                    apt.customerUserId === targetId ||
-                                    apt.barberStoreId === targetId ||
-                                    apt.freeBarberId === targetId
-                            );
-                            if (!hasMatch) return;
-
-                            dispatch(
-                                api.util.updateQueryData(
-                                    'getAllAppointmentByFilter',
-                                    queryState.originalArgs,
-                                    (draft) => {
-                                        if (!draft || !Array.isArray(draft)) return;
-                                        draft.forEach((apt: any) => {
-                                            if (apt.customerUserId === targetId) {
-                                                apt.isCustomerFavorite = isFavorite;
-                                            }
-                                            if (apt.barberStoreId === targetId) {
-                                                apt.isStoreFavorite = isFavorite;
-                                            }
-                                            if (apt.freeBarberId === targetId) {
-                                                apt.isFreeBarberFavorite = isFavorite;
-                                            }
-                                        });
-                                    }
-                                )
-                            );
-                        });
-                    } catch (e) {
-                        // ignore
+                    updateAppointmentFavoriteFlag(optimisticToggle);
+                    updateDiscoveryFilteredFavorite(optimisticToggle, optimisticToggle ? 1 : -1);
+                    if (optimisticToggle) {
+                        tryPrependMyFavorites(undefined);
+                    } else {
+                        applyMyFavoritesUnfavorite();
                     }
-                };
+                    patchChatThreadsFavoriteRestriction(optimisticToggle);
+                }
 
                 // Backend'den dönen response'u bekle
                 try {
@@ -1001,6 +1663,24 @@ export const api = createApi({
                         const isFavorite = responseData.isFavorite ?? false;
                         const fc = responseData.favoriteCount;
                         updateAppointmentFavoriteFlag(isFavorite);
+                        updateDiscoveryFilteredFavorite(
+                            isFavorite,
+                            undefined,
+                            typeof fc === 'number' ? fc : undefined,
+                        );
+                        patchAllListCachesFromServer(isFavorite, typeof fc === 'number' ? fc : undefined);
+                        patchChatThreadsFavoriteRestriction(isFavorite);
+                        try {
+                            dispatch(api.util.updateQueryData('isFavorite', targetId, () => isFavorite));
+                        } catch {
+                            // ignore
+                        }
+
+                        if (!isFavorite) {
+                            applyMyFavoritesUnfavorite();
+                        } else {
+                            tryPrependMyFavorites(typeof fc === 'number' ? fc : undefined);
+                        }
 
                         if (typeof fc === 'number') {
                             try {
@@ -1032,11 +1712,24 @@ export const api = createApi({
                         }
                     }
                 } catch (error) {
-                    // Hata durumunda optimistic update'i geri al
-                    patchResults.forEach(patchResult => {
+                    patchResults.forEach((patchResult) => {
                         patchResult.undo();
                     });
-                    // invalidatesTags zaten cache'i temizleyecek ve refetch yapacak
+                    if (canOptimisticFavorite && typeof currentIsFavorite === 'boolean') {
+                        try {
+                            dispatch(api.util.updateQueryData('isFavorite', targetId, () => currentIsFavorite));
+                        } catch {
+                            // ignore
+                        }
+                        updateAppointmentFavoriteFlag(currentIsFavorite);
+                        updateDiscoveryFilteredFavorite(currentIsFavorite, optimisticToggle ? -1 : 1);
+                        patchChatThreadsFavoriteRestriction(currentIsFavorite);
+                        if (optimisticToggle) {
+                            removeStubFavoriteRowOnRollback();
+                        } else {
+                            refetchMyFavoritesCache();
+                        }
+                    }
                 }
             },
             invalidatesTags: (result, error, arg) => [
@@ -1071,8 +1764,34 @@ export const api = createApi({
             providesTags: (result, error, targetId) => [{ type: 'IsFavorite' as const, id: targetId }],
             transformResponse: transformBooleanResponse,
         }),
-        getMyFavorites: builder.query<FavoriteGetDto[], void>({
-            query: () => 'Favorite/my-favorites',
+        // Favorilerim — INFINITE SCROLL.
+        //  - serializeQueryArgs: () => ({}) → tek cache slot (mevcut useGetMyFavoritesQuery() kullanımları etkilenmez).
+        //  - Liste CreatedAt DESC → eski sayfa SONA append edilir.
+        //  - invalidatesTags: ['Favorite'] mutation'ları sonrası merge-cache refetch edilir.
+        getMyFavorites: builder.query<FavoriteGetDto[], { before?: string; beforeId?: string; limit?: number } | void>({
+            query: (arg) => ({
+                url: 'Favorite/my-favorites',
+                params: {
+                    ...(arg && (arg as any).before ? { before: (arg as any).before } : {}),
+                    ...(arg && (arg as any).beforeId ? { beforeId: (arg as any).beforeId } : {}),
+                    ...(arg && (arg as any).limit ? { limit: (arg as any).limit } : {}),
+                },
+            }),
+            serializeQueryArgs: () => ({}),
+            merge: (currentCache, newItems, { arg }) => {
+                const before = (arg as any)?.before as string | undefined;
+                if (!before) return newItems;
+                const seen = new Set(currentCache.map((f) => f.id));
+                const deduped = newItems.filter((f) => !seen.has(f.id));
+                return [...currentCache, ...deduped];
+            },
+            forceRefetch: ({ currentArg, previousArg }) => {
+                const cTs = (currentArg as any)?.before ?? null;
+                const pTs = (previousArg as any)?.before ?? null;
+                const cId = (currentArg as any)?.beforeId ?? null;
+                const pId = (previousArg as any)?.beforeId ?? null;
+                return cTs !== pTs || cId !== pId;
+            },
             keepUnusedDataFor: CACHE_DURATIONS.REAL_TIME,
             providesTags: ['Favorite'],
             transformResponse: transformArrayResponse<FavoriteGetDto>,
@@ -1105,33 +1824,47 @@ export const api = createApi({
         }),
 
         // --- FILTERED API ---
+        // Server clamps limit to [1, 200]; offset defaults to 0. Çağıranlar limit/offset
+        // vermezse backend default 100 döndürür (eski davranış, sadece tavanlı).
         // Mutation version (for manual triggers)
-        getFilteredStores: builder.mutation<BarberStoreGetDto[], FilterRequestDto>({
-            query: (filter) => ({
+        getFilteredStores: builder.mutation<BarberStoreGetDto[], FilterRequestDto & { limit?: number; offset?: number }>({
+            query: ({ limit, offset, ...filter }) => ({
                 url: 'BarberStore/filtered',
                 method: 'POST',
                 body: filter,
+                params: {
+                    ...(limit !== undefined ? { limit } : {}),
+                    ...(offset !== undefined ? { offset } : {}),
+                },
             }),
             invalidatesTags: [],
             transformResponse: transformArrayResponse<BarberStoreGetDto>,
         }),
 
-        getFilteredFreeBarbers: builder.mutation<FreeBarGetDto[], FilterRequestDto>({
-            query: (filter) => ({
+        getFilteredFreeBarbers: builder.mutation<FreeBarGetDto[], FilterRequestDto & { limit?: number; offset?: number }>({
+            query: ({ limit, offset, ...filter }) => ({
                 url: 'FreeBarber/filtered',
                 method: 'POST',
                 body: filter,
+                params: {
+                    ...(limit !== undefined ? { limit } : {}),
+                    ...(offset !== undefined ? { offset } : {}),
+                },
             }),
             invalidatesTags: ['MineFreeBarberPanel'],
             transformResponse: transformArrayResponse<FreeBarGetDto>,
         }),
 
         // Query version (for useNearby hook with filters)
-        getFilteredStoresQuery: builder.query<BarberStoreGetDto[], FilterRequestDto>({
-            query: (filter) => ({
+        getFilteredStoresQuery: builder.query<BarberStoreGetDto[], FilterRequestDto & { limit?: number; offset?: number }>({
+            query: ({ limit, offset, ...filter }) => ({
                 url: 'BarberStore/filtered',
                 method: 'POST',
                 body: filter,
+                params: {
+                    ...(limit !== undefined ? { limit } : {}),
+                    ...(offset !== undefined ? { offset } : {}),
+                },
             }),
             keepUnusedDataFor: CACHE_DURATIONS.REAL_TIME,
             transformResponse: transformArrayResponse<BarberStoreGetDto>,
@@ -1148,11 +1881,15 @@ export const api = createApi({
                     ],
         }),
 
-        getFilteredFreeBarbersQuery: builder.query<FreeBarGetDto[], FilterRequestDto>({
-            query: (filter) => ({
+        getFilteredFreeBarbersQuery: builder.query<FreeBarGetDto[], FilterRequestDto & { limit?: number; offset?: number }>({
+            query: ({ limit, offset, ...filter }) => ({
                 url: 'FreeBarber/filtered',
                 method: 'POST',
                 body: filter,
+                params: {
+                    ...(limit !== undefined ? { limit } : {}),
+                    ...(offset !== undefined ? { offset } : {}),
+                },
             }),
             keepUnusedDataFor: CACHE_DURATIONS.REAL_TIME,
             transformResponse: transformArrayResponse<FreeBarGetDto>,
@@ -1167,6 +1904,36 @@ export const api = createApi({
                         { type: 'MineFreeBarberPanel' as const, id: 'LIST' },
                         { type: 'MineFreeBarberPanel' as const, id: 'FILTERED' },
                     ],
+        }),
+
+        /** Müşteri keşfi: dükkan + serbest berber (ayrı store/freeBarber offset) */
+        getDiscoveryFiltered: builder.query<
+            DiscoveryFilteredResponseDto,
+            FilterRequestDto & { limit?: number; storeOffset?: number; freeBarberOffset?: number }
+        >({
+            query: ({ limit, storeOffset, freeBarberOffset, ...filter }) => ({
+                url: 'Discovery/filtered',
+                method: 'POST',
+                body: filter,
+                params: {
+                    ...(limit !== undefined ? { limit } : {}),
+                    ...(storeOffset !== undefined ? { storeOffset } : {}),
+                    ...(freeBarberOffset !== undefined ? { freeBarberOffset } : {}),
+                },
+            }),
+            keepUnusedDataFor: CACHE_DURATIONS.REAL_TIME,
+            transformResponse: (response: unknown): DiscoveryFilteredResponseDto => {
+                const raw = transformObjectResponse<Record<string, unknown>>(response);
+                const stores =
+                    (raw.stores as BarberStoreGetDto[] | undefined) ??
+                    (raw.Stores as BarberStoreGetDto[] | undefined) ??
+                    [];
+                const freeBarbers =
+                    (raw.freeBarbers as FreeBarGetDto[] | undefined) ??
+                    (raw.FreeBarbers as FreeBarGetDto[] | undefined) ??
+                    [];
+                return { stores, freeBarbers };
+            },
         }),
 
         // --- IMAGE API ---
@@ -1311,7 +2078,25 @@ export const api = createApi({
                 method: 'PUT',
                 body: dto,
             }),
-            invalidatesTags: ['Setting'],
+            async onQueryStarted(arg, { dispatch, queryFulfilled }) {
+                const patch = dispatch(
+                    api.util.updateQueryData('getSetting', undefined, (draft) => {
+                        if (!draft?.data) return;
+                        draft.data.showImageAnimation = arg.showImageAnimation;
+                        if (typeof arg.showPriceAnimation === 'boolean') {
+                            draft.data.showPriceAnimation = arg.showPriceAnimation;
+                        }
+                        if (typeof arg.enableNotificationSound === 'boolean') {
+                            draft.data.enableNotificationSound = arg.enableNotificationSound;
+                        }
+                    }),
+                );
+                try {
+                    await queryFulfilled;
+                } catch {
+                    patch.undo();
+                }
+            },
         }),
 
         // --- HELP GUIDE API ---
@@ -1640,6 +2425,7 @@ export const {
     useGetFilteredFreeBarbersMutation,
     useLazyGetFilteredStoresQueryQuery,
     useLazyGetFilteredFreeBarbersQueryQuery,
+    useLazyGetDiscoveryFilteredQuery,
     useGetImagesByOwnerQuery,
     useLazyGetImagesByOwnerQuery,
     useUploadImageMutation,

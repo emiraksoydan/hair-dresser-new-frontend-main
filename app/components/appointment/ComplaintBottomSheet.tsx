@@ -1,6 +1,16 @@
 import { Icon } from "react-native-paper";
-import React, { useState } from "react";
-import { View, Image, TextInput, TouchableOpacity, ActivityIndicator, Platform } from "react-native";
+import React, { useState, useRef } from "react";
+import {
+  View,
+  Image,
+  TextInput,
+  TouchableOpacity,
+  ActivityIndicator,
+  Platform,
+  Keyboard,
+  InputAccessoryView,
+  StyleSheet,
+} from "react-native";
 import { Text } from "../common/Text";
 import { BottomSheetView, BottomSheetScrollView } from "@gorhom/bottom-sheet";
 
@@ -10,6 +20,8 @@ import { useAlert } from "../../hook/useAlert";
 import { useTheme } from "../../hook/useTheme";
 import { useActionGuard } from "../../hook/useActionGuard";
 import { DEFAULT_AVATAR } from "../../constants/images";
+
+const COMPLAINT_REASON_INPUT_ACCESSORY_ID = "complaint-reason-input-accessory";
 
 type ComplaintBottomSheetProps = {
   appointmentId: string;
@@ -33,6 +45,7 @@ export const ComplaintBottomSheet: React.FC<ComplaintBottomSheetProps> = ({
   const { colors, isDark } = useTheme();
   const guard = useActionGuard();
   const [reason, setReason] = useState("");
+  const reasonInputRef = useRef<TextInput>(null);
   const [createComplaint, { isLoading }] = useCreateComplaintMutation();
 
   const handleSubmit = () =>
@@ -65,10 +78,14 @@ export const ComplaintBottomSheet: React.FC<ComplaintBottomSheetProps> = ({
     letterSpacing: 0.15,
   };
 
+  const keyboardDismissMode =
+    Platform.OS === "ios" ? ("interactive" as const) : ("on-drag" as const);
+
   return (
     <BottomSheetView style={{ flex: 1, backgroundColor: colors.sheetBg }}>
       <BottomSheetScrollView
         keyboardShouldPersistTaps="handled"
+        keyboardDismissMode={keyboardDismissMode}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{
           paddingHorizontal: 16,
@@ -124,13 +141,47 @@ export const ComplaintBottomSheet: React.FC<ComplaintBottomSheetProps> = ({
         </View>
 
         <Text style={labelStyle}>{t("complaint.reason")} *</Text>
+        {Platform.OS === "ios" ? (
+          <InputAccessoryView nativeID={COMPLAINT_REASON_INPUT_ACCESSORY_ID}>
+            <View
+              style={{
+                flexDirection: "row",
+                justifyContent: "flex-end",
+                alignItems: "center",
+                paddingHorizontal: 12,
+                paddingVertical: 8,
+                borderTopWidth: StyleSheet.hairlineWidth,
+                borderTopColor: colors.borderColor,
+                backgroundColor: colors.cardBg2,
+              }}
+            >
+              <TouchableOpacity
+                onPress={() => {
+                  reasonInputRef.current?.blur();
+                  Keyboard.dismiss();
+                }}
+                hitSlop={{ top: 10, bottom: 10, left: 12, right: 12 }}
+                accessibilityRole="button"
+                accessibilityLabel={t("common.ok")}
+              >
+                <Text style={{ color: "#fb923c", fontFamily: "CenturyGothic-Bold", fontSize: 16 }}>
+                  {t("common.ok")}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </InputAccessoryView>
+        ) : null}
         <TextInput
+          ref={reasonInputRef}
           value={reason}
           onChangeText={setReason}
           placeholder={t("complaint.reasonPlaceholder")}
           placeholderTextColor={colors.textSecondary}
           multiline
           numberOfLines={4}
+          inputAccessoryViewID={
+            Platform.OS === "ios" ? COMPLAINT_REASON_INPUT_ACCESSORY_ID : undefined
+          }
           style={{
             backgroundColor: colors.cardBg2,
             borderColor: colors.borderColor,

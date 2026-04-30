@@ -201,7 +201,7 @@ function AccountSwitchOverlay() {
         pointerEvents: 'auto',
       }}
     >
-      <ActivityIndicator size="large" color="#fea60e" />
+      <ActivityIndicator size="large" color="#FACC15" />
     </View>
   );
 }

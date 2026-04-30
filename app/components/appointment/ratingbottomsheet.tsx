@@ -1,15 +1,17 @@
 import { Icon } from "react-native-paper";
-import React, { useState, useCallback, useMemo } from "react";
+import React, { useState, useCallback, useMemo, useRef } from "react";
 import {
   View,
   TouchableOpacity,
   TextInput,
   ActivityIndicator,
-  KeyboardAvoidingView,
   Platform,
+  Keyboard,
+  InputAccessoryView,
+  StyleSheet,
 } from "react-native";
 import { Text } from "../common/Text";
-import { BottomSheetView } from "@gorhom/bottom-sheet";
+import { BottomSheetScrollView } from "@gorhom/bottom-sheet";
 
 import StarRating from "react-native-star-rating-widget";
 import { useCreateRatingMutation } from "../../store/api";
@@ -20,8 +22,10 @@ import { useAlert } from "../../hook/useAlert";
 import { useTheme } from "../../hook/useTheme";
 import { useActionGuard } from "../../hook/useActionGuard";
 
-/** Ana CTA — uygulamadaki sarı / altın vurgu (#ffb900) */
-const ACCENT = "#ffb900";
+/** Ana CTA — uygulamadaki sarı / altın vurgu (#FACC15) */
+const ACCENT = "#FACC15";
+
+const RATING_COMMENT_INPUT_ACCESSORY_ID = "rating-comment-input-accessory";
 
 type RatingBottomSheetProps = {
   appointmentId: string;
@@ -44,6 +48,7 @@ export const RatingBottomSheet: React.FC<RatingBottomSheetProps> = ({
 }) => {
   const [rating, setRating] = useState(0);
   const [comment, setComment] = useState("");
+  const commentInputRef = useRef<TextInput>(null);
   const [createRating, { isLoading }] = useCreateRatingMutation();
   const guard = useActionGuard();
   const { t } = useLanguage();
@@ -69,7 +74,7 @@ export const RatingBottomSheet: React.FC<RatingBottomSheetProps> = ({
       padding: 2,
       borderRadius: 14,
       borderWidth: 1,
-      borderColor: isDark ? "rgba(255, 185, 0, 0.45)" : "rgba(217, 119, 6, 0.4)",
+      borderColor: isDark ? "rgba(250, 204, 21, 0.45)" : "rgba(217, 119, 6, 0.4)",
       marginRight: 14,
     }),
     [isDark],
@@ -138,19 +143,22 @@ export const RatingBottomSheet: React.FC<RatingBottomSheetProps> = ({
           ? t("appointment.labels.storeBarber")
           : t("card.customer");
 
+  const keyboardDismissMode =
+    Platform.OS === "ios" ? ("interactive" as const) : ("on-drag" as const);
+
   return (
-    <BottomSheetView
-      style={{
-        backgroundColor: colors.sheetBg,
+    <BottomSheetScrollView
+      style={{ flex: 1, backgroundColor: colors.sheetBg }}
+      contentContainerStyle={{
         paddingHorizontal: 16,
         paddingTop: 4,
         paddingBottom: 20,
+        flexGrow: 1,
       }}
+      keyboardShouldPersistTaps="handled"
+      keyboardDismissMode={keyboardDismissMode}
+      showsVerticalScrollIndicator={false}
     >
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-        keyboardVerticalOffset={0}
-      >
         <View
           style={{
             flexDirection: "row",
@@ -279,7 +287,38 @@ export const RatingBottomSheet: React.FC<RatingBottomSheetProps> = ({
         </View>
 
         <Text style={[sectionLabel, { marginTop: 16 }]}>{t("rating.commentOptional")}</Text>
+        {Platform.OS === "ios" ? (
+          <InputAccessoryView nativeID={RATING_COMMENT_INPUT_ACCESSORY_ID}>
+            <View
+              style={{
+                flexDirection: "row",
+                justifyContent: "flex-end",
+                alignItems: "center",
+                paddingHorizontal: 12,
+                paddingVertical: 8,
+                borderTopWidth: StyleSheet.hairlineWidth,
+                borderTopColor: colors.borderColor,
+                backgroundColor: colors.cardBg2,
+              }}
+            >
+              <TouchableOpacity
+                onPress={() => {
+                  commentInputRef.current?.blur();
+                  Keyboard.dismiss();
+                }}
+                hitSlop={{ top: 10, bottom: 10, left: 12, right: 12 }}
+                accessibilityRole="button"
+                accessibilityLabel={t("common.ok")}
+              >
+                <Text style={{ color: ACCENT, fontFamily: "CenturyGothic-Bold", fontSize: 16 }}>
+                  {t("common.ok")}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </InputAccessoryView>
+        ) : null}
         <TextInput
+          ref={commentInputRef}
           placeholder={t("rating.commentPlaceholder")}
           placeholderTextColor={colors.textSecondary}
           value={comment}
@@ -288,6 +327,9 @@ export const RatingBottomSheet: React.FC<RatingBottomSheetProps> = ({
           numberOfLines={4}
           textAlignVertical="top"
           maxLength={500}
+          inputAccessoryViewID={
+            Platform.OS === "ios" ? RATING_COMMENT_INPUT_ACCESSORY_ID : undefined
+          }
           style={{
             minHeight: 128,
             backgroundColor: colors.cardBg2,
@@ -352,7 +394,6 @@ export const RatingBottomSheet: React.FC<RatingBottomSheetProps> = ({
             </>
           )}
         </TouchableOpacity>
-      </KeyboardAvoidingView>
-    </BottomSheetView>
+    </BottomSheetScrollView>
   );
 };

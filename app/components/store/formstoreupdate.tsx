@@ -34,6 +34,7 @@ import { Avatar, Divider, HelperText, Icon, TextInput } from "react-native-paper
 import { Button } from "../common/Button";
 import { Dropdown } from "react-native-element-dropdown";
 import { CategoryListSelect } from "../common/CategoryListSelect";
+import { OutlinedImagePickField } from "../common/OutlinedImagePickField";
 import { useCanPerformAction } from "../../hook/useCanPerformAction";
 import {
   useDeleteImageMutation,
@@ -58,6 +59,7 @@ import {
   truncateFileName,
   resolveMimeType,
 } from "../../utils/form/pick-document";
+import { ImageUploadHint } from "../common/ImageUploadHint";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { MapPicker } from "../common/mappicker";
 import { createStoreLocationHelpers } from "../../utils/store/store-location-helper";
@@ -419,7 +421,7 @@ const MULTI_SELECT_STYLE_ERROR_BORDER = { borderColor: "#b00020" } as const;
 const MULTI_SELECT_SELECTED_STYLE = {
   borderRadius: 10,
   backgroundColor: "#374151",
-  borderColor: "#ffb900",
+  borderColor: "#FACC15",
   paddingHorizontal: 10,
   paddingVertical: 6,
   margin: 0,
@@ -488,7 +490,7 @@ const FormStoreUpdate = React.memo(({
 
   const MULTI_SELECT_INPUT_SEARCH_STYLE = useMemo(() => ({
     backgroundColor: colors.cardBg,
-    borderColor: "#ffb900",
+    borderColor: "#FACC15",
     borderWidth: 1,
     borderRadius: 8,
     color: colors.sectionHeaderText,
@@ -728,7 +730,12 @@ const FormStoreUpdate = React.memo(({
     const assignedBarberId = currentChair.barberId ?? null;
 
     return barbers
-      .map((b) => ({ id: b.id, name: b.name }))
+      .map((b) => ({
+        id: b.id,
+        name: b.name,
+        ratingAvg: (b as any).averageRating ?? (b as any).rating ?? null,
+        ratingCount: (b as any).ratingCount ?? (b as any).totalRatingCount ?? null,
+      }))
       .filter((b) => {
         const usedInAnotherChair = chairs.some(
           (c, i) => i !== chairIndex && c.barberId === b.id,
@@ -747,6 +754,8 @@ const FormStoreUpdate = React.memo(({
       .map((b) => ({
         id: b.id,
         name: b.name,
+        ratingAvg: (b as any).averageRating ?? (b as any).rating ?? null,
+        ratingCount: (b as any).ratingCount ?? (b as any).totalRatingCount ?? null,
       }));
   };
 
@@ -1799,6 +1808,7 @@ const FormStoreUpdate = React.memo(({
                           </TouchableOpacity>
                         )}
                       </ScrollView>
+                      <ImageUploadHint className="mt-2 px-1" />
                     </View>
                     <Text className="text-xl mt-6 px-2" style={{ color: colors.sectionHeaderText }}>
                       {t("form.storeInformation")}
@@ -1809,9 +1819,21 @@ const FormStoreUpdate = React.memo(({
                         name="taxDocumentImage"
                         render={({ field: { value, onChange } }) => (
                           <>
-                            <TouchableOpacity
-                              activeOpacity={0.85}
-                              disabled={isTaxDocumentLoading}
+                            <OutlinedImagePickField
+                              label="Vergi Levhası Resmi"
+                              valueText={
+                                value?.name
+                                  ? truncateFileName(value.name)
+                                  : t("form.imageNotSelected")
+                              }
+                              error={!!errors.taxDocumentImage}
+                              borderColor={errors.taxDocumentImage ? "#b00020" : colors.borderColor2}
+                              colors={{
+                                cardBg: colors.cardBg,
+                                sectionHeaderText: colors.sectionHeaderText,
+                                textSecondary: colors.textSecondary,
+                              }}
+                              loading={isTaxDocumentLoading}
                               onPress={async () => {
                                 setIsTaxDocumentLoading(true);
                                 try {
@@ -1821,43 +1843,14 @@ const FormStoreUpdate = React.memo(({
                                   setIsTaxDocumentLoading(false);
                                 }
                               }}
+                            />
+                            <HelperText
+                              type="error"
+                              visible={!!errors.taxDocumentImage}
                             >
-                              <TextInput
-                                label="Vergi Levhası Resmi"
-                                mode="outlined"
-                                value={
-                                  value?.name
-                                    ? truncateFileName(value.name)
-                                    : t("form.imageNotSelected")
-                                }
-                                editable={false}
-                                dense
-                                pointerEvents="none"
-                                textColor={colors.sectionHeaderText}
-                                outlineColor={
-                                  errors.taxDocumentImage ? "#b00020" : colors.borderColor2
-                                }
-                                right={
-                                  isTaxDocumentLoading ? (
-                                    <ActivityIndicator
-                                      size="small"
-                                      color="#888"
-                                      style={{ marginRight: 12 }}
-                                    />
-                                  ) : (
-                                    <TextInput.Icon icon="image" color={colors.sectionHeaderText} />
-                                  )
-                                }
-                                theme={{
-                                  roundness: 10,
-                                  colors: {
-                                    onSurfaceVariant: colors.textSecondary,
-                                    primary: colors.sectionHeaderText,
-                                  },
-                                }}
-                                style={{ backgroundColor: colors.cardBg, borderWidth: 0 }}
-                              />
-                            </TouchableOpacity>
+                              {taxDocErrorText}
+                            </HelperText>
+                            {!errors.taxDocumentImage && <ImageUploadHint className="px-1" />}
                             {value?.uri && !isTaxDocumentLoading && (
                               <View className="mt-2 mb-2 w-full relative">
                                 <Image
@@ -1878,12 +1871,6 @@ const FormStoreUpdate = React.memo(({
                                 </TouchableOpacity>
                               </View>
                             )}
-                            <HelperText
-                              type="error"
-                              visible={!!errors.taxDocumentImage}
-                            >
-                              {taxDocErrorText}
-                            </HelperText>
                           </>
                         )}
                       />
@@ -2551,7 +2538,17 @@ const FormStoreUpdate = React.memo(({
                                   <Icon size={22} source="delete-outline" color="#ef4444" />
                                 </TouchableOpacity>
                               </View>
-                              <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                              <View
+                                style={{
+                                  flexDirection: "row",
+                                  alignItems: "center",
+                                  gap: 8,
+                                  borderRadius: 10,
+                                  paddingVertical: 8,
+                                  paddingHorizontal: 10,
+                                  backgroundColor: isDark ? "rgba(255,255,255,0.04)" : "rgba(15,23,42,0.03)",
+                                }}
+                              >
                                 <View
                                   style={{
                                     paddingHorizontal: 8,
@@ -2564,11 +2561,16 @@ const FormStoreUpdate = React.memo(({
                                     {modeLabel}
                                   </Text>
                                 </View>
+                                <Icon
+                                  size={17}
+                                  source={isBarberChair ? "account-circle-outline" : "card-text-outline"}
+                                  color={isBarberChair ? "#c2a523" : colors.textSecondary}
+                                />
                                 <Text
                                   style={{
                                     flex: 1,
                                     fontSize: 14,
-                                    fontFamily: "CenturyGothic",
+                                    fontFamily: "CenturyGothic-Bold",
                                     color: colors.sectionHeaderText,
                                   }}
                                   numberOfLines={1}
@@ -2724,7 +2726,7 @@ const FormStoreUpdate = React.memo(({
                                     borderRadius: 10,
                                     overflow: "hidden",
                                   }}
-                                  activeColor="#ffb900"
+                                  activeColor="#FACC15"
                                 />
                                 <HelperText
                                   type="error"
@@ -2983,8 +2985,8 @@ const FormStoreUpdate = React.memo(({
                   className="flex-1"
                   mode="outlined"
                   onPress={handlePrevStep}
-                  buttonColor="#ffb900"
-                  textColor="#ffb900"
+                  buttonColor="#FACC15"
+                  textColor="#FACC15"
                 >
                   {t("form.stepPrev")}
                 </Button>
@@ -2994,7 +2996,7 @@ const FormStoreUpdate = React.memo(({
                   className="flex-1"
                   mode="contained"
                   onPress={handleNextStep}
-                  buttonColor="#ffb900"
+                  buttonColor="#FACC15"
                   textColor="#1F2937"
                 >
                   {t("form.stepNext")}

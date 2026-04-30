@@ -12,6 +12,7 @@ import Animated, {
 } from 'react-native-reanimated';
 
 import { Text } from './Text';
+import { COLORS } from '../../constants/colors';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -28,9 +29,12 @@ interface CustomCurvedTabBarProps {
   activeIndex: number;
   onTabPress: (index: number, tab: CustomTabItem) => void;
   onTabDoubleTap?: (index: number, tab: CustomTabItem) => void;
-  accentColor?: string;
+  /**
+   * Açık sarı: yüzen aktif ikon (kenar yok)
+   */
+  chipBackground?: string;
+  chipForeground?: string;
   backgroundColor?: string;
-  activeIconColor?: string;
   inactiveIconColor?: string;
   height?: number;
 }
@@ -71,14 +75,17 @@ const CurvedBackground: React.FC<{
 
 const DOUBLE_TAP_DELAY = 450; // ms
 
+/** Şeftali “Berber çağır” zeminli yüzen alanlarda ikon rengi */
+const ICON_TINT = "#FFFFFF";
+
 export const CustomCurvedTabBar: React.FC<CustomCurvedTabBarProps> = ({
   tabs,
   activeIndex,
   onTabPress,
   onTabDoubleTap,
-  accentColor = '#FFB900',
+  chipBackground = COLORS.UI.ACCENT_GOLD,
+  chipForeground = COLORS.UI.ACCENT_GOLD,
   backgroundColor = '#1a1b25',
-  activeIconColor = '#FFFFFF',
   inactiveIconColor = '#9CA3AF',
   height = 60,
 }) => {
@@ -93,9 +100,9 @@ export const CustomCurvedTabBar: React.FC<CustomCurvedTabBarProps> = ({
 
   useEffect(() => {
     animatedIndex.value = withSpring(activeIndex, {
-      damping: 24,
-      stiffness: 140,
-      mass: 0.9,
+      damping: 18,
+      stiffness: 260,
+      mass: 0.65,
     });
   }, [activeIndex]);
 
@@ -201,14 +208,14 @@ export const CustomCurvedTabBar: React.FC<CustomCurvedTabBarProps> = ({
             <Icon
               source={tab.icon}
               size={24}
-              color={isActive ? accentColor : inactiveIconColor}
+              color={isActive ? ICON_TINT : inactiveIconColor}
             />
           </AnimatedView>
           <AnimatedView style={tabLabelAnimatedStyle}>
             <Text
               style={[
                 styles.tabLabel,
-                { color: isActive ? accentColor : inactiveIconColor },
+                { color: isActive ? chipForeground : inactiveIconColor },
               ]}
               numberOfLines={1}
             >
@@ -278,7 +285,8 @@ export const CustomCurvedTabBar: React.FC<CustomCurvedTabBarProps> = ({
           style={[
             styles.floatButton,
             {
-              backgroundColor: accentColor,
+              backgroundColor: chipBackground,
+              borderWidth: 0,
               width: floatSize,
               height: floatSize,
               borderRadius: floatSize / 2,
@@ -289,7 +297,7 @@ export const CustomCurvedTabBar: React.FC<CustomCurvedTabBarProps> = ({
             <Icon
               source={tabs[activeIndex]?.iconFocused || tabs[activeIndex]?.icon || 'home'}
               size={20}
-              color={activeIconColor}
+              color={ICON_TINT}
             />
           </AnimatedView>
           {tabs[activeIndex]?.badgeCount !== undefined &&

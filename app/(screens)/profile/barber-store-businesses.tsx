@@ -46,6 +46,7 @@ import { safeCoord } from "../../utils/location/geo";
 import { BarberMarker } from "../../components/freebarber/barbermarker";
 import { RatingsBottomSheet } from "../../components/rating/ratingsbottomsheet";
 import { useBackendFilters } from "../../hook/useBackendFilters";
+import { DEFAULT_FILTER_RADIUS_KM, DEFAULT_DISTANCE_PRESET_ID } from "../../constants/filterDefaults";
 import { StoreMarker } from "../../components/common/storemarker";
 import { DeferredRender } from "../../components/common/deferredrender";
 import { CrudSkeletonComponent } from "../../components/common/crudskeleton";
@@ -152,7 +153,7 @@ const Index = () => {
     enabled: false,
     stores,
     hardRefreshMs: 15000,
-    radiusKm: 10,
+    radiusKm: DEFAULT_FILTER_RADIUS_KM,
     filter: freeBarberFilterDto,
     currentUserId,
   });
@@ -726,7 +727,7 @@ const Index = () => {
       >
         <IconButton
           icon="arrow-left"
-          iconColor="#ffb900"
+          iconColor="#FACC15"
           size={20}
           onPress={() => router.back()}
           accessibilityLabel={t("common.goBack")}
@@ -1033,6 +1034,8 @@ const Index = () => {
       <FilterDrawer
         visible={filterDrawerVisible}
         onClose={() => setFilterDrawerVisible(false)}
+        selectedDistancePreset={filterCriteria.distancePreset ?? DEFAULT_DISTANCE_PRESET_ID}
+        onChangeDistancePreset={(preset) => updateFilterCriteria({ distancePreset: preset })}
         selectedUserType={filterCriteria.userType || "all"}
         onChangeUserType={(value) => updateFilterCriteria({ userType: value })}
         showUserTypeFilter={true}

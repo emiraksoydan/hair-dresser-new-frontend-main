@@ -1,10 +1,7 @@
-import React, { Component, ErrorInfo, ReactNode, useState } from 'react';
+import React, { Component, ErrorInfo, ReactNode } from 'react';
 import { View, TouchableOpacity } from 'react-native';
 import { Text } from './Text';
 import { MESSAGES } from '../../constants/messages';
-import { LegalModal } from './LegalModal';
-import { LegalDocumentType } from '../../constants/legal';
-import { useLanguage } from '../../hook/useLanguage';
 import { useTheme } from '../../hook/useTheme';
 import { COLORS } from '../../constants/colors';
 
@@ -16,49 +13,12 @@ interface Props {
 interface State {
     hasError: boolean;
     error?: Error;
+    retryKey: number;
 }
 
-/** Legal links shown in error fallback so users can always access KVKK/legal docs */
-const ErrorLegalLinks: React.FC = () => {
-    const { t } = useLanguage();
-    const { colors } = useTheme();
-    const [modalDoc, setModalDoc] = useState<LegalDocumentType | null>(null);
-
-    const links: { type: LegalDocumentType; labelKey: string }[] = [
-        { type: 'kvkk', labelKey: 'legal.kvkk' },
-        { type: 'terms', labelKey: 'legal.terms' },
-        { type: 'privacy', labelKey: 'legal.privacy' },
-        { type: 'consent', labelKey: 'legal.consent' },
-    ];
-
-    return (
-        <View className="mt-6 items-center">
-            <View className="flex-row flex-wrap justify-center gap-3">
-                {links.map((link) => (
-                    <TouchableOpacity
-                        key={link.type}
-                        onPress={() => setModalDoc(link.type)}
-                        activeOpacity={0.6}
-                    >
-                        <Text style={{ color: colors.tagline, fontSize: 11, textDecorationLine: 'underline' }}>
-                            {t(link.labelKey)}
-                        </Text>
-                    </TouchableOpacity>
-                ))}
-            </View>
-            <LegalModal
-                visible={modalDoc !== null}
-                onClose={() => setModalDoc(null)}
-                documentType={modalDoc || 'kvkk'}
-            />
-        </View>
-    );
-};
-
 const ErrorBoundaryFallback: React.FC<{
-    error?: Error;
     onRetry: () => void;
-}> = ({ error, onRetry }) => {
+}> = ({ onRetry }) => {
     const { colors } = useTheme();
     return (
         <View
@@ -97,10 +57,10 @@ const ErrorBoundaryFallback: React.FC<{
                     style={{
                         color: colors.textSecondary,
                         textAlign: 'center',
-                        marginBottom: 16,
+                        marginBottom: 20,
                     }}
                 >
-                    {error?.message || MESSAGES.ERRORS.UNEXPECTED}
+                    {MESSAGES.ERRORS.UNEXPECTED}
                 </Text>
                 <TouchableOpacity
                     onPress={onRetry}
@@ -115,33 +75,29 @@ const ErrorBoundaryFallback: React.FC<{
                         {MESSAGES.ACTIONS.RETRY}
                     </Text>
                 </TouchableOpacity>
-                <ErrorLegalLinks />
             </View>
         </View>
     );
 };
 
-/**
- * Error Boundary component for global error handling
- * Catches JavaScript errors anywhere in the child component tree
- * Includes legal document links so users can always access KVKK docs
- */
 export class ErrorBoundary extends Component<Props, State> {
     constructor(props: Props) {
         super(props);
-        this.state = { hasError: false };
+        this.state = { hasError: false, retryKey: 0 };
     }
 
-    static getDerivedStateFromError(error: Error): State {
+    static getDerivedStateFromError(error: Error): Partial<State> {
         return { hasError: true, error };
     }
 
-    componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+    componentDidCatch(_error: Error, _errorInfo: ErrorInfo) {
         // Error caught silently
     }
 
     handleReset = () => {
-        this.setState({ hasError: false, error: undefined });
+        // retryKey artışı children'ı tamamen yeniden mount eder — aynı hatanın
+        // tekrar fırlatılması engellenir (sadece state sıfırlamak yetmez).
+        this.setState((s) => ({ hasError: false, error: undefined, retryKey: s.retryKey + 1 }));
     };
 
     render() {
@@ -151,14 +107,15 @@ export class ErrorBoundary extends Component<Props, State> {
             }
 
             return (
-                <ErrorBoundaryFallback
-                    error={this.state.error}
-                    onRetry={this.handleReset}
-                />
+                <ErrorBoundaryFallback onRetry={this.handleReset} />
             );
         }
 
-        return this.props.children;
+        return (
+            <React.Fragment key={this.state.retryKey}>
+                {this.props.children}
+            </React.Fragment>
+        );
     }
 }
 

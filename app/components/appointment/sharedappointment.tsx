@@ -24,10 +24,12 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StarRatingDisplay } from "react-native-star-rating-widget";
 import { BottomSheetModal, BottomSheetView } from "@gorhom/bottom-sheet";
 import {
+  api,
   useGetAllAppointmentByFilterQuery, useCancelAppointmentMutation, useCompleteAppointmentMutation, useToggleFavoriteMutation,
   useDeleteAppointmentMutation, useDeleteAllAppointmentsMutation, useBlockUserMutation,
   useGetAllBlockedUserIdsQuery,
 } from "../../store/api";
+import { useAppDispatch } from "../../store/hook";
 import { AppointmentStatus, AppointmentFilter, AppointmentGetDto, AppointmentRequester, } from "../../types/appointment";
 import { useAuth } from "../../hook/useAuth";
 import { BarberType, UserType, PricingType, ImageOwnerType } from "../../types";
@@ -128,23 +130,97 @@ export default function SharedAppointmentScreen() {
   useEffect(() => () => clearAfterUserSelectionChain(), [clearAfterUserSelectionChain]);
 
   // --- API ---
+  const APPOINTMENTS_PAGE_SIZE = 30;
+  /** RN `onEndReached` ilk layout / kısa içerikte yanlış tetiklenebilir — footer spinner flash'ını önler. */
+  const APPOINTMENTS_END_REACHED_GRACE_MS = 450;
   const {
     data: appointments,
     isLoading,
     refetch,
     error,
     isError,
-  } = useGetAllAppointmentByFilterQuery(activeFilter);
+  } = useGetAllAppointmentByFilterQuery({ filter: activeFilter, limit: APPOINTMENTS_PAGE_SIZE });
   const [isPullRefreshing, setIsPullRefreshing] = useState(false);
   const [appointmentsRetryBusy, setAppointmentsRetryBusy] = useState(false);
+
+  // Pagination state — filter başına ayrı. Filtre değiştiğinde sıfırlanır.
+  // Server createdAt DESC döndüğü için en eski item liste sonundadır.
+  const dispatch = useAppDispatch();
+  const [isLoadingOlder, setIsLoadingOlder] = useState(false);
+  const isLoadingOlderRef = useRef(false);
+  const hasMoreRef = useRef<Record<AppointmentFilter, boolean>>({
+    [AppointmentFilter.All]: true,
+    [AppointmentFilter.Active]: true,
+    [AppointmentFilter.Completed]: true,
+    [AppointmentFilter.Cancelled]: true,
+    [AppointmentFilter.Pending]: true,
+  });
+  const lastLoadedBeforeRef = useRef<Record<AppointmentFilter, string | null>>({
+    [AppointmentFilter.All]: null,
+    [AppointmentFilter.Active]: null,
+    [AppointmentFilter.Completed]: null,
+    [AppointmentFilter.Cancelled]: null,
+    [AppointmentFilter.Pending]: null,
+  });
+  const suppressEndReachedUntilMsRef = useRef(0);
+  const bumpAppointmentEndReachedGrace = useCallback(() => {
+    suppressEndReachedUntilMsRef.current = Date.now() + APPOINTMENTS_END_REACHED_GRACE_MS;
+  }, []);
+
+  useEffect(() => {
+    bumpAppointmentEndReachedGrace();
+  }, [activeFilter, bumpAppointmentEndReachedGrace]);
+
+  const loadOlderAppointments = useCallback(async () => {
+    if (Date.now() < suppressEndReachedUntilMsRef.current) return;
+    if (isLoadingOlderRef.current) return;
+    if (!hasMoreRef.current[activeFilter]) return;
+    if (!appointments || appointments.length === 0) return;
+
+    // Server sırası: createdAt DESC → en eski = son eleman.
+    // Cache'de eski sayfalar sonradan ekleniyor (merge append), yine sonda eski.
+    // Tie-breaker: aynı CreatedAt'a sahip 2+ randevuda AppointmentId ile sıkı sıralama.
+    const oldest = appointments[appointments.length - 1];
+    const beforeIso = (oldest as any)?.createdAt as string | undefined;
+    const beforeApptId = (oldest as any)?.id as string | undefined;
+    if (!beforeIso) return;
+    const cursorKey = `${beforeIso}|${beforeApptId ?? ""}`;
+    if (lastLoadedBeforeRef.current[activeFilter] === cursorKey) return;
+
+    isLoadingOlderRef.current = true;
+    lastLoadedBeforeRef.current[activeFilter] = cursorKey;
+    setIsLoadingOlder(true);
+    try {
+      const result = await dispatch(
+        api.endpoints.getAllAppointmentByFilter.initiate(
+          { filter: activeFilter, before: beforeIso, beforeId: beforeApptId, limit: APPOINTMENTS_PAGE_SIZE },
+          { subscribe: false, forceRefetch: true },
+        ),
+      ).unwrap();
+      const fetched = Array.isArray(result) ? result.length : 0;
+      if (fetched < APPOINTMENTS_PAGE_SIZE) {
+        hasMoreRef.current[activeFilter] = false;
+      }
+    } catch {
+      lastLoadedBeforeRef.current[activeFilter] = null;
+    } finally {
+      isLoadingOlderRef.current = false;
+      setIsLoadingOlder(false);
+    }
+  }, [activeFilter, appointments, dispatch]);
+
   const handleRefresh = useCallback(async () => {
     setIsPullRefreshing(true);
+    bumpAppointmentEndReachedGrace();
     try {
+      // Refresh → aktif filtrenin pagination state'ini sıfırla.
+      hasMoreRef.current[activeFilter] = true;
+      lastLoadedBeforeRef.current[activeFilter] = null;
       await refetch();
     } finally {
       setIsPullRefreshing(false);
     }
-  }, [refetch]);
+  }, [refetch, activeFilter, bumpAppointmentEndReachedGrace]);
   const handleAppointmentsRetry = useCallback(async () => {
     setAppointmentsRetryBusy(true);
     try {
@@ -782,12 +858,12 @@ export default function SharedAppointmentScreen() {
               className="flex-row items-center justify-center rounded-lg px-3 py-2.5 mt-1"
               style={{
                 backgroundColor: colors.cardBg3,
-                borderColor: "rgba(255,185,0,0.3)",
+                borderColor: "rgba(250, 204, 21,0.3)",
                 borderWidth: 1,
               }}
             >
-              <Icon source="star-outline" size={16} color="#ffb900" />
-              <Text className="text-[#ffb900] text-xs font-semibold ml-2">
+              <Icon source="star-outline" size={16} color="#FACC15" />
+              <Text className="text-[#FACC15] text-xs font-semibold ml-2">
                 {t("appointment.labels.makeComment")}
               </Text>
             </TouchableOpacity>
@@ -838,8 +914,10 @@ export default function SharedAppointmentScreen() {
         showCompleteButton = true;
       }
 
-      // Active tab'ında sadece Approved durumunda iptal butonu göster
-      if (isApproved) {
+      // Active tab'ında Approved durumunda iptal butonu:
+      // Saati geçmiş randevularda (time passed) iptal gösterme.
+      // Schedule bilgisi olmayan özel akışlarda iptal göstermek güvenli.
+      if (isApproved && (!hasSchedule || !passed)) {
         showCancelButton = true;
       }
     }
@@ -958,7 +1036,7 @@ export default function SharedAppointmentScreen() {
             className="rounded-2xl mb-3 overflow-hidden"
             style={{
               backgroundColor: colors.cardBg,
-              borderColor: isCompletedOrCancelled ? colors.borderColor : "rgba(255, 185, 0, 0.22)",
+              borderColor: isCompletedOrCancelled ? colors.borderColor : "rgba(250, 204, 21, 0.22)",
               borderWidth: 1,
               borderRadius: 14,
               borderLeftWidth: 2,
@@ -1001,8 +1079,8 @@ export default function SharedAppointmentScreen() {
                           </Text>
                           {passed && isApproved && (
                             <View className="flex-row items-center">
-                              <Icon source="alert-circle" size={14} color="#ffb900" />
-                              <Text className="text-[#ffb900] text-xs ml-1">
+                              <Icon source="alert-circle" size={14} color="#FACC15" />
+                              <Text className="text-[#FACC15] text-xs ml-1">
                                 {t("appointment.labels.timePassed")}
                               </Text>
                             </View>
@@ -1385,6 +1463,9 @@ export default function SharedAppointmentScreen() {
                             <Icon source="seat" size={24} color={isDark ? "#94a3b8" : "#64748b"} />
                           </View>
                           <View className="flex-1">
+                            <Text style={sectionLabelStyle}>
+                              {t("appointment.labels.chairName")}
+                            </Text>
                             <Text
                               style={{
                                 fontFamily: "CenturyGothic-Bold",
@@ -1441,7 +1522,7 @@ export default function SharedAppointmentScreen() {
                             )}
                             {item.storeNo && (
                               <Text style={metaLineStyle}>
-                                {'#'}{item.storeNo}
+                                {t("card.storeNo")}: {item.storeNo}
                               </Text>
                             )}
                             {item.storeOwnerNumber && (
@@ -1588,7 +1669,7 @@ export default function SharedAppointmentScreen() {
                             )}
                             {item.storeNo && (
                               <Text style={metaLineStyle}>
-                                {'#'}{item.storeNo}
+                                {t("card.storeNo")}: {item.storeNo}
                               </Text>
                             )}
                             {item.storeOwnerNumber && (
@@ -1766,6 +1847,9 @@ export default function SharedAppointmentScreen() {
                             <Icon source="seat" size={24} color={isDark ? "#94a3b8" : "#64748b"} />
                           </View>
                           <View className="flex-1">
+                            <Text style={sectionLabelStyle}>
+                              {t("appointment.labels.chairName")}
+                            </Text>
                             <Text
                               style={{
                                 fontFamily: "CenturyGothic-Bold",
@@ -1951,7 +2035,7 @@ export default function SharedAppointmentScreen() {
                         letterSpacing: 0.15,
                       }}
                     >
-                      Paketler
+                      {t("servicePackage.tabPackages")}
                     </Text>
                   </View>
                   <ScrollView horizontal showsHorizontalScrollIndicator={false}>
@@ -2007,6 +2091,55 @@ export default function SharedAppointmentScreen() {
                   </ScrollView>
                 </View>
               )}
+
+              {/* Toplam Fiyat */}
+              {(item.services.length > 0 || (item.packages && item.packages.length > 0)) && (() => {
+                const totalServicesPrice = item.services.reduce((sum, s) => sum + Number(s.price), 0);
+                const totalPackagesPrice = (item.packages ?? []).reduce((sum, p) => sum + Number(p.totalPrice), 0);
+                const grandTotal = totalServicesPrice + totalPackagesPrice;
+                return grandTotal > 0 ? (
+                  <View
+                    className="mt-2 rounded-xl px-3 py-2.5"
+                    style={{
+                      backgroundColor: isDark ? "rgba(34,197,94,0.1)" : "rgba(34,197,94,0.08)",
+                      borderWidth: 1,
+                      borderColor: isDark ? "rgba(34,197,94,0.35)" : "rgba(34,197,94,0.24)",
+                    }}
+                  >
+                    <View className="flex-row items-center justify-between">
+                      <View className="flex-row items-center">
+                        <Icon source="cash-multiple" size={16} color="#22c55e" />
+                        <Text
+                          style={{
+                            color: colors.textSecondary,
+                            fontFamily: "CenturyGothic",
+                            fontSize: 12,
+                            marginLeft: 6,
+                          }}
+                        >
+                          {t("card.totalPrice")}
+                        </Text>
+                      </View>
+                      <View
+                        className="rounded-lg px-2.5 py-1"
+                        style={{
+                          backgroundColor: isDark ? "rgba(34,197,94,0.18)" : "rgba(34,197,94,0.14)",
+                        }}
+                      >
+                        <Text
+                          style={{
+                            color: "#16a34a",
+                            fontFamily: "CenturyGothic-Bold",
+                            fontSize: 16,
+                          }}
+                        >
+                          {grandTotal.toFixed(0)} {t("card.currencySymbol")}
+                        </Text>
+                      </View>
+                    </View>
+                  </View>
+                ) : null;
+              })()}
             </View>
           </View>
     );
@@ -2127,6 +2260,15 @@ export default function SharedAppointmentScreen() {
               paddingBottom: 100,
               paddingTop: 10,
             }}
+            onEndReached={loadOlderAppointments}
+            onEndReachedThreshold={0.5}
+            ListFooterComponent={
+              isLoadingOlder ? (
+                <View style={{ paddingVertical: 16, alignItems: "center" }}>
+                  <ActivityIndicator size="small" color="#f05e23" />
+                </View>
+              ) : null
+            }
             refreshControl={
               <RefreshControl
                 refreshing={isPullRefreshing}
@@ -2287,6 +2429,9 @@ export default function SharedAppointmentScreen() {
         handleIndicatorStyle={{ backgroundColor: colors.sheetHandle }}
         backgroundStyle={{ backgroundColor: colors.sheetBg }}
         backdropComponent={complaintSheet.makeBackdrop()}
+        keyboardBehavior="interactive"
+        keyboardBlurBehavior="restore"
+        android_keyboardInputMode="adjustResize"
         onChange={(index) => {
           complaintSheet.handleChange(index);
           if (index < 0) {
@@ -2406,7 +2551,7 @@ export default function SharedAppointmentScreen() {
                 ? "rgba(255, 255, 255, 0.94)"
                 : "rgba(255, 255, 255, 0.98)",
               borderWidth: 1,
-              borderColor: isDark ? "rgba(255, 185, 0, 0.35)" : "rgba(255, 185, 0, 0.42)",
+              borderColor: isDark ? "rgba(250, 204, 21, 0.35)" : "rgba(250, 204, 21, 0.42)",
               elevation: 8,
               shadowColor: "#000",
               shadowOffset: { width: 0, height: 3 },
@@ -2427,7 +2572,7 @@ export default function SharedAppointmentScreen() {
                     paddingHorizontal: 11,
                     paddingVertical: 7,
                     borderBottomWidth: 1,
-                    borderBottomColor: isDark ? colors.borderColor : "rgba(255, 185, 0, 0.22)",
+                    borderBottomColor: isDark ? colors.borderColor : "rgba(250, 204, 21, 0.22)",
                   }}
                   activeOpacity={0.7}
                 >
@@ -2451,7 +2596,7 @@ export default function SharedAppointmentScreen() {
                     paddingVertical: 7,
                     opacity: isBlockingUser ? 0.6 : 1,
                     borderBottomWidth: cardMenuFlags.showDelete ? 1 : 0,
-                    borderBottomColor: isDark ? colors.borderColor : "rgba(255, 185, 0, 0.22)",
+                    borderBottomColor: isDark ? colors.borderColor : "rgba(250, 204, 21, 0.22)",
                   }}
                   activeOpacity={0.7}
                 >

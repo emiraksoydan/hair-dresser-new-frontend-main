@@ -28,6 +28,8 @@ import {
 type ChairModalBarber = {
   id: string;
   name: string;
+  ratingAvg?: number | null;
+  ratingCount?: number | null;
 };
 
 type Props = {
@@ -68,7 +70,12 @@ export const ChairEditModal: React.FC<Props> = ({
   const [updateChair, { isLoading: isUpdating }] =
     useUpdateStoreChairMutation();
 
-  const barberOptions = barbers.map((b) => ({ label: b.name, value: b.id }));
+  const barberOptions = barbers.map((b) => ({
+    label: b.name,
+    value: b.id,
+    ratingAvg: b.ratingAvg ?? null,
+    ratingCount: b.ratingCount ?? null,
+  }));
   const { t } = useLanguage();
   const { colors, isDark } = useTheme();
   const confirmBtn = primaryConfirmButtonColors(isDark);
@@ -269,9 +276,11 @@ export const ChairEditModal: React.FC<Props> = ({
                       caption={t("form.chairNameFieldLabel")}
                       placeholder={t("form.chairNamePlaceholder")}
                     />
-                    <HelperText type="error" visible={!!errors.name}>
-                      {errors.name?.message as string}
-                    </HelperText>
+                    {!!errors.name && (
+                      <HelperText type="error" visible>
+                        {errors.name?.message as string}
+                      </HelperText>
+                    )}
                   </>
                 )}
               />
@@ -300,39 +309,43 @@ export const ChairEditModal: React.FC<Props> = ({
                       })}
                       hint={t("form.selectPersonnelListHint")}
                     />
-                    <HelperText type="error" visible={!!errors.barberId}>
-                      {errors.barberId?.message as string}
-                    </HelperText>
+                    {!!errors.barberId && (
+                      <HelperText type="error" visible>
+                        {errors.barberId?.message as string}
+                      </HelperText>
+                    )}
                   </>
                 )}
               />
             )}
           </View>
+          <View style={{ flexDirection: "row", gap: 10, marginTop: 10, paddingBottom: 12 }}>
+            <Button
+              mode="outlined"
+              onPress={onClose}
+              textColor={SOFT_CANCEL_TEXT}
+              buttonColor={cancelBtn.borderColor}
+              style={{ borderRadius: 10, borderColor: cancelBtn.borderColor, backgroundColor: cancelBtn.backgroundColor, flex: 1 }}
+              contentStyle={{ justifyContent: "center" }}
+              labelStyle={{ fontFamily: "CenturyGothic" }}
+            >
+              {t("common.cancel")}
+            </Button>
+            <Button
+              mode="contained"
+              loading={isAdding || isUpdating}
+              disabled={isAdding || isUpdating}
+              onPress={handleSubmit(submit)}
+              buttonColor={confirmBtn.backgroundColor}
+              textColor={confirmBtn.color}
+              style={{ borderRadius: 10, flex: 1 }}
+              contentStyle={{ justifyContent: "center" }}
+              labelStyle={{ fontFamily: "CenturyGothic" }}
+            >
+              {t("common.save")}
+            </Button>
+          </View>
         </Dialog.Content>
-        <Dialog.Actions style={{ flexDirection: "column", alignItems: "stretch", paddingHorizontal: 16, paddingBottom: 16, gap: 8 }}>
-          <Button
-            mode="contained"
-            loading={isAdding || isUpdating}
-            disabled={isAdding || isUpdating}
-            onPress={handleSubmit(submit)}
-            buttonColor={confirmBtn.backgroundColor}
-            textColor={confirmBtn.color}
-            style={{ borderRadius: 10 }}
-            labelStyle={{ fontFamily: "CenturyGothic" }}
-          >
-            {t("common.save")}
-          </Button>
-          <Button
-            mode="outlined"
-            onPress={onClose}
-            textColor={SOFT_CANCEL_TEXT}
-            buttonColor={cancelBtn.borderColor}
-            style={{ borderRadius: 10, borderColor: cancelBtn.borderColor, backgroundColor: cancelBtn.backgroundColor }}
-            labelStyle={{ fontFamily: "CenturyGothic" }}
-          >
-            {t("common.cancel")}
-          </Button>
-        </Dialog.Actions>
       </Dialog>
     </Portal>
   );

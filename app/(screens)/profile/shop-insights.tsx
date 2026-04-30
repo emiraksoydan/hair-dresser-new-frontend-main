@@ -220,7 +220,7 @@ const EarningsCard = ({
   const suffix = valueSuffix ?? CURRENCY;
   const subTextStyle = {
     color: isDark ? "rgba(255,255,255,0.45)" : "rgba(30,41,59,0.45)",
-    fontSize: 10,
+    fontSize: 12,
     marginTop: 5,
     fontFamily: "CenturyGothic",
   } as const;
@@ -272,9 +272,9 @@ const EarningsCard = ({
               style={{
                 color: isDark ? "rgba(255,255,255,0.82)" : "rgba(30,41,59,0.82)",
                 fontFamily: "CenturyGothic-Bold",
-                fontSize: 13,
+                fontSize: 15,
                 flex: 1,
-                lineHeight: 18,
+                lineHeight: 20,
               }}
               numberOfLines={2}
             >
@@ -288,7 +288,7 @@ const EarningsCard = ({
               style={{
                 color: accentColor,
                 fontFamily: "CenturyGothic-Bold",
-                fontSize: 26,
+                fontSize: 28,
               }}
               numberOfLines={1}
               adjustsFontSizeToFit
@@ -303,7 +303,7 @@ const EarningsCard = ({
               style={{
                 color: accentColor,
                 fontFamily: "CenturyGothic-Bold",
-                fontSize: 26,
+                fontSize: 28,
               }}
               enabled={animateNumbers}
             />
@@ -312,7 +312,7 @@ const EarningsCard = ({
               style={{
                 color: accentColor,
                 fontFamily: "CenturyGothic-Bold",
-                fontSize: 26,
+                fontSize: 28,
               }}
               numberOfLines={1}
               adjustsFontSizeToFit
@@ -490,9 +490,9 @@ const FilterChip = ({
       paddingHorizontal: 13,
       paddingVertical: 7,
       borderRadius: 20,
-      backgroundColor: active ? "#ffb900" : colors.cardBg3,
+      backgroundColor: active ? "#FACC15" : colors.cardBg3,
       borderWidth: 1,
-      borderColor: active ? "#ffb900" : colors.borderColor2,
+      borderColor: active ? "#FACC15" : colors.borderColor2,
       marginRight: 6,
     }}
   >
@@ -500,7 +500,7 @@ const FilterChip = ({
       style={{
         color: active ? "#1f2937" : colors.sectionHeaderText,
         fontFamily: "CenturyGothic-Bold",
-        fontSize: 12,
+        fontSize: 14,
       }}
     >
       {label}
@@ -686,7 +686,7 @@ export default function ShopInsightsPage() {
         stroke: isDark ? "rgba(255,255,255,0.07)" : "rgba(15,23,42,0.07)",
       },
       propsForLabels: {
-        fontSize: safeLabels.length > 10 ? 9 : 10,
+        fontSize: safeLabels.length > 10 ? 11 : 12,
       },
       fillShadowGradient: "rgba(251,191,36,0.95)",
       fillShadowGradientOpacity: isDark ? 0.1 : 0.14,
@@ -833,17 +833,17 @@ export default function ShopInsightsPage() {
 
   return (
     <SafeAreaView
-      style={{ flex: 1, backgroundColor: isDark ? "#0f0f1a" : "#f1f5f9" }}
+      style={{ flex: 1, backgroundColor: colors.screenBg }}
       edges={["top"]}
     >
-      <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={colors.screenBg} />
       <View
         style={{
           flexDirection: "row",
           alignItems: "center",
           paddingHorizontal: 16,
           paddingVertical: 12,
-          backgroundColor: isDark ? "#1a1a2e" : "#ffffff",
+          backgroundColor: colors.screenBg,
           borderBottomWidth: 1,
           borderBottomColor: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.07)",
         }}
@@ -863,12 +863,12 @@ export default function ShopInsightsPage() {
             style={{
               color: colors.sectionHeaderText,
               fontFamily: "CenturyGothic-Bold",
-              fontSize: 17,
+              fontSize: 19,
             }}
           >
             {pageTitle}
           </Text>
-          <Text style={{ color: colors.textSecondary, fontSize: 11, marginTop: 2 }}>
+          <Text style={{ color: colors.textSecondary, fontSize: 13, marginTop: 2 }}>
             {isFreeBarber ? t("profile.panelEarningsSubtitle") : t("profile.storeEarningsSubtitle")}
           </Text>
         </View>
@@ -890,16 +890,17 @@ export default function ShopInsightsPage() {
           {isBarberStore && stores.length >= 2 && (
             <TouchableOpacity
               onPress={() => router.push("/(screens)/profile/store-compare")}
-              style={{ padding: 8, borderRadius: 12, backgroundColor: isDark ? "rgba(255,185,0,0.12)" : "rgba(255,185,0,0.2)" }}
+              style={{ padding: 8, borderRadius: 12, backgroundColor: isDark ? "rgba(250, 204, 21,0.12)" : "rgba(250, 204, 21,0.2)" }}
             >
-              <Icon source="compare-horizontal" size={22} color="#ffb900" />
+              <Icon source="compare-horizontal" size={22} color="#FACC15" />
             </TouchableOpacity>
           )}
         </View>
       </View>
 
       <ScrollView
-        contentContainerStyle={{ paddingBottom: 72 }}
+        style={{ backgroundColor: colors.screenBg }}
+        contentContainerStyle={{ paddingBottom: 72, flexGrow: 1, backgroundColor: colors.screenBg }}
         showsVerticalScrollIndicator={false}
         stickyHeaderIndices={[0]}
       >
@@ -908,7 +909,7 @@ export default function ShopInsightsPage() {
             paddingHorizontal: 12,
             paddingTop: 10,
             paddingBottom: 10,
-            backgroundColor: isDark ? "#0f0f1a" : "#f1f5f9",
+            backgroundColor: colors.screenBg,
             borderBottomWidth: 1,
             borderBottomColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.07)",
             zIndex: 10,
@@ -919,7 +920,7 @@ export default function ShopInsightsPage() {
               color: colors.sectionHeaderText,
               fontFamily: "CenturyGothic-Bold",
               marginBottom: 8,
-              fontSize: 12,
+              fontSize: 14,
             }}
           >
             {t("profile.filter") || "Filtreler"}
@@ -952,8 +953,8 @@ export default function ShopInsightsPage() {
                   borderColor: isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.08)",
                 }}
               >
-                <Text style={{ color: colors.textSecondary, fontSize: 11 }}>{t("profile.customStart") || "Başlangıç"}</Text>
-                <Text style={{ color: colors.sectionHeaderText, fontFamily: "CenturyGothic-Bold", marginTop: 2 }}>
+                <Text style={{ color: colors.textSecondary, fontSize: 13 }}>{t("profile.customStart") || "Başlangıç"}</Text>
+                <Text style={{ color: colors.sectionHeaderText, fontFamily: "CenturyGothic-Bold", fontSize: 15, marginTop: 2 }}>
                   {customStart.toLocaleDateString("tr-TR")}
                 </Text>
               </TouchableOpacity>
@@ -971,8 +972,8 @@ export default function ShopInsightsPage() {
                   borderColor: isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.08)",
                 }}
               >
-                <Text style={{ color: colors.textSecondary, fontSize: 11 }}>{t("profile.customEnd") || "Bitiş"}</Text>
-                <Text style={{ color: colors.sectionHeaderText, fontFamily: "CenturyGothic-Bold", marginTop: 2 }}>
+                <Text style={{ color: colors.textSecondary, fontSize: 13 }}>{t("profile.customEnd") || "Bitiş"}</Text>
+                <Text style={{ color: colors.sectionHeaderText, fontFamily: "CenturyGothic-Bold", fontSize: 15, marginTop: 2 }}>
                   {customEnd.toLocaleDateString("tr-TR")}
                 </Text>
               </TouchableOpacity>
@@ -986,7 +987,7 @@ export default function ShopInsightsPage() {
                   color: colors.sectionHeaderText,
                   fontFamily: "CenturyGothic-Bold",
                   marginBottom: 8,
-                  fontSize: 12,
+                  fontSize: 14,
                 }}
               >
                 {t("profile.selectStore")}
@@ -1007,7 +1008,7 @@ export default function ShopInsightsPage() {
                 inside
                 alwaysRenderSelectedItem
                 visibleSelectedItem
-                activeColor="#ffb900"
+                activeColor="#FACC15"
                 style={{
                   borderWidth: 1,
                   borderColor: isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.1)",
@@ -1020,7 +1021,7 @@ export default function ShopInsightsPage() {
                   borderRadius: 12,
                   borderWidth: 1,
                   borderColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)",
-                  backgroundColor: isDark ? "#121522" : "#ffffff",
+                  backgroundColor: isDark ? "#121522" : colors.cardBg,
                 }}
                 inputSearchStyle={{
                   color: colors.sectionHeaderText,
@@ -1029,21 +1030,21 @@ export default function ShopInsightsPage() {
                 }}
                 placeholderStyle={{
                   color: colors.textSecondary,
-                  fontSize: 12,
+                  fontSize: 14,
                 }}
                 selectedTextStyle={{
                   color: colors.sectionHeaderText,
-                  fontSize: 12,
+                  fontSize: 14,
                   fontFamily: "CenturyGothic-Bold",
                 }}
                 itemTextStyle={{
                   color: colors.sectionHeaderText,
-                  fontSize: 12,
+                  fontSize: 14,
                 }}
                 selectedStyle={{
                   borderRadius: 14,
-                  backgroundColor: isDark ? "rgba(255,185,0,0.22)" : "rgba(255,185,0,0.2)",
-                  borderColor: "#ffb900",
+                  backgroundColor: isDark ? "rgba(250, 204, 21,0.22)" : "rgba(250, 204, 21,0.2)",
+                  borderColor: "#FACC15",
                 }}
                 selectedTextProps={{ numberOfLines: 1 }}
               />
@@ -1051,10 +1052,10 @@ export default function ShopInsightsPage() {
           )}
         </View>
 
-        <View style={{ paddingTop: 8, paddingBottom: 6 }}>
+        <View style={{ paddingTop: 8, paddingBottom: 6, backgroundColor: colors.screenBg }}>
           {loadingStore && (
             <View style={{ alignItems: "center", marginBottom: 12 }}>
-              <ActivityIndicator color="#ffb900" />
+              <ActivityIndicator color="#FACC15" />
             </View>
           )}
 
@@ -1118,27 +1119,27 @@ export default function ShopInsightsPage() {
                   width: 38,
                   height: 38,
                   borderRadius: 12,
-                  backgroundColor: isDark ? "rgba(255,185,0,0.12)" : "rgba(255,185,0,0.2)",
+                  backgroundColor: isDark ? "rgba(250, 204, 21,0.12)" : "rgba(250, 204, 21,0.2)",
                   alignItems: "center",
                   justifyContent: "center",
                 }}
               >
-                <Icon source="chart-areaspline" size={22} color="#ffb900" />
+                <Icon source="chart-areaspline" size={22} color="#FACC15" />
               </View>
               <View style={{ flex: 1, minWidth: 0 }}>
                 <Text
-                  style={{ color: colors.sectionHeaderText, fontFamily: "CenturyGothic-Bold", fontSize: 14 }}
+                  style={{ color: colors.sectionHeaderText, fontFamily: "CenturyGothic-Bold", fontSize: 16 }}
                   numberOfLines={1}
                 >
                   {t("profile.earningsChart") || "Kazanç Grafiği"}
                 </Text>
-                <Text style={{ color: colors.textTertiary, fontSize: 10, marginTop: 2 }} numberOfLines={2}>
+                <Text style={{ color: colors.textTertiary, fontSize: 12, marginTop: 2 }} numberOfLines={2}>
                   {t("profile.earningsBreakdownHint")}
                 </Text>
               </View>
             </View>
             <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-              <Text style={{ color: colors.textSecondary, fontSize: 11 }}>{showChart ? t("profile.viewChart") : t("profile.viewTable")}</Text>
+              <Text style={{ color: colors.textSecondary, fontSize: 13 }}>{showChart ? t("profile.viewChart") : t("profile.viewTable")}</Text>
               <View
                 style={{
                   borderRadius: 22,
@@ -1166,16 +1167,16 @@ export default function ShopInsightsPage() {
                       paddingHorizontal: 12,
                       paddingVertical: 6,
                       borderRadius: 10,
-                      backgroundColor: chartType === ct ? "#ffb900" : colors.cardBg3,
+                      backgroundColor: chartType === ct ? "#FACC15" : colors.cardBg3,
                       borderWidth: 1,
-                      borderColor: chartType === ct ? "#ffb900" : colors.borderColor2,
+                      borderColor: chartType === ct ? "#FACC15" : colors.borderColor2,
                     }}
                   >
                     <Text
                       style={{
                         color: chartType === ct ? "#1f2937" : colors.sectionHeaderText,
                         fontFamily: "CenturyGothic-Bold",
-                        fontSize: 12,
+                        fontSize: 14,
                       }}
                     >
                       {ct === "line" ? t("profile.chartModeLine") : ct === "bar" ? t("profile.chartModeBar") : t("profile.chartModePie")}
@@ -1197,8 +1198,8 @@ export default function ShopInsightsPage() {
                   }}
                 >
                   <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-                    <Icon source="calendar-range" size={18} color="#ffb900" />
-                    <Text style={{ color: colors.textSecondary, fontSize: 11, flex: 1 }} numberOfLines={2}>
+                    <Icon source="calendar-range" size={18} color="#FACC15" />
+                    <Text style={{ color: colors.textSecondary, fontSize: 13, flex: 1 }} numberOfLines={2}>
                       {filterLabels[dateFilter]} · {toDateStr(rangeStart)} — {toDateStr(rangeEnd)}
                     </Text>
                   </View>
@@ -1207,7 +1208,7 @@ export default function ShopInsightsPage() {
                       marginTop: 8,
                       color: colors.sectionHeaderText,
                       fontFamily: "CenturyGothic-Bold",
-                      fontSize: 16,
+                      fontSize: 18,
                     }}
                   >
                     {t("profile.chartPeriodTotal")}{" "}
@@ -1232,8 +1233,8 @@ export default function ShopInsightsPage() {
                     borderColor: colors.borderColor2,
                   }}
                 >
-                  <ActivityIndicator color="#ffb900" size="large" />
-                  <Text style={{ color: colors.textSecondary, fontSize: 12, marginTop: 12 }}>{t("profile.chartLoading")}</Text>
+                  <ActivityIndicator color="#FACC15" size="large" />
+                  <Text style={{ color: colors.textSecondary, fontSize: 14, marginTop: 12 }}>{t("profile.chartLoading")}</Text>
                 </View>
               ) : !hasChartActivity ? (
                 <View
@@ -1263,14 +1264,14 @@ export default function ShopInsightsPage() {
                     style={{
                       color: colors.sectionHeaderText,
                       fontFamily: "CenturyGothic-Bold",
-                      fontSize: 14,
+                      fontSize: 16,
                       marginTop: 10,
                       textAlign: "center",
                     }}
                   >
                     {t("profile.earningsEmptyTitle")}
                   </Text>
-                  <Text style={{ color: colors.textSecondary, fontSize: 12, marginTop: 6, textAlign: "center" }}>
+                  <Text style={{ color: colors.textSecondary, fontSize: 14, marginTop: 6, textAlign: "center" }}>
                     {t("profile.earningsEmptySubtitle")}
                   </Text>
                 </View>
@@ -1303,11 +1304,11 @@ export default function ShopInsightsPage() {
                       <View key={`${s.name}-${idx}`} style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
                         <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
                           <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: (s as any).color }} />
-                          <Text style={{ color: colors.sectionHeaderText, fontSize: 12 }} numberOfLines={1}>
+                          <Text style={{ color: colors.sectionHeaderText, fontSize: 14 }} numberOfLines={1}>
                             {s.name}
                           </Text>
                         </View>
-                        <Text style={{ color: colors.textSecondary, fontSize: 12, fontFamily: "CenturyGothic-Bold" }}>
+                        <Text style={{ color: colors.textSecondary, fontSize: 14, fontFamily: "CenturyGothic-Bold" }}>
                           {(s as any).population?.toLocaleString?.("tr-TR") ?? ""} {CURRENCY}
                         </Text>
                       </View>
@@ -1327,7 +1328,7 @@ export default function ShopInsightsPage() {
                     paddingBottom: 4,
                   }}
                 >
-                  <Text style={{ color: colors.textTertiary, fontSize: 10, marginBottom: 6, marginHorizontal: 8 }}>
+                  <Text style={{ color: colors.textTertiary, fontSize: 12, marginBottom: 6, marginHorizontal: 8 }}>
                     {t("profile.chartScrollHint")}
                   </Text>
                   <ScrollView horizontal showsHorizontalScrollIndicator={safeLabels.length > 6}>
@@ -1396,14 +1397,14 @@ export default function ShopInsightsPage() {
                 style={{
                   color: colors.sectionHeaderText,
                   fontFamily: "CenturyGothic-Bold",
-                  fontSize: 14,
+                  fontSize: 16,
                   marginTop: 10,
                   textAlign: "center",
                 }}
               >
                 {t("profile.earningsEmptyTitle")}
               </Text>
-              <Text style={{ color: colors.textSecondary, fontSize: 12, marginTop: 6, textAlign: "center" }}>
+              <Text style={{ color: colors.textSecondary, fontSize: 14, marginTop: 6, textAlign: "center" }}>
                 {t("profile.earningsEmptySubtitle")}
               </Text>
             </View>
@@ -1429,14 +1430,14 @@ export default function ShopInsightsPage() {
                     borderColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)",
                   }}
                 >
-                  <Text style={{ color: colors.textSecondary, fontSize: 11 }} numberOfLines={1}>
+                  <Text style={{ color: colors.textSecondary, fontSize: 13 }} numberOfLines={1}>
                     {label}
                   </Text>
                   <Text
                     style={{
                       color: safeValues[i] > 0 ? "#0d9488" : colors.textSecondary,
                       fontFamily: "CenturyGothic-Bold",
-                      fontSize: 15,
+                      fontSize: 17,
                       marginTop: 6,
                     }}
                   >
@@ -1468,10 +1469,10 @@ export default function ShopInsightsPage() {
           contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 32 }}
           keyboardShouldPersistTaps="handled"
         >
-          <Text style={{ color: colors.sectionHeaderText, fontFamily: "CenturyGothic-Bold", fontSize: 15, marginBottom: 8 }}>
+          <Text style={{ color: colors.sectionHeaderText, fontFamily: "CenturyGothic-Bold", fontSize: 17, marginBottom: 8 }}>
             {pickerMode === "start" ? t("profile.customStart") : pickerMode === "end" ? t("profile.customEnd") : ""}
           </Text>
-          <Text style={{ color: colors.textSecondary, fontSize: 12, marginBottom: 12 }}>
+          <Text style={{ color: colors.textSecondary, fontSize: 14, marginBottom: 12 }}>
             {t("profile.pickDateHint")}
           </Text>
           {pickerMode !== null && (
@@ -1504,13 +1505,13 @@ export default function ShopInsightsPage() {
             }}
             style={{
               marginTop: 16,
-              backgroundColor: "#ffb900",
+              backgroundColor: "#FACC15",
               borderRadius: 12,
               paddingVertical: 12,
               alignItems: "center",
             }}
           >
-            <Text style={{ color: "#1f2937", fontFamily: "CenturyGothic-Bold", fontSize: 15 }}>{t("common.ok")}</Text>
+            <Text style={{ color: "#1f2937", fontFamily: "CenturyGothic-Bold", fontSize: 16 }}>{t("common.ok")}</Text>
           </TouchableOpacity>
         </BottomSheetScrollView>
       </BottomSheetModal>

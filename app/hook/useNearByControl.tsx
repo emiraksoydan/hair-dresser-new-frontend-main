@@ -12,6 +12,10 @@ import { tokenStore } from "../lib/tokenStore";
 // Expo Go background location'ı desteklemez
 const IS_EXPO_GO = Constants.executionEnvironment === "storeClient";
 
+// Tab remount'larında fetchedOnce bayrağı sıfırlanmasın.
+// JS oturumu süresince yaşar (uygulama tamamen kapanırsa sıfırlanır — bu doğru davranış).
+const _persistedFetchedOnce = new Set<string>();
+
 function coordsNearlyEqual(lat1: number, lon1: number, lat2: number, lon2: number) {
     return Math.abs(lat1 - lat2) < 1e-5 && Math.abs(lon1 - lon2) < 1e-5;
 }
@@ -37,10 +41,20 @@ export function useNearbyControl({
     onFetch,
     error,
     enableBackgroundTracking = false, // Sadece useTrackFreeBarberLocation'da true
+    persistKey,
 }: UseNearbyControlParams & { error?: any }) {
     const [locationStatus, setLocationStatus] = useState<LocationStatus>("unknown");
     const [locationMessage, setLocationMessage] = useState<string>("");
-    const [fetchedOnce, setFetchedOnce] = useState(false);
+    const [fetchedOnce, setFetchedOnce] = useState(
+        () => (persistKey ? _persistedFetchedOnce.has(persistKey) : false)
+    );
+
+    // fetchedOnce true olduğunda modül cache'ine de yaz (remount'ta sıfırlanmasın).
+    useEffect(() => {
+        if (fetchedOnce && persistKey) {
+            _persistedFetchedOnce.add(persistKey);
+        }
+    }, [fetchedOnce, persistKey]);
 
     const lastFetchPos = useRef<Pos | null>(null);
     const lastFetchTime = useRef(0);

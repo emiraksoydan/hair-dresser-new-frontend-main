@@ -42,6 +42,7 @@ module.exports = {
         ITSAppUsesNonExemptEncryption: false,
       },
       bundleIdentifier: "com.hairdresser.app",
+      buildNumber: "12",
       /** EAS: production ortamında GOOGLE_SERVICES_PLIST (type: file) secret — build sırasında geçici dosya yolu olur. */
       googleServicesFile: process.env.GOOGLE_SERVICES_PLIST ?? "./GoogleService-Info.plist",
     },
@@ -116,6 +117,23 @@ module.exports = {
       ],
       "@react-native-firebase/app",
       "@react-native-firebase/messaging",
+      /**
+       * iOS: entitlements içine `aps-environment` yazar (Push). Sadece app.json'da olursa
+       * app.config.js baskın geldiği için prebuild'te uygulanmaz — burada da tanımlı olmalı.
+       * Mağaza: EAS production profili → mode production.
+       */
+      [
+        "expo-notifications",
+        {
+          icon: "./assets/icon.png",
+          color: "#FACC15",
+          defaultChannel: "default",
+          mode:
+            process.env.EAS_BUILD_PROFILE === "production"
+              ? "production"
+              : "development",
+        },
+      ],
     ],
     fonts: [
       "./assets/fonts/centurygothic.ttf",

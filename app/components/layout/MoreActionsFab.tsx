@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { FAB, Portal } from "react-native-paper";
 import { useTheme } from "../../hook/useTheme";
+import { COLORS } from "../../constants/colors";
 import type { MoreFabMenuItem } from "./MoreFabContext";
 import { getMoreFabAnchorBottom } from "./panelBottomOverlays";
 
@@ -11,9 +12,12 @@ import { getMoreFabAnchorBottom } from "./panelBottomOverlays";
  */
 export const FAB_NUDGE_LAST_TAB_CLEARANCE = 14;
 
+const FAB_ICON_TINT = "#FFFFFF";
+
 type Props = {
   items: MoreFabMenuItem[];
-  accentColor: string;
+  /** Açık sarı (kapalı FAB + alt menü düğmeleri) */
+  chipBackground?: string;
   /** Ek `paddingBottom` (FAB’ı ekran tabanından yukarı iter); son sekmede çakışma önleme için kullanılır */
   fabNudgeDown?: number;
   /** true: FAB gizlenir (açık sheet üzerinde görünmemesi için) */
@@ -23,7 +27,12 @@ type Props = {
 /**
  * React Native Paper FAB.Group (speed dial); tab bar üzerinde konumlanır.
  */
-export function MoreActionsFab({ items, accentColor, fabNudgeDown = 0, hidden = false }: Props) {
+export function MoreActionsFab({
+  items,
+  chipBackground = COLORS.UI.ACCENT_GOLD,
+  fabNudgeDown = 0,
+  hidden = false,
+}: Props) {
   const { isDark } = useTheme();
   const insets = useSafeAreaInsets();
   const [open, setOpen] = useState(false);
@@ -56,16 +65,19 @@ export function MoreActionsFab({ items, accentColor, fabNudgeDown = 0, hidden = 
       items.map((item) => ({
         icon: item.icon,
         label: item.label,
-        labelTextColor: "#ffffff",
+        labelTextColor: FAB_ICON_TINT,
         labelStyle: { fontFamily: "CenturyGothic-Bold" } as const,
         size: "small" as const,
-        style: { backgroundColor: accentColor },
-        color: "#ffffff",
+        style: {
+          backgroundColor: chipBackground,
+          borderWidth: 0,
+        },
+        color: FAB_ICON_TINT,
         onPress: () => {
           item.onPress();
         },
       })),
-    [items, accentColor],
+    [items, chipBackground],
   );
 
   if (items.length === 0) {
@@ -86,7 +98,8 @@ export function MoreActionsFab({ items, accentColor, fabNudgeDown = 0, hidden = 
             ? isDark
               ? "rgba(148,163,184,0.4)"
               : "#e5e7eb"
-            : accentColor,
+            : chipBackground,
+          borderWidth: 0,
           width: 48,
           height: 48,
           borderRadius: 24,
@@ -94,7 +107,7 @@ export function MoreActionsFab({ items, accentColor, fabNudgeDown = 0, hidden = 
           alignItems: "center",
           justifyContent: "center",
         }}
-        color={open ? (isDark ? "#f9fafb" : "#1f2937") : "#ffffff"}
+        color={open ? (isDark ? "#f9fafb" : "#1f2937") : FAB_ICON_TINT}
         backdropColor="rgba(0,0,0,0.22)"
         accessibilityLabel={open ? "Menüyü kapat" : "Daha fazla işlem"}
       />
