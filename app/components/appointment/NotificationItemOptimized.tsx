@@ -500,18 +500,114 @@ export const NotificationItemOptimized = React.memo<NotificationItemProps>(
       if (onAddStore && item.appointmentId) onAddStore(item.appointmentId);
     }, [item.appointmentId, onAddStore]);
 
+    /**
+     * "Haritada Göster" — bildirimin TERSi rol için uygun haritayı açar.
+     *
+     * Hedef seçim mantığı (recipient = bildirimi alan; sender = isteği atan):
+     *   - recipient store     → sender freebarber → FB CANLI konumu
+     *   - recipient store     → sender customer   → Customer (snapshot, payload'da varsa)
+     *   - recipient freebarber→ sender store      → Store statik konumu
+     *   - recipient freebarber→ sender customer   → Customer (snapshot)
+     *   - recipient customer  → sender store      → Store statik konumu
+     *   - recipient customer  → sender freebarber → FB CANLI konumu
+     *
+     * Ekran: /(screens)/notification-map (targetType + targetId + lat/lng params)
+     * Customer canlı konumu için backend'de Appointment.RequestLatitude/Longitude
+     * persist + payload'a eklenmesi gerekiyor (TODO).
+     */
+    const mapTarget = React.useMemo<{
+      type: "store" | "freebarber" | "customer";
+      id: string;
+      name: string;
+      lat?: number;
+      lng?: number;
+    } | null>(() => {
+      if (!payload) return null;
+      const rRole = recipientRole;
+      const customerLat = (payload as any)?.customer?.latitude;
+      const customerLng = (payload as any)?.customer?.longitude;
+
+      if (rRole === "store") {
+        if (payload.freeBarber?.userId) {
+          return {
+            type: "freebarber",
+            id: payload.freeBarber.userId,
+            name: payload.freeBarber.displayName || "Serbest Berber",
+          };
+        }
+        if (payload.customer?.userId && customerLat != null && customerLng != null) {
+          return {
+            type: "customer",
+            id: payload.customer.userId,
+            name: payload.customer.displayName || "Müşteri",
+            lat: customerLat,
+            lng: customerLng,
+          };
+        }
+        return null;
+      }
+
+      if (rRole === "freebarber") {
+        if (payload.store?.storeId && payload.store.latitude != null && payload.store.longitude != null) {
+          return {
+            type: "store",
+            id: payload.store.storeId,
+            name: payload.store.storeName || "Dükkan",
+            lat: payload.store.latitude!,
+            lng: payload.store.longitude!,
+          };
+        }
+        if (payload.customer?.userId && customerLat != null && customerLng != null) {
+          return {
+            type: "customer",
+            id: payload.customer.userId,
+            name: payload.customer.displayName || "Müşteri",
+            lat: customerLat,
+            lng: customerLng,
+          };
+        }
+        return null;
+      }
+
+      if (rRole === "customer") {
+        if (payload.freeBarber?.userId) {
+          return {
+            type: "freebarber",
+            id: payload.freeBarber.userId,
+            name: payload.freeBarber.displayName || "Serbest Berber",
+          };
+        }
+        if (payload.store?.storeId && payload.store.latitude != null && payload.store.longitude != null) {
+          return {
+            type: "store",
+            id: payload.store.storeId,
+            name: payload.store.storeName || "Dükkan",
+            lat: payload.store.latitude!,
+            lng: payload.store.longitude!,
+          };
+        }
+        return null;
+      }
+
+      return null;
+    }, [payload, recipientRole]);
+
     const handleShowOnMap = React.useCallback(() => {
-      const lat = payload?.store?.latitude;
-      const lng = payload?.store?.longitude;
-      if (!lat || !lng) return;
+      if (!mapTarget) return;
       onCloseSheet?.();
       setTimeout(() => {
         router.push({
-          pathname: "/(freebarbertabs)/(panel)",
-          params: { focusLat: String(lat), focusLng: String(lng) },
+          pathname: "/(screens)/notification-map" as any,
+          params: {
+            targetType: mapTarget.type,
+            targetId: mapTarget.id,
+            targetName: mapTarget.name,
+            ...(mapTarget.lat != null ? { lat: String(mapTarget.lat) } : {}),
+            ...(mapTarget.lng != null ? { lng: String(mapTarget.lng) } : {}),
+          },
         });
       }, 220);
-    }, [payload?.store?.latitude, payload?.store?.longitude, router, onCloseSheet]);
+    }, [mapTarget, router, onCloseSheet]);
 
     // Tıklama: Aksiyon bildirimlerinde (onay/red) dokunarak okuma yok; sadece diğer türlerde.
     // Karar bekleyen + süresi dolmamış aksiyonlarda kart tıklanmasın (butonlara odaklanılsın).
@@ -846,29 +942,33 @@ export const NotificationItemOptimized = React.memo<NotificationItemProps>(
                   </View>
                 </View>
               )}
-            {/* Haritada Göster butonu (FreeBarber - dükkan konumu var ise) */}
-            {recipientRole === "freebarber" &&
-              payload?.store &&
-              payload.store.latitude != null &&
-              payload.store.longitude != null && (
-                <TouchableOpacity
-                  onPress={handleShowOnMap}
-                  className="mt-2 rounded-xl py-3 items-center justify-center flex-row gap-2"
-                  style={{
-                    backgroundColor: isDark ? "rgba(56,189,248,0.12)" : "rgba(224,242,254,0.7)",
-                    borderWidth: 1,
-                    borderColor: isDark ? "rgba(56,189,248,0.35)" : "rgba(14,165,233,0.28)",
-                  }}
+            {/* Haritada Göster butonu — mapTarget hesaplandıysa her rol için göster.
+                FreeBarber hedefi → CANLI konum etiketi; diğerleri → statik. */}
+            {mapTarget && (
+              <TouchableOpacity
+                onPress={handleShowOnMap}
+                className="mt-2 rounded-xl py-3 items-center justify-center flex-row gap-2"
+                style={{
+                  backgroundColor: isDark ? "rgba(56,189,248,0.12)" : "rgba(224,242,254,0.7)",
+                  borderWidth: 1,
+                  borderColor: isDark ? "rgba(56,189,248,0.35)" : "rgba(14,165,233,0.28)",
+                }}
+              >
+                <Icon
+                  source={mapTarget.type === "freebarber" ? "map-marker-radius" : "map-marker-outline"}
+                  size={18}
+                  color={isDark ? "#7dd3fc" : "#0284c7"}
+                />
+                <Text
+                  className="text-sm font-semibold"
+                  style={{ color: isDark ? "#bae6fd" : "#0369a1", fontFamily: "CenturyGothic-Bold" }}
                 >
-                  <Icon source="map-marker-outline" size={18} color={isDark ? "#7dd3fc" : "#0284c7"} />
-                  <Text
-                    className="text-sm font-semibold"
-                    style={{ color: isDark ? "#bae6fd" : "#0369a1", fontFamily: "CenturyGothic-Bold" }}
-                  >
-                    Haritada Göster
-                  </Text>
-                </TouchableOpacity>
-              )}
+                  {mapTarget.type === "freebarber"
+                    ? "Haritada Göster (Canlı)"
+                    : "Haritada Göster"}
+                </Text>
+              </TouchableOpacity>
+            )}
           </View>
         )}
 

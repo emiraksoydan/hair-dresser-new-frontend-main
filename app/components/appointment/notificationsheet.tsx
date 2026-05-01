@@ -23,6 +23,7 @@ import {
   UserType,
 } from "../../types";
 import { TouchableOpacity, View, ActivityIndicator } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Text } from "../common/Text";
 
 import { NotificationItemOptimized } from "./NotificationItemOptimized";
@@ -58,6 +59,7 @@ export function NotificationsSheet({
   const router = useSafeNavigation();
   const guard = useActionGuard();
   const dispatch = useAppDispatch();
+  const insets = useSafeAreaInsets();
   const NOTIFICATIONS_PAGE_SIZE = 30;
   const { data, isFetching, isLoading, refetch } = useGetAllNotificationsQuery({
     limit: NOTIFICATIONS_PAGE_SIZE,
@@ -543,7 +545,10 @@ export function NotificationsSheet({
         style={{ flex: 1 }}
         contentContainerStyle={{
           flexGrow: 1, // Liste boş olsa bile kaydırma davranışını korur
+          // Android nav bar / iOS home indicator: son item'ın safe-area altında kalmaması için.
+          paddingBottom: insets.bottom + 24,
         }}
+        keyboardShouldPersistTaps="handled"
         renderItem={renderItem}
         ListEmptyComponent={
           isLoading || (isFetching && (!data || data.length === 0)) ? (

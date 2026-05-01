@@ -70,6 +70,9 @@ export interface NotificationPayload {
     rating?: number; // FreeBarber için rating
     isInFavorites?: boolean; // Bu müşteri favorilerde mi?
     customerNumber?: string; // Müşteri numarası
+    /** Müşterinin randevu açtığı andaki snapshot konumu — "Haritada Göster" için */
+    latitude?: number | null;
+    longitude?: number | null;
   };
   freeBarber?: {
     userId: string;
@@ -80,6 +83,9 @@ export interface NotificationPayload {
     rating?: number;
     isInFavorites?: boolean; // Bu serbest berber favorilerde mi?
     customerNumber?: string; // Müşteri numarası
+    /** FreeBarber canlı konumu (snapshot) — harita ekranı 10sn'de bir polling ile günceller */
+    latitude?: number | null;
+    longitude?: number | null;
   };
   chair?: {
     chairId: string;

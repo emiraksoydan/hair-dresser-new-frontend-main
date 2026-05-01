@@ -1,7 +1,7 @@
 import { useEffect, useRef, useCallback } from 'react';
 import Constants from 'expo-constants';
 import * as Notifications from 'expo-notifications';
-import { AppState, NativeModules, Platform } from 'react-native';
+import { AppState, NativeModules } from 'react-native';
 import { useDispatch } from 'react-redux';
 import { useAuth } from './useAuth';
 import { useNotificationOpener } from '../context/NotificationOpenerContext';
@@ -117,6 +117,15 @@ export function useFirebaseMessaging() {
 
           // Cache'i tazele (notification list / badge)
           refreshNotifications();
+
+          // Cihaz ikonu rozeti: backend data.badge gönderiyor (APNs aps.badge ile aynı değer)
+          const badgeRaw = remoteMessage?.data?.badge;
+          if (typeof badgeRaw === 'string' && badgeRaw.length > 0) {
+            const badgeNum = parseInt(badgeRaw, 10);
+            if (!Number.isNaN(badgeNum) && badgeNum >= 0) {
+              Notifications.setBadgeCountAsync(badgeNum).catch(() => { /* ignore */ });
+            }
+          }
 
           // Foreground'daysa lokal bildirim olarak göster.
           await Notifications.scheduleNotificationAsync({
@@ -243,16 +252,30 @@ export function useFirebaseMessaging() {
     };
   }, [token, refreshNotifications]);
 
-  // iOS'ta uygulama tray badge'ini temiz tutmak için active olunca sıfırla.
+  // Uygulama active olduğunda app icon badge'ini in-app sayaçla SENKRONİZE et.
+  // Eskiden 0'a setliyorduk ama kullanıcı app'i açıp hiçbir bildirimi okumadan
+  // kapatırsa launcher 0, in-app 5 olup tutarsızlık çıkıyordu. Şimdi gerçek
+  // okunmamış toplamını (notification + chat) yansıtıyoruz; bildirimler içeride
+  // okundukça SignalR badge.updated → senkron düşer.
   useEffect(() => {
-    if (Platform.OS !== 'ios') return;
+    if (!token) return;
     const sub = AppState.addEventListener('change', (state) => {
-      if (state === 'active') {
-        Notifications.setBadgeCountAsync(0).catch(() => { /* ignore */ });
-      }
+      if (state !== 'active') return;
+      // RTK Query: cache'te varsa hemen, yoksa fetch ederek getir.
+      const promise: any = dispatch(
+        api.endpoints.getBadgeCounts.initiate(undefined, { forceRefetch: false }),
+      );
+      promise?.unwrap?.()
+        .then((resp: any) => {
+          const notif = resp?.data?.notificationUnreadCount ?? 0;
+          const chat = resp?.data?.chatUnreadCount ?? 0;
+          const total = Math.max(0, notif + chat);
+          Notifications.setBadgeCountAsync(total).catch(() => { /* ignore */ });
+        })
+        .catch(() => { /* ignore */ });
     });
     return () => {
       try { sub.remove(); } catch { /* ignore */ }
     };
-  }, []);
+  }, [token, dispatch]);
 }

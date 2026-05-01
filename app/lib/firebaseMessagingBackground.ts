@@ -65,6 +65,20 @@ if (!isExpoGo && NativeModules.RNFBAppModule) {
       messaging().setBackgroundMessageHandler(async (remoteMessage: any) => {
         try {
           const { notification, data } = remoteMessage ?? {};
+
+          // Cihaz ikonu rozeti: backend data.badge gönderiyor.
+          // iOS'ta APNs aps.badge zaten otomatik uygulanır, ama Android'de
+          // launcher badge'i için manuel set etmek gerek (cihaz/launcher destekliyorsa).
+          const badgeRaw = data?.badge;
+          if (typeof badgeRaw === 'string' && badgeRaw.length > 0) {
+            const badgeNum = parseInt(badgeRaw, 10);
+            if (!Number.isNaN(badgeNum) && badgeNum >= 0) {
+              try {
+                await Notifications.setBadgeCountAsync(badgeNum);
+              } catch { /* ignore */ }
+            }
+          }
+
           // Android background: FCM payload'ında "notification" bloğu varsa
           // sistem otomatik tray bildirimi gösterir. Data-only geldiyse biz
           // lokal bildirim gösteririz ki kullanıcı görsün.

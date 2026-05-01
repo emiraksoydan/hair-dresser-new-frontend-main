@@ -470,6 +470,12 @@ const Index = () => {
                     currentUserId = decoded.identifier || (decoded as any).sub || null;
                 } catch {}
             }
+            // FCM token'ı silmeden önce unregister et — aksi halde silinen kullanıcının
+            // device token'ı backend'de kalır (logout flow ile tutarlılık).
+            const fcmTok = getCurrentFcmToken();
+            if (fcmTok) {
+                await unregisterFcmToken({ fcmToken: fcmTok }).catch(() => {});
+            }
             const result = await deleteAccount({ otpCode: deleteAccountOtpCode }).unwrap();
             if (result.success) {
                 setDeleteAccountModalVisible(false);

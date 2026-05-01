@@ -15,6 +15,7 @@ import {
   Dimensions,
 } from "react-native";
 import { BottomSheetScrollView } from "@gorhom/bottom-sheet";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Text } from "../common/Text";
 import { ActivityIndicator, Icon } from "react-native-paper";
 import { useLanguage } from "../../hook/useLanguage";
@@ -98,6 +99,7 @@ const StoreBookingContent = ({
   disableHeaderImageSwipe = false,
 }: Props) => {
   const { colors, isDark } = useTheme();
+  const insets = useSafeAreaInsets();
   // store header info
   const { data: storeData } = useGetStoreForUsersQuery(storeId, {
     skip: !storeId,
@@ -353,7 +355,12 @@ const StoreBookingContent = ({
     <ScrollContainer
       style={isBottomSheet ? { flex: 1 } : undefined}
       nestedScrollEnabled
-      contentContainerStyle={{ paddingBottom: isBottomSheet ? 220 : 140 }}
+      keyboardShouldPersistTaps="handled"
+      // Android nav bar / iOS home indicator: alttaki "Randevu Al" butonu
+      // safe area altında kalmasın diye dinamik inset eklendi.
+      contentContainerStyle={{
+        paddingBottom: (isBottomSheet ? 220 : 140) + insets.bottom,
+      }}
       showsVerticalScrollIndicator={false}
       stickyHeaderIndices={isBottomSheet ? undefined : [0]}
     >

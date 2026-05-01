@@ -555,6 +555,10 @@ export const BaseTabLayout: React.FC<BaseTabLayoutProps> = ({
         snapPoints={notificationsSheet.snapPoints}
         enableOverDrag={notificationsSheet.enableOverDrag}
         enablePanDownToClose={notificationsSheet.enablePanDownToClose}
+        // İçerik (BottomSheetFlatList) kendi scroll'unu yönetebilsin diye
+        // dış container'ın panning gesture'ını kapatıyoruz. Aksi halde Android'de
+        // liste kaydırma denemesi sheet'i drag ediyor ve kaydırma çalışmıyor.
+        enableContentPanningGesture={false}
         onChange={(index) => { notificationsSheet.handleChange(index); setNotiSheetOpen(index >= 0); }}
         onDismiss={() => setNotiSheetOpen(false)}
       >

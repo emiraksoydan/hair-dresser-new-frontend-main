@@ -26,7 +26,8 @@
       "Bash(sed \"s/ =>$//g\")",
       "Bash(sed 's/:$//')",
       "Bash(ls -la \"/c/Users/yazilimciemir/Desktop/Calismalar/hair-dresser-new-frontend/app/\\(screens\\)/\")",
-      "Bash(find \"/c/Users/yazilimciemir/Desktop/Calismalar/hair-dresser-new-frontend/app/\\(barberstoretabs\\)\\(panel\\)\" -type f)"
+      "Bash(find \"/c/Users/yazilimciemir/Desktop/Calismalar/hair-dresser-new-frontend/app/\\(barberstoretabs\\)\\(panel\\)\" -type f)",
+      "Bash(find C:UsersyazilimciemirDesktophair-dresser-new-frontend-main -type f \\\\\\(-name *appointment* -o -name *randevu* \\\\\\))"
     ],
     "additionalDirectories": [
       "C:\\Users\\yazilimciemir\\source\\repos\\HairDresser\\Business\\Concrete",

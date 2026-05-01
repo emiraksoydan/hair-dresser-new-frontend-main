@@ -17,6 +17,7 @@ import {
   Platform,
 } from "react-native";
 import { BottomSheetScrollView, BottomSheetFlatList } from "@gorhom/bottom-sheet";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Text } from "../common/Text";
 import { useNavigation } from "@react-navigation/native";
 import { useSafeNavigation } from "../../hook/useSafeNavigation";
@@ -98,6 +99,9 @@ const FreeBarberBookingContent = ({
   const router = useSafeNavigation();
   const navigation = useNavigation();
   const guard = useActionGuard();
+  const insets = useSafeAreaInsets();
+  // Mod (harita ↔ liste) geçişinde scroll position reset için ref.
+  const storesListRef = useRef<FlatList<any>>(null);
 
   const handleBookingBack = useCallback(() => {
     if (navigation.canGoBack()) {
@@ -436,8 +440,13 @@ const FreeBarberBookingContent = ({
       <ScrollContainer
         style={isBottomSheet ? { flex: 1 } : undefined}
         nestedScrollEnabled
+        keyboardShouldPersistTaps="handled"
         className={isAddStoreMode ? "p-4 gap-3" : undefined}
-        contentContainerStyle={{ paddingBottom: isBottomSheet ? 220 : 140 }}
+        // Android nav bar / iOS home indicator: alttaki "Randevu Al" butonu
+        // safe area altında kalmasın diye dinamik inset eklendi.
+        contentContainerStyle={{
+          paddingBottom: (isBottomSheet ? 220 : 140) + insets.bottom,
+        }}
         stickyHeaderIndices={
           !isAddStoreMode && !isBottomSheet ? [0] : undefined
         }
@@ -1299,17 +1308,25 @@ const FreeBarberBookingContent = ({
                     </View>
                   ) : (
                     <FlatList
-                      key="storesList"
+                      ref={storesListRef}
+                      // KEY: horizontal toggle değiştiğinde FlatList'i remount eder, böylece
+                      // gorhom/bottom-sheet'in scrollable registry'si yeni eksen ile yeniden bağlanır
+                      // ve liste başa dönmüş olur (scroll-to-top istenen davranış).
+                      key={`storesList-${expanded ? "v" : "h"}`}
                       data={stores}
                       keyExtractor={(item) => item.id}
                       renderItem={renderStoreItem}
                       horizontal={!expanded}
                       nestedScrollEnabled
+                      keyboardShouldPersistTaps="handled"
                       showsHorizontalScrollIndicator={false}
                       contentContainerStyle={{
                         gap: 12,
                         paddingTop: hasStores ? 8 : 0,
                         paddingHorizontal: 16,
+                        // Liste modunda alt kısım: sticky harita butonu (h-14 + bottom-6 = ~80) +
+                        // safe area + nefes payı, böylece son item buton altında kalmaz.
+                        paddingBottom: expanded ? insets.bottom + 96 : 8,
                       }}
                       ListEmptyComponent={
                         <EmptyState

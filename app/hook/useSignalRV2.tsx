@@ -1,5 +1,6 @@
 import "react-native-url-polyfill/auto";
 import { useEffect, useRef, useCallback } from "react";
+import * as Notifications from "expo-notifications";
 import * as SignalR from "@microsoft/signalr";
 import { useAppDispatch, useAppSelector } from "../store/hook";
 import { api } from "../store/api";
@@ -333,6 +334,7 @@ export const useSignalRV2 = () => {
 
     conn.on("badge.updated", (counts?: { notificationUnreadCount?: number; chatUnreadCount?: number; threadUnreadCounts?: Record<string, number> }) => {
       if (counts && (counts.notificationUnreadCount !== undefined || counts.chatUnreadCount !== undefined || counts.threadUnreadCounts !== undefined)) {
+        let osBadgeTotal: number | null = null;
         dispatch(
           api.util.updateQueryData("getBadgeCounts", undefined, (draft) => {
             if (!draft?.data) return;
@@ -345,8 +347,20 @@ export const useSignalRV2 = () => {
                 ...counts.threadUnreadCounts,
               };
             }
+            // OS launcher badge için: cache'in BİRLEŞİK son hâlinden hesapla.
+            // Event sadece notif veya sadece chat gönderiyor olabilir — diğerini
+            // mutasyon sonrası draft'tan al ki "yarım resim" badge'i bozmasın.
+            osBadgeTotal = Math.max(
+              0,
+              (draft.data.notificationUnreadCount ?? 0) + (draft.data.chatUnreadCount ?? 0),
+            );
           }),
         );
+
+        // Cache patch'i tamamlandıktan sonra OS rozetini senkronize et.
+        if (osBadgeTotal !== null) {
+          Notifications.setBadgeCountAsync(osBadgeTotal).catch(() => { /* ignore */ });
+        }
       } else {
         dispatch(api.util.invalidateTags([{ type: "Notification", id: "LIST" }, { type: "Chat", id: "LIST" }, { type: "Appointment", id: "LIST" }]));
       }

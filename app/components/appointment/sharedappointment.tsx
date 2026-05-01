@@ -585,33 +585,61 @@ export default function SharedAppointmentScreen() {
     setCancelModalAppointmentId(id);
   }, []);
 
+  // ÖNEMLİ: Modal'ı kapatırken `isCancelling` guard'ı KALDIRILDI.
+  // Eski kodda kullanıcı loading sırasında modal'ı kapatamıyordu — istek hang ederse
+  // (yavaş backend, bağlantı kopması) tüm UI bloke oluyordu. Artık kullanıcı her an
+  // kaçabilir; istek arka planda kendi sonlanır (mutation cache'i sonucu yine işler).
   const closeCancelModal = useCallback(() => {
-    if (isCancelling) return;
     Keyboard.dismiss();
     setCancelModalAppointmentId(null);
     setCancelReasonDraft("");
-  }, [isCancelling]);
+  }, []);
 
   const submitCancel = useCallback(() => {
     const id = cancelModalAppointmentId;
     if (!id) return;
     const trimmed = cancelReasonDraft.trim();
+
+    // İstemci safety timeout: backend 30sn içinde dönmezse hata gösterip modal'ı kapat.
+    // Bu sayede "spinner sonsuza dek" durumu olmaz; kullanıcı yeniden deneyebilir.
+    const CANCEL_TIMEOUT_MS = 30_000;
+
     void guard(async () => {
-      const cancelResult = await cancelAppointment({
-        appointmentId: id,
-        cancellationReason: trimmed.length > 0 ? trimmed : undefined,
-      });
-      if ("error" in cancelResult) {
+      try {
+        const mutationPromise = cancelAppointment({
+          appointmentId: id,
+          cancellationReason: trimmed.length > 0 ? trimmed : undefined,
+        }).unwrap();
+
+        const timeoutPromise = new Promise<never>((_, reject) =>
+          setTimeout(
+            () => reject(new Error("CANCEL_TIMEOUT")),
+            CANCEL_TIMEOUT_MS,
+          ),
+        );
+
+        await Promise.race([mutationPromise, timeoutPromise]);
+
+        // Başarılı — modal'ı kapat ve success göster
+        Keyboard.dismiss();
+        setCancelModalAppointmentId(null);
+        setCancelReasonDraft("");
+        alertSuccess(t("common.success"), t("appointment.alerts.cancelled"));
+      } catch (err: any) {
         const errorMessage =
-          (cancelResult.error as any)?.data?.message ||
-          t("appointment.alerts.cancelFailed");
+          err?.message === "CANCEL_TIMEOUT"
+            ? t("common.requestTimeout") ||
+              "İşlem çok uzun sürdü. Lütfen daha sonra tekrar deneyin."
+            : err?.data?.message || t("appointment.alerts.cancelFailed");
+
+        // KRİTİK: Hata durumunda da modal'ı kapat — user'ı modalda kilitli bırakma.
+        // (Önceki kod sadece alert gösterip modal'ı açık bırakıyordu → kullanıcı tekrar
+        // submit edemezken Vazgeç de loading guard yüzünden çalışmıyordu = freeze.)
+        Keyboard.dismiss();
+        setCancelModalAppointmentId(null);
+        setCancelReasonDraft("");
         alertError(t("common.error"), errorMessage);
-        return;
       }
-      Keyboard.dismiss();
-      setCancelModalAppointmentId(null);
-      setCancelReasonDraft("");
-      alertSuccess(t("common.success"), t("appointment.alerts.cancelled"));
     });
   }, [
     cancelModalAppointmentId,
@@ -623,20 +651,46 @@ export default function SharedAppointmentScreen() {
     alertSuccess,
   ]);
 
+  // Tüm aksiyon mutation'larında ortak timeout: 30 sn içinde backend dönmezse
+  // kullanıcıya hata göster + UI bloke kalmasın. Olası sebepler: ağ kopması,
+  // SignalR/badge hesaplaması fazla sürmesi, EF transaction lock vb.
+  const ACTION_TIMEOUT_MS = 30_000;
+  const runWithTimeout = useCallback(
+    async <T,>(p: Promise<T>, label: string): Promise<T> => {
+      let timer: ReturnType<typeof setTimeout> | null = null;
+      try {
+        return await Promise.race([
+          p,
+          new Promise<T>((_, reject) => {
+            timer = setTimeout(
+              () => reject(new Error(`${label}_TIMEOUT`)),
+              ACTION_TIMEOUT_MS,
+            );
+          }),
+        ]);
+      } finally {
+        if (timer) clearTimeout(timer);
+      }
+    },
+    [],
+  );
+
   const handleComplete = async (id: string) => {
     confirm(
       t("appointment.alerts.completionTitle"),
       t("appointment.alerts.confirmCompletion"),
       () => guard(async () => {
-        const completeResult = await completeAppointment(id);
-        if ("error" in completeResult) {
+        try {
+          await runWithTimeout(completeAppointment(id).unwrap(), "COMPLETE");
+          alertSuccess(t("common.success"), t("appointment.alerts.completed"));
+        } catch (err: any) {
           const errorMessage =
-            (completeResult.error as any)?.data?.message ||
-            t("appointment.alerts.completeFailed");
+            err?.message === "COMPLETE_TIMEOUT"
+              ? t("common.requestTimeout") ||
+                "İşlem çok uzun sürdü. Lütfen tekrar deneyin."
+              : err?.data?.message || t("appointment.alerts.completeFailed");
           alertError(t("common.error"), errorMessage);
-          return;
         }
-        alertSuccess(t("common.success"), t("appointment.alerts.completed"));
       }),
       undefined,
       t("appointment.actions.complete"),
@@ -650,22 +704,27 @@ export default function SharedAppointmentScreen() {
         t("appointment.alerts.deleteTitle"),
         t("appointment.alerts.confirmDelete"),
         () => guard(async () => {
-          const deleteResult = await deleteAppointment(appointmentId);
-          if ("error" in deleteResult) {
+          try {
+            await runWithTimeout(
+              deleteAppointment(appointmentId).unwrap(),
+              "DELETE",
+            );
+            alertSuccess(t("common.success"), t("appointment.alerts.deleted"));
+          } catch (err: any) {
             const errorMessage =
-              (deleteResult.error as any)?.data?.message ||
-              t("appointment.alerts.deleteFailed");
+              err?.message === "DELETE_TIMEOUT"
+                ? t("common.requestTimeout") ||
+                  "İşlem çok uzun sürdü. Lütfen tekrar deneyin."
+                : err?.data?.message || t("appointment.alerts.deleteFailed");
             alertError(t("common.error"), errorMessage);
-            return;
           }
-          alertSuccess(t("common.success"), t("appointment.alerts.deleted"));
         }),
         undefined,
         t("appointment.actions.delete"),
         t("common.cancel"),
       );
     },
-    [deleteAppointment, t, confirm, alertError, alertSuccess, guard],
+    [deleteAppointment, t, confirm, alertError, alertSuccess, guard, runWithTimeout],
   );
 
   const handleDeleteAll = useCallback(async () => {
