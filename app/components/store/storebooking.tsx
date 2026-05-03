@@ -406,7 +406,7 @@ const StoreBookingContent = ({
                 </View>
 
                 <View className="flex-row items-center mt-2 gap-1">
-                  <Icon size={20} color="#FFA500" source="star" />
+                  <Icon size={22} color="#FFA500" source="star" />
                   <Text
                     className="font-century-gothic text-white"
                     style={{ fontSize: 15 }}
@@ -645,11 +645,11 @@ const StoreBookingContent = ({
                         {rating != null && (
                           <View className="flex-row items-center gap-1 mt-1">
                             <Icon
-                              size={12}
+                              size={15}
                               source="star"
                               color={isSelected ? "#fde047" : "#FFA500"}
                             />
-                            <Text className={`text-xs ${isSelected ? "text-white" : "text-gray-300"}`}>
+                            <Text className={`text-sm ${isSelected ? "text-white" : "text-gray-300"}`}>
                               {rating}
                             </Text>
                           </View>

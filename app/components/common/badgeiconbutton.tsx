@@ -1,6 +1,6 @@
 import React, { useEffect } from "react";
-import { View } from "react-native";
-import { Badge, IconButton } from "react-native-paper";
+import { View, Text, Platform, StyleSheet } from "react-native";
+import { IconButton } from "react-native-paper";
 import { useTheme } from "../../hook/useTheme";
 import Animated, {
     useAnimatedStyle,
@@ -82,21 +82,53 @@ export function BadgeIconButton({
             </Animated.View>
 
             {show && (
-                <Badge
-                    style={{
-                        position: "absolute",
-                        top: -2, // Dairenin biraz dışına/kenarına taşması için
-                        right: -2,
-                        backgroundColor: badgeColor,
-                        fontSize: 10,
-                        fontWeight: 'bold',
-                        lineHeight: 14,
-                    }}
-                    size={16}
+                <View
+                    pointerEvents="none"
+                    style={[
+                        styles.countBubble,
+                        {
+                            backgroundColor: badgeColor,
+                            top: Platform.OS === "android" ? -6 : -2,
+                            right: Platform.OS === "android" ? -6 : -2,
+                        },
+                        text.length > 2 ? styles.countBubbleWide : null,
+                    ]}
                 >
-                    {text}
-                </Badge>
+                    <Text
+                        style={styles.countText}
+                        includeFontPadding={Platform.OS === "android" ? false : undefined}
+                    >
+                        {text}
+                    </Text>
+                </View>
             )}
         </View>
     );
 }
+
+/** Paper Badge Android'de metni aşağıda bırakıyordu; küçük rozet için RN görünümü kullanılıyor. */
+const styles = StyleSheet.create({
+    countBubble: {
+        position: "absolute",
+        minWidth: 16,
+        height: 16,
+        borderRadius: 8,
+        paddingHorizontal: 3,
+        alignItems: "center",
+        justifyContent: "center",
+    },
+    countBubbleWide: {
+        minWidth: 22,
+        paddingHorizontal: 5,
+        borderRadius: 10,
+    },
+    countText: {
+        color: "#ffffff",
+        fontSize: 10,
+        fontWeight: "700",
+        lineHeight: Platform.OS === "android" ? 12 : 14,
+        ...Platform.select({
+            android: { textAlignVertical: "center" },
+        }),
+    },
+});

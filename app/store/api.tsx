@@ -24,6 +24,7 @@ import { FilterRequestDto, SavedFilterGetDto, SavedFilterCreateDto, SavedFilterU
 import { transformArrayResponse, transformObjectResponse, transformBooleanResponse, transformApiResponse } from '../utils/api/transform-response';
 import { lastMessagePreviewFromChatMessage, plainMessageSnapshot } from '../utils/chat/lastMessagePreview';
 import { DEFAULT_FILTER_RADIUS_KM } from '../constants/filterDefaults';
+import { shouldKeepNotificationUnreadForMarkAll } from '../utils/notificationMarkAllReadExclusion';
 
 // Cache duration constants (in seconds)
 const CACHE_DURATIONS = {
@@ -35,6 +36,51 @@ const CACHE_DURATIONS = {
     REAL_TIME: 5,     // 5 seconds - Nearby lists
 } as const;
 
+function sameFavoriteId(a?: string | null, b?: string | null): boolean {
+    if (a == null || b == null) return false;
+    return String(a).toLowerCase() === String(b).toLowerCase();
+}
+
+/**
+ * Randevu listesi önbelleğindeki favori bayrağı — tüm `getAllAppointmentByFilter` slot'ları taranır;
+ * biri bile true derse true (çoklu filtre / sayfa slot'larında tutarlılık).
+ * Kart ekranında `isFavorite` refetch yarışından ÖNCE bu kullanılmalı.
+ */
+function readFavoriteFromAppointmentCaches(state: unknown, targetId: string): boolean | undefined {
+    const apiState = (state as { api?: { queries?: Record<string, any> } })?.api;
+    if (!apiState?.queries) return undefined;
+
+    let referenced = false;
+    let anyTrue = false;
+
+    for (const queryKey of Object.keys(apiState.queries)) {
+        const qs = apiState.queries[queryKey];
+        if (qs?.endpointName !== 'getAllAppointmentByFilter' || !Array.isArray(qs.data)) continue;
+        for (const apt of qs.data as Array<{
+            barberStoreId?: string;
+            freeBarberId?: string;
+            customerUserId?: string;
+            isStoreFavorite?: boolean;
+            isFreeBarberFavorite?: boolean;
+            isCustomerFavorite?: boolean;
+        }>) {
+            if (!apt) continue;
+            if (sameFavoriteId(apt.barberStoreId, targetId)) {
+                referenced = true;
+                if (apt.isStoreFavorite === true) anyTrue = true;
+            } else if (sameFavoriteId(apt.freeBarberId, targetId)) {
+                referenced = true;
+                if (apt.isFreeBarberFavorite === true) anyTrue = true;
+            } else if (sameFavoriteId(apt.customerUserId, targetId)) {
+                referenced = true;
+                if (apt.isCustomerFavorite === true) anyTrue = true;
+            }
+        }
+    }
+
+    return referenced ? anyTrue : undefined;
+}
+
 /**
  * isFavorite sorgusu yoksa (kartlar skipQuery ile) bile liste/detay önbelleğinden
  * mevcut favori durumunu okur — optimistic toggle yönünü doğru hesaplamak için.
@@ -43,9 +89,14 @@ function getCachedFavoriteStateForTarget(state: unknown, targetId: string): bool
     const apiState = (state as { api?: { queries?: Record<string, any> } })?.api;
     if (!apiState?.queries) return undefined;
 
+    const fromAppointments = readFavoriteFromAppointmentCaches(state, targetId);
+    if (fromAppointments !== undefined) {
+        return fromAppointments;
+    }
+
     for (const queryKey of Object.keys(apiState.queries)) {
         const qs = apiState.queries[queryKey];
-        if (qs?.endpointName === 'isFavorite' && qs?.originalArgs === targetId && qs.data !== undefined) {
+        if (qs?.endpointName === 'isFavorite' && sameFavoriteId(qs?.originalArgs as string, targetId) && qs.data !== undefined) {
             return qs.data as boolean;
         }
     }
@@ -61,10 +112,8 @@ function getCachedFavoriteStateForTarget(state: unknown, targetId: string): bool
         if (!qs?.data || !listEndpoints.has(qs.endpointName)) continue;
         const data = qs.data;
         if (Array.isArray(data)) {
-            const item = data.find((x: { id?: string }) => x?.id === targetId);
-            if (item && typeof (item as { isFavorited?: boolean }).isFavorited === 'boolean') {
-                return (item as { isFavorited: boolean }).isFavorited;
-            }
+            const item = data.find((x: { id?: string }) => sameFavoriteId(x?.id, targetId));
+            if (item) return !!(item as { isFavorited?: boolean }).isFavorited;
         }
     }
 
@@ -79,32 +128,7 @@ function getCachedFavoriteStateForTarget(state: unknown, targetId: string): bool
         const qs = apiState.queries[queryKey];
         if (!qs?.data || !detailEndpoints.has(qs.endpointName)) continue;
         const d = qs.data as { id?: string; isFavorited?: boolean };
-        if (d?.id === targetId && typeof d.isFavorited === 'boolean') return d.isFavorited;
-    }
-
-    /** Randevu kartları (isFavorite sorgusu olmadan) — beğeni durumunu aynı hedef ID ile oku */
-    for (const queryKey of Object.keys(apiState.queries)) {
-        const qs = apiState.queries[queryKey];
-        if (qs?.endpointName !== 'getAllAppointmentByFilter' || !Array.isArray(qs.data)) continue;
-        for (const apt of qs.data as Array<{
-            barberStoreId?: string;
-            freeBarberId?: string;
-            customerUserId?: string;
-            isStoreFavorite?: boolean;
-            isFreeBarberFavorite?: boolean;
-            isCustomerFavorite?: boolean;
-        }>) {
-            if (!apt) continue;
-            if (apt.barberStoreId === targetId && typeof apt.isStoreFavorite === 'boolean') {
-                return apt.isStoreFavorite;
-            }
-            if (apt.freeBarberId === targetId && typeof apt.isFreeBarberFavorite === 'boolean') {
-                return apt.isFreeBarberFavorite;
-            }
-            if (apt.customerUserId === targetId && typeof apt.isCustomerFavorite === 'boolean') {
-                return apt.isCustomerFavorite;
-            }
-        }
+        if (sameFavoriteId(d?.id, targetId)) return !!d.isFavorited;
     }
 
     /** Müşteri keşif POST cevabı (RTK cache) — useNearbyDiscovery ile aynı payload */
@@ -113,10 +137,10 @@ function getCachedFavoriteStateForTarget(state: unknown, targetId: string): bool
         if (qs?.endpointName !== 'getDiscoveryFiltered' || !qs?.data) continue;
         const d = qs.data as { stores?: { id: string; isFavorited?: boolean }[]; freeBarbers?: { id: string; isFavorited?: boolean }[] };
         for (const s of d.stores ?? []) {
-            if (s.id === targetId && typeof s.isFavorited === 'boolean') return s.isFavorited;
+            if (sameFavoriteId(s.id, targetId)) return !!s.isFavorited;
         }
         for (const f of d.freeBarbers ?? []) {
-            if (f.id === targetId && typeof f.isFavorited === 'boolean') return f.isFavorited;
+            if (sameFavoriteId(f.id, targetId)) return !!f.isFavorited;
         }
     }
 
@@ -132,7 +156,7 @@ function getCachedFavoriteStateForTarget(state: unknown, targetId: string): bool
             const p = thread.participants[0];
             const threadTargetId =
                 p.userType === UserType.BarberStore ? (thread.favoriteStoreId ?? p.userId) : p.userId;
-            if (threadTargetId !== targetId) continue;
+            if (!sameFavoriteId(threadTargetId, targetId)) continue;
             return !thread.isRestrictedForCurrentUser;
         }
     }
@@ -168,6 +192,19 @@ function getMeUserIdFromRtkState(state: { api?: { queries?: Record<string, any> 
         }
     }
     return undefined;
+}
+
+function getMeUserTypeFromRtkState(state: { api?: { queries?: Record<string, any> } }): UserType | null {
+    const queries = state?.api?.queries;
+    if (!queries) return null;
+    for (const k of Object.keys(queries)) {
+        const q = queries[k];
+        if (q?.endpointName === 'getMe' && q?.data) {
+            const inner = (q.data as ApiResponse<UserProfileDto>)?.data;
+            if (inner != null && typeof inner.userType === 'number') return inner.userType;
+        }
+    }
+    return null;
 }
 
 type FavoriteEntityForCache = {
@@ -729,16 +766,61 @@ export const api = createApi({
 
         deleteAppointment: builder.mutation<ApiResponse<boolean>, string>({
             query: (id) => ({ url: `Appointment/${id}`, method: 'DELETE' }),
+            // OPTIMISTIC DELETE: kullanıcıya anlık feedback — backend yanıtını beklemeden listeden çıkar
+            async onQueryStarted(id, { dispatch, queryFulfilled, getState }) {
+                const patches: { undo: () => void }[] = [];
+                const queries = api.util.selectInvalidatedBy(getState(), [
+                    { type: 'Appointment' as const, id: 'LIST' },
+                ]);
+                for (const q of queries ?? []) {
+                    if (q.endpointName !== 'getAllAppointments' && q.endpointName !== 'getAppointmentsByFilter') continue;
+                    const patch = dispatch(
+                        api.util.updateQueryData(q.endpointName as any, q.originalArgs as any, (draft: any) => {
+                            if (Array.isArray(draft)) {
+                                const idx = draft.findIndex((a: any) => a.id === id);
+                                if (idx !== -1) draft.splice(idx, 1);
+                            }
+                        }),
+                    );
+                    patches.push(patch);
+                }
+                try {
+                    await queryFulfilled;
+                } catch {
+                    patches.forEach((p) => p.undo());
+                }
+            },
             invalidatesTags: (result, error, id) => [
                 { type: 'Appointment', id },
-                { type: 'Appointment', id: 'LIST' },
+                // LIST invalidation kaldırıldı — optimistic update zaten yapıldı.
+                // Refetch sadece error durumunda undo() ile devreye girer.
             ],
         }),
         deleteAllAppointments: builder.mutation<ApiResponse<boolean>, void>({
             query: () => ({ url: 'Appointment/all', method: 'DELETE' }),
-            invalidatesTags: [
-                { type: 'Appointment', id: 'LIST' },
-            ],
+            // OPTIMISTIC: tümünü anlık temizle, hata olursa refetch ile geri al
+            async onQueryStarted(_, { dispatch, queryFulfilled, getState }) {
+                const patches: { undo: () => void }[] = [];
+                const queries = api.util.selectInvalidatedBy(getState(), [
+                    { type: 'Appointment' as const, id: 'LIST' },
+                ]);
+                for (const q of queries ?? []) {
+                    if (q.endpointName !== 'getAllAppointments' && q.endpointName !== 'getAppointmentsByFilter') continue;
+                    const patch = dispatch(
+                        api.util.updateQueryData(q.endpointName as any, q.originalArgs as any, (draft: any) => {
+                            if (Array.isArray(draft)) draft.length = 0;
+                        }),
+                    );
+                    patches.push(patch);
+                }
+                try {
+                    await queryFulfilled;
+                    // Bazı randevular silinemeyebilir (aktif Pending/Approved) — refetch
+                    dispatch(api.util.invalidateTags([{ type: 'Appointment' as const, id: 'LIST' }]));
+                } catch {
+                    patches.forEach((p) => p.undo());
+                }
+            },
         }),
 
         // --- WORKING HOURS API ---
@@ -791,37 +873,145 @@ export const api = createApi({
         }),
         markNotificationRead: builder.mutation<void, string>({
             query: (id) => ({ url: `Notification/read/${id}`, method: 'POST' }),
-            async onQueryStarted(id, { dispatch, queryFulfilled }) {
-                const listPatch = dispatch(
-                    api.util.updateQueryData('getAllNotifications', undefined, (draft) => {
-                        const notification = draft.find((n) => n.id === id);
-                        if (notification) { notification.isRead = true; }
-                    }),
-                );
+            async onQueryStarted(id, { dispatch, queryFulfilled, getState }) {
+                const patches: { undo: () => void }[] = [];
+                const queries = api.util.selectInvalidatedBy(getState(), [
+                    { type: 'Notification' as const, id: 'LIST' },
+                ]);
+                let flippedUnreadToRead = false;
+                for (const q of queries ?? []) {
+                    if (q.endpointName !== 'getAllNotifications') continue;
+                    const patch = dispatch(
+                        api.util.updateQueryData('getAllNotifications', q.originalArgs as any, (draft: any) => {
+                            if (!Array.isArray(draft)) return;
+                            const notification = draft.find((n: any) => n.id === id);
+                            if (notification && !notification.isRead) {
+                                notification.isRead = true;
+                                flippedUnreadToRead = true;
+                            }
+                        }),
+                    );
+                    patches.push(patch);
+                }
                 const badgePatch = dispatch(
-                    api.util.updateQueryData('getBadgeCounts', undefined, (draft) => {
-                        if (draft?.data?.notificationUnreadCount !== undefined) {
-                            draft.data.notificationUnreadCount = Math.max(0, draft.data.notificationUnreadCount - 1);
+                    api.util.updateQueryData('getBadgeCounts', undefined, (draft: any) => {
+                        if (
+                            flippedUnreadToRead &&
+                            draft?.data?.notificationUnreadCount !== undefined
+                        ) {
+                            draft.data.notificationUnreadCount = Math.max(
+                                0,
+                                draft.data.notificationUnreadCount - 1,
+                            );
                         }
                     }),
                 );
-                try { await queryFulfilled; }
-                catch { listPatch.undo(); badgePatch.undo(); }
+                patches.push(badgePatch);
+                try {
+                    await queryFulfilled;
+                } catch {
+                    patches.forEach((p) => p.undo());
+                }
+            },
+        }),
+        markAllNotificationsRead: builder.mutation<ApiResponse<boolean>, void>({
+            query: () => ({ url: 'Notification/read-all', method: 'POST' }),
+            async onQueryStarted(_, { dispatch, queryFulfilled, getState }) {
+                const patches: { undo: () => void }[] = [];
+                const userType = getMeUserTypeFromRtkState(getState() as { api?: { queries?: Record<string, any> } });
+                const queries = api.util.selectInvalidatedBy(getState(), [
+                    { type: 'Notification' as const, id: 'LIST' },
+                ]);
+                let markedCount = 0;
+                for (const q of queries ?? []) {
+                    if (q.endpointName !== 'getAllNotifications') continue;
+                    const patch = dispatch(
+                        api.util.updateQueryData('getAllNotifications', q.originalArgs as any, (draft: any) => {
+                            if (!Array.isArray(draft)) return;
+                            const ts = Date.now();
+                            for (const n of draft) {
+                                if (!n || n.isRead) continue;
+                                if (shouldKeepNotificationUnreadForMarkAll(n as NotificationDto, userType)) continue;
+                                n.isRead = true;
+                                n._updatedAt = ts;
+                                markedCount += 1;
+                            }
+                        }),
+                    );
+                    patches.push(patch);
+                }
+                const badgePatch = dispatch(
+                    api.util.updateQueryData('getBadgeCounts', undefined, (draft: any) => {
+                        if (draft?.data?.notificationUnreadCount !== undefined) {
+                            draft.data.notificationUnreadCount = Math.max(
+                                0,
+                                draft.data.notificationUnreadCount - markedCount,
+                            );
+                        }
+                    }),
+                );
+                patches.push(badgePatch);
+                try {
+                    await queryFulfilled;
+                } catch {
+                    patches.forEach((p) => p.undo());
+                }
             },
         }),
         deleteNotification: builder.mutation<ApiResponse<boolean>, string>({
             query: (id) => ({ url: `Notification/${id}`, method: 'DELETE' }),
-            // Server-confirmed delete: remove only after successful response
-            invalidatesTags: [{ type: 'Notification' as const, id: 'LIST' }],
+            // OPTIMISTIC DELETE: kullanıcı silmeye basar basmaz UI'dan kaldır,
+            // hata olursa geri yükle. invalidatesTags refetch yerine cache patch.
+            async onQueryStarted(id, { dispatch, queryFulfilled, getState }) {
+                const patches: { undo: () => void }[] = [];
+                // getAllNotifications query'sinin tüm cache slot'larını gez ve item'ı çıkar
+                const queries = api.util.selectInvalidatedBy(getState(), [
+                    { type: 'Notification' as const, id: 'LIST' },
+                ]);
+                for (const q of queries ?? []) {
+                    if (q.endpointName !== 'getAllNotifications') continue;
+                    const patch = dispatch(
+                        api.util.updateQueryData('getAllNotifications', q.originalArgs as any, (draft: any) => {
+                            if (Array.isArray(draft)) {
+                                const idx = draft.findIndex((n: any) => n.id === id);
+                                if (idx !== -1) draft.splice(idx, 1);
+                            }
+                        }),
+                    );
+                    patches.push(patch);
+                }
+                try {
+                    await queryFulfilled;
+                } catch {
+                    // Backend hata verdi — UI'ı geri yükle
+                    patches.forEach((p) => p.undo());
+                }
+            },
         }),
         deleteAllNotifications: builder.mutation<ApiResponse<boolean>, void>({
             query: () => ({ url: 'Notification/all', method: 'DELETE' }),
-            async onQueryStarted(_, { dispatch, queryFulfilled }) {
+            // OPTIMISTIC: tümünü hemen UI'dan boşalt; hata olursa invalidate ile gerçek listeyi getir
+            async onQueryStarted(_, { dispatch, queryFulfilled, getState }) {
+                const patches: { undo: () => void }[] = [];
+                const queries = api.util.selectInvalidatedBy(getState(), [
+                    { type: 'Notification' as const, id: 'LIST' },
+                ]);
+                for (const q of queries ?? []) {
+                    if (q.endpointName !== 'getAllNotifications') continue;
+                    const patch = dispatch(
+                        api.util.updateQueryData('getAllNotifications', q.originalArgs as any, (draft: any) => {
+                            if (Array.isArray(draft)) draft.length = 0;
+                        }),
+                    );
+                    patches.push(patch);
+                }
                 try {
                     await queryFulfilled;
-                    // Backend bazı bildirimleri silmeyebilir (aktif randevu vs), o yüzden refetch
+                    // Backend bazı bildirimleri silmeyebilir (aktif randevu vs); refetch ile gerçek durumu al
                     dispatch(api.util.invalidateTags([{ type: 'Notification' as const, id: 'LIST' }]));
-                } catch { /* hata durumunda listeyi bozmayalım */ }
+                } catch {
+                    patches.forEach((p) => p.undo());
+                }
             },
         }),
 
@@ -1444,9 +1634,9 @@ export const api = createApi({
 
                             const hasMatch = queryState.data.some(
                                 (apt: any) =>
-                                    apt.customerUserId === targetId ||
-                                    apt.barberStoreId === targetId ||
-                                    apt.freeBarberId === targetId
+                                    sameFavoriteId(apt.customerUserId, targetId) ||
+                                    sameFavoriteId(apt.barberStoreId, targetId) ||
+                                    sameFavoriteId(apt.freeBarberId, targetId)
                             );
                             if (!hasMatch) return;
 
@@ -1457,13 +1647,13 @@ export const api = createApi({
                                     (draft) => {
                                         if (!draft || !Array.isArray(draft)) return;
                                         draft.forEach((apt: any) => {
-                                            if (apt.customerUserId === targetId) {
+                                            if (sameFavoriteId(apt.customerUserId, targetId)) {
                                                 apt.isCustomerFavorite = isFavoriteVal;
                                             }
-                                            if (apt.barberStoreId === targetId) {
+                                            if (sameFavoriteId(apt.barberStoreId, targetId)) {
                                                 apt.isStoreFavorite = isFavoriteVal;
                                             }
-                                            if (apt.freeBarberId === targetId) {
+                                            if (sameFavoriteId(apt.freeBarberId, targetId)) {
                                                 apt.isFreeBarberFavorite = isFavoriteVal;
                                             }
                                         });
@@ -1739,7 +1929,8 @@ export const api = createApi({
                 { type: 'Chat' as const, id: 'MESSAGES' },
                 'MineFreeBarberPanel',
                 'MineStores',
-                { type: 'IsFavorite', id: arg.targetId },
+                // IsFavorite invalidate → refetch sırasında `getCachedFavoriteStateForTarget` yanlış okuyup
+                // ardışık toggle yönünü bozuyordu; randevu kartı zaten onQueryStarted + fulfilled ile patch'leniyor.
                 { type: 'StoreForUsers', id: arg.targetId },
                 { type: 'FreeBarberForUsers', id: arg.targetId },
                 { type: 'GetStoreById', id: arg.targetId },
@@ -2376,6 +2567,7 @@ export const {
     useUpdateFreeBarberAvailabilityMutation,
     useGetAllNotificationsQuery,
     useMarkNotificationReadMutation,
+    useMarkAllNotificationsReadMutation,
     useDeleteNotificationMutation,
     useDeleteAllNotificationsMutation,
     useCreateCustomerAppointmentMutation,

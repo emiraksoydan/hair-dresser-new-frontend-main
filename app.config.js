@@ -45,6 +45,23 @@ module.exports = {
       buildNumber: "12",
       /** EAS: production ortamında GOOGLE_SERVICES_PLIST (type: file) secret — build sırasında geçici dosya yolu olur. */
       googleServicesFile: process.env.GOOGLE_SERVICES_PLIST ?? "./GoogleService-Info.plist",
+      /**
+       * APNs entitlement — iOS push bildirimleri için ZORUNLU.
+       * @react-native-firebase/messaging plugin'i bunu eklemesi gerek ama bazı
+       * sürümlerde atlanabiliyor. Burada açıkça belirterek garanti altına alıyoruz.
+       *
+       * BU OLMADAN:
+       *   - iOS Settings → uygulama altında "Bildirimler" satırı GÖRÜNMEZ
+       *   - messaging().getToken() boş döner
+       *   - APNs token oluşmaz → backend "No active FCM tokens" der
+       *
+       * "production" değeri TestFlight + App Store build'leri için doğru.
+       * Lokal dev build (eas build --profile development) için "development" lazım,
+       * ancak production'a gönderilen build'lerde "production" olmalı.
+       */
+      entitlements: {
+        "aps-environment": "production",
+      },
     },
     android: {
       adaptiveIcon: {

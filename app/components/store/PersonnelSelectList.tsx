@@ -267,7 +267,7 @@ export const PersonnelSelectList = React.memo<Props>(
                         : "rgba(245,158,11,0.12)",
                     }}
                   >
-                    <Icon source="star" size={10} color="#f59e0b" />
+                    <Icon source="star" size={12} color="#f59e0b" />
                     <Text
                       style={{
                         fontFamily: "CenturyGothic-Bold",

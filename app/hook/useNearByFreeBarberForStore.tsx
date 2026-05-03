@@ -174,25 +174,42 @@ export function useNearbyStoresControl({
 
             const isInitialLoad = isInitialLoadRef.current;
             const showRetryUi = isRetry || (showLoading && !isInitialLoad);
+            // BACKGROUND REFRESH: showLoading=false ve isRetry=false → user-initiated değil.
+            // Bu durumda mevcut listeyi/error'ı KORU; çünkü 15sn'de bir geçici ağ flap
+            // olunca "Servise ulaşılamadı" göstermek istemiyoruz.
+            const isBackgroundRefresh = !showLoading && !isRetry && !isInitialLoad;
+
             if (showRetryUi) setRetryInProgress(true);
             if (isRetry) setError(null);
 
             if (showLoading || isInitialLoad) setIsLoading(true);
 
-            // Yeni fetch: cursors ve accumulator sıfırla, token bump et.
+            // Yeni fetch için token bump (geç gelen yanıtları yok say)
             const token = ++fetchTokenRef.current;
-            cursorsRef.current = {};
-            accumulatedMapRef.current = new Map();
+
+            // Sadece NON-background fetch'lerde cursors/accumulator sıfırlanır.
+            // Background'da mevcut state korunur; başarılı sonuç gelirse üstüne yazılır.
+            const previousAccumulator = accumulatedMapRef.current;
+            const previousCursors = cursorsRef.current;
+            if (!isBackgroundRefresh) {
+                cursorsRef.current = {};
+                accumulatedMapRef.current = new Map();
+            } else {
+                // Background: temiz aksiyon için yeni map oluştur, başarılı sonuçları
+                // buraya yaz; başarısızsa eski map'e geri dön.
+                cursorsRef.current = {};
+                accumulatedMapRef.current = new Map();
+            }
 
             try {
                 let hasAnyError = false;
+                let successCount = 0;
                 let lastError: any = null;
 
                 const results = await Promise.all(
                     localStores.map(async (store) => {
                         const c = safeCoord(store.latitude, store.longitude);
                         if (!c) return null;
-                        // İlk store konumunu ref'e kaydet — state güncellemesi yerine
                         if (!locationRef.current && c) {
                             locationRef.current = { latitude: c.lat, longitude: c.lon };
                         }
@@ -201,7 +218,6 @@ export function useNearbyStoresControl({
                     }),
                 );
 
-                // Token eskimiş — bu yanıtı kullanma.
                 if (token !== fetchTokenRef.current) return;
 
                 let anyHasMore = false;
@@ -213,6 +229,7 @@ export function useNearbyStoresControl({
                         lastError = page.error;
                         continue;
                     }
+                    successCount += 1;
                     cursorsRef.current[store.id] = {
                         offset: page.items.length,
                         hasMore: page.items.length >= pageSize,
@@ -225,18 +242,41 @@ export function useNearbyStoresControl({
                     }
                 }
 
+                // BACKGROUND REFRESH ÖZEL DURUM:
+                // Tüm dükkanlar başarısız olduysa MEVCUT veriyi koru, error gösterme.
+                // Kullanıcı zaten gördüğü listede çalışıyor; geçici ağ kesintisi onu kilitlemesin.
+                if (isBackgroundRefresh && successCount === 0) {
+                    accumulatedMapRef.current = previousAccumulator;
+                    cursorsRef.current = previousCursors;
+                    return;
+                }
+
                 setFreeBarbers(Array.from(accumulatedMapRef.current.values()));
                 setHasMore(anyHasMore);
                 suppressLoadMoreUntilMsRef.current = Date.now() + LOAD_MORE_GRACE_MS;
 
-                if (hasAnyError && accumulatedMapRef.current.size === 0) {
+                // KRİTİK FIX (Multi-store partial success):
+                // Eski davranış: hasAnyError && accumulator=0 → error göster.
+                //   Bu, 1 dükkan başarısız + diğerleri 0 sonuçlu olduğunda da tetikleniyordu.
+                // Yeni davranış: SADECE TÜM dükkanlar HATA verdiyse error göster.
+                //   Bir dükkan bile başarılı sonuçla döndüyse (sıfır sonuç dahil), error gösterme.
+                //   "Sıfır sonuç" zaten "Çevrede serbest berber yok" empty state ile handle edilir.
+                if (hasAnyError && successCount === 0) {
                     setError(lastError);
                 } else {
                     setError(null);
                 }
                 isInitialLoadRef.current = false;
             } catch (err) {
-                if (token === fetchTokenRef.current) setError(err);
+                if (token === fetchTokenRef.current) {
+                    // Background refresh'te exception → mevcut listeyi koru, sessiz ol
+                    if (isBackgroundRefresh) {
+                        accumulatedMapRef.current = previousAccumulator;
+                        cursorsRef.current = previousCursors;
+                    } else {
+                        setError(err);
+                    }
+                }
             } finally {
                 if (token === fetchTokenRef.current) {
                     if (showRetryUi) setRetryInProgress(false);

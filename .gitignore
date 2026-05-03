@@ -3,6 +3,10 @@
 # dependencies
 node_modules/
 
+# IDE / araç yerel ayarları (repoya girmemeli)
+.claude/
+.qodo/
+
 # Expo
 .expo/
 dist/
@@ -40,6 +44,11 @@ GoogleService-Info.plist
 
 # typescript
 *.tsbuildinfo
+
+# Yanlışlıkla kopyalanan .NET / boş shim klasörleri (RN projesinde kullanılmaz)
+/DataAccess/
+/obj/
+/metro-shims/
 
 # generated native folders
 /ios

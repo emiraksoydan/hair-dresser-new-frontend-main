@@ -1,11 +1,11 @@
-import { InteractionManager, View, ScrollView, RefreshControl, TouchableOpacity } from 'react-native'
+import { InteractionManager, View, ScrollView, RefreshControl, TouchableOpacity, Alert } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Text } from '../../components/common/Text'
 import { Avatar, Divider, HelperText, Icon, IconButton, Modal as PaperModal, Portal, Switch, TextInput } from "react-native-paper";
 import { OtpInput } from 'react-native-otp-entry';
 import { Button } from '../../components/common/Button';
 import { useRevokeMutation, useGetMeQuery, useUpdateProfileMutation, useUploadImageMutation, useUpdateImageBlobMutation, useGetSettingQuery, useUpdateSettingMutation, useGetSubscriptionStatusQuery, useSendPhoneChangeOtpMutation, useUpdatePhoneMutation, useSendDeleteAccountOtpMutation, useDeleteAccountMutation, useDeleteImageMutation, useUnregisterFcmTokenMutation } from '../../store/api';
-import { getCurrentFcmToken } from '../../hook/useFcmToken';
+import { getCurrentFcmToken, useFcmToken } from '../../hook/useFcmToken';
 import { tokenStore } from '../../lib/tokenStore';
 import { clearStoredTokens, saveTokens } from '../../lib/tokenStorage';
 import { resetSignalRState } from '../../store/signalrSlice';
@@ -60,6 +60,7 @@ const Index = () => {
     const { t, currentLanguage } = useLanguage();
     const { themeMode, toggleTheme } = useThemeContext();
     const { locationGranted, notificationGranted, handleLocationToggle, handleNotificationToggle } = usePermissionSwitches();
+    const { runFcmDiagnostic } = useFcmToken();
     const { colors, isDark } = useTheme();
     const profileSchema = useMemo(() => createProfileSchema(t), [t, currentLanguage]);
     const resolver = useMemo(() => zodResolver(profileSchema), [profileSchema]);
@@ -902,6 +903,28 @@ const Index = () => {
                             {...getProfilePaperSwitchProps(isDark)}
                         />
                     </View>
+                    <View style={{ height: 1, backgroundColor: colors.borderColor, marginVertical: 8 }} />
+                    <TouchableOpacity
+                        onPress={async () => {
+                            const result = await runFcmDiagnostic();
+                            Alert.alert(
+                                result.ok ? '✅ ' + result.message : '⚠️ ' + result.message,
+                                result.detail ?? '',
+                                [{ text: 'Tamam' }]
+                            );
+                        }}
+                        className='flex-row items-center justify-between py-2'
+                    >
+                        <View className='flex-1 mr-4'>
+                            <Text className='text-base font-century-gothic-bold' style={{ color: colors.sectionHeaderText }}>
+                                Bildirimleri Test Et
+                            </Text>
+                            <Text className='text-sm' style={{ color: colors.textSecondary }}>
+                                Push bildirimi gelmiyorsa bu butona basıp sonucu görün.
+                            </Text>
+                        </View>
+                        <Icon source="bell-check-outline" size={24} color={colors.textSecondary} />
+                    </TouchableOpacity>
                 </View>
 
                 {/* Abonelik Durumu */}

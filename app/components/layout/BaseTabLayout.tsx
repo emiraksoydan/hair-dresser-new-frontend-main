@@ -152,9 +152,10 @@ export const BaseTabLayout: React.FC<BaseTabLayoutProps> = ({
     }
   }, [subscriptionExpired, userType, router, dispatch]);
 
-  // Bottom sheet hook
+  // Tek referanslı snapPoints — her render'da yeni dizi gorhom'da yüksekliği oynatabiliyor.
+  const notificationSheetSnapPoints = useMemo((): (string | number)[] => ["100%"], []);
   const notificationsSheet = useBottomSheet({
-    snapPoints: ["60%", "90%"],
+    snapPoints: notificationSheetSnapPoints,
     enablePanDownToClose: true,
     enableOverDrag: false,
   });
@@ -512,9 +513,9 @@ export const BaseTabLayout: React.FC<BaseTabLayoutProps> = ({
                     <Image
                       source={require("../../../assets/icon.png")}
                       style={{
-                        width: 28,
-                        height: 28,
-                        borderRadius: 14,
+                        width: 36,
+                        height: 36,
+                        borderRadius: 18,
                         marginRight: 8,
                         resizeMode: "contain",
                       }}
@@ -553,6 +554,7 @@ export const BaseTabLayout: React.FC<BaseTabLayoutProps> = ({
         handleIndicatorStyle={{ backgroundColor: colors.sheetHandle }}
         backgroundStyle={{ backgroundColor: colors.sheetBg }}
         snapPoints={notificationsSheet.snapPoints}
+        enableDynamicSizing={false}
         enableOverDrag={notificationsSheet.enableOverDrag}
         enablePanDownToClose={notificationsSheet.enablePanDownToClose}
         // İçerik (BottomSheetFlatList) kendi scroll'unu yönetebilsin diye

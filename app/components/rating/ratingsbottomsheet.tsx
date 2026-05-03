@@ -200,9 +200,16 @@ export const RatingsBottomSheet: React.FC<RatingsBottomSheetProps> = ({
                 item.ratedFromUserType !== undefined && (
                   <View
                     className="rounded-full px-2 py-0.5"
-                    style={{ backgroundColor: colors.cardBg2 }}
+                    style={{
+                      backgroundColor: "rgba(250, 204, 21, 0.18)",
+                      borderWidth: 1,
+                      borderColor: "rgba(250, 204, 21, 0.4)",
+                    }}
                   >
-                    <Text className="text-[#9ca3af] text-[10px]">
+                    <Text
+                      className="text-[10px] font-century-gothic-bold"
+                      style={{ color: "#b45309" }}
+                    >
                       {item.ratedFromUserType === UserType.Customer
                         ? t("card.customer")
                         : item.ratedFromUserType === UserType.FreeBarber
@@ -218,15 +225,25 @@ export const RatingsBottomSheet: React.FC<RatingsBottomSheetProps> = ({
                 item.ratedFromBarberType !== undefined && (
                   <View
                     className="rounded-full px-2 py-0.5"
-                    style={{ backgroundColor: colors.cardBg3 }}
+                    style={{
+                      backgroundColor: "rgba(59, 130, 246, 0.16)",
+                      borderWidth: 1,
+                      borderColor: "rgba(59, 130, 246, 0.36)",
+                    }}
                   >
-                    <Text className="text-[#d1d5db] text-[10px]">
+                    <Text
+                      className="text-[10px] font-century-gothic-bold"
+                      style={{ color: "#1e40af" }}
+                    >
                       {getBarberTypeName(item.ratedFromBarberType)}
                     </Text>
                   </View>
                 )}
             </View>
-            <Text style={{ color: colors.textSecondary }} className="text-xs">
+            <Text
+              style={{ color: colors.sectionHeaderText, opacity: 0.7 }}
+              className="text-xs font-century-gothic-bold"
+            >
               {formatDateTime(item.createdAt)}
             </Text>
             {/* Yorum metni */}

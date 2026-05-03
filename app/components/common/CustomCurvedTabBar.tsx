@@ -1,6 +1,6 @@
 import { Icon } from "react-native-paper";
 import React, { useEffect, useRef, useCallback } from 'react';
-import { View, TouchableOpacity, Dimensions, StyleSheet } from 'react-native';
+import { View, TouchableOpacity, Dimensions, StyleSheet, Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
 import Animated, {
@@ -227,7 +227,10 @@ export const CustomCurvedTabBar: React.FC<CustomCurvedTabBarProps> = ({
         {/* Badge: aktif sekmede yüzen butonda gösterilir; burada yalnızca pasif */}
         {tab.badgeCount !== undefined && tab.badgeCount > 0 && !isActive && (
           <View style={styles.badge}>
-            <Text style={styles.badgeText}>
+            <Text
+              style={styles.badgeText}
+              includeFontPadding={Platform.OS === 'android' ? false : undefined}
+            >
               {tab.badgeCount > 99 ? '99+' : tab.badgeCount}
             </Text>
           </View>
@@ -303,7 +306,10 @@ export const CustomCurvedTabBar: React.FC<CustomCurvedTabBarProps> = ({
           {tabs[activeIndex]?.badgeCount !== undefined &&
             tabs[activeIndex]!.badgeCount! > 0 && (
               <View style={styles.floatBadge}>
-                <Text style={styles.floatBadgeText}>
+                <Text
+                  style={styles.floatBadgeText}
+                  includeFontPadding={Platform.OS === 'android' ? false : undefined}
+                >
                   {tabs[activeIndex]!.badgeCount! > 99
                     ? '99+'
                     : tabs[activeIndex]!.badgeCount}
@@ -354,8 +360,8 @@ const styles = StyleSheet.create({
   },
   floatBadge: {
     position: 'absolute',
-    top: -2,
-    right: -2,
+    top: Platform.OS === 'android' ? -6 : -2,
+    right: Platform.OS === 'android' ? -6 : -2,
     backgroundColor: '#EF4444',
     borderRadius: 10,
     minWidth: 18,
@@ -370,6 +376,10 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 10,
     fontWeight: 'bold',
+    ...Platform.select({
+      android: { lineHeight: 12, textAlignVertical: 'center' },
+      default: {},
+    }),
   },
   tabsContainer: {
     flexDirection: 'row',
@@ -391,7 +401,7 @@ const styles = StyleSheet.create({
   },
   badge: {
     position: 'absolute',
-    top: 4,
+    top: Platform.OS === 'android' ? 2 : 4,
     right: '22%',
     backgroundColor: '#EF4444',
     borderRadius: 10,
@@ -405,6 +415,10 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 10,
     fontWeight: 'bold',
+    ...Platform.select({
+      android: { lineHeight: 12, textAlignVertical: 'center' },
+      default: {},
+    }),
   },
 });
 

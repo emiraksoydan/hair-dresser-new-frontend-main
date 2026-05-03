@@ -63,6 +63,7 @@ export default function SharedAppointmentScreen() {
   );
 
   const ratingSheet = useBottomSheet({
+    snapPoints: ["100%"],
     enablePanDownToClose: true,
   });
   const [selectedRatingTarget, setSelectedRatingTarget] = useState<{
@@ -265,6 +266,23 @@ export default function SharedAppointmentScreen() {
     useCompleteAppointmentMutation();
   const [toggleFavorite, { isLoading: isTogglingFavorite }] =
     useToggleFavoriteMutation();
+
+  /**
+   * @legendapp/list hücre recycler'ı — yalnızca `data` referansı veya `extraData` değişince
+   * satırları güvenilir şekilde yeniden boyar. Favori bayrakları RTK'da güncellenirken
+   * `openCardMenuId` sabit kalabildiği için kalp tek tıkta "kilitlenmiş" gibi görünüyordu.
+   */
+  const appointmentListExtraData = useMemo(
+    () =>
+      `${openCardMenuId ?? ""}|${isTogglingFavorite ? 1 : 0}|${(appointments ?? [])
+        .map(
+          (a) =>
+            `${a.id}:${a.isCustomerFavorite ? 1 : 0}${a.isStoreFavorite ? 1 : 0}${a.isFreeBarberFavorite ? 1 : 0}`,
+        )
+        .join(",")}`,
+    [openCardMenuId, isTogglingFavorite, appointments],
+  );
+
   const [deleteAppointment, { isLoading: isDeletingAppointment }] =
     useDeleteAppointmentMutation();
   const [deleteAllAppointments, { isLoading: isDeletingAllAppointments }] =
@@ -862,11 +880,11 @@ export default function SharedAppointmentScreen() {
         {/* Ortalama Rating - Her zaman göster (eğer varsa) */}
         {averageRating !== undefined && averageRating !== null && (
           <View className="flex-row items-center mb-2">
-            <Icon source="star" size={14} color="#fbbf24" />
-            <Text className="text-[#fbbf24] text-xs  font-semibold ml-1">
+            <Icon source="star" size={17} color="#fbbf24" />
+            <Text className="text-[#fbbf24] text-sm font-semibold ml-1">
               {formatRating(averageRating)}
             </Text>
-            <Text className="text-[#6b7280] text-xs ml-1">
+            <Text className="text-[#6b7280] text-sm ml-1">
               ({t("appointment.labels.average")})
             </Text>
           </View>
@@ -878,13 +896,13 @@ export default function SharedAppointmentScreen() {
             <View className="flex-row items-center mb-2">
               <StarRatingDisplay
                 rating={myRating}
-                starSize={14}
+                starSize={17}
                 starStyle={{ marginHorizontal: 1 }}
               />
-              <Text className="text-[#fbbf24] text-xs font-semibold ml-2">
+              <Text className="text-[#fbbf24] text-sm font-semibold ml-2">
                 {formatRating(myRating)}
               </Text>
-              <Text className="text-[#6b7280] text-xs ml-1">
+              <Text className="text-[#6b7280] text-sm ml-1">
                 ({t("appointment.labels.yourComment")})
               </Text>
             </View>
@@ -898,7 +916,8 @@ export default function SharedAppointmentScreen() {
                 }}
               >
                 <Text
-                  className="text-[#d1d5db] text-xs leading-4"
+                  className="text-xs leading-4"
+                  style={{ color: colors.text }}
                   numberOfLines={3}
                   ellipsizeMode="tail"
                 >
@@ -921,8 +940,8 @@ export default function SharedAppointmentScreen() {
                 borderWidth: 1,
               }}
             >
-              <Icon source="star-outline" size={16} color="#FACC15" />
-              <Text className="text-[#FACC15] text-xs font-semibold ml-2">
+              <Icon source="star-outline" size={18} color="#FACC15" />
+              <Text className="text-[#FACC15] text-sm font-semibold ml-2">
                 {t("appointment.labels.makeComment")}
               </Text>
             </TouchableOpacity>
@@ -1041,7 +1060,7 @@ export default function SharedAppointmentScreen() {
     const metaLineStyle = {
       color: colors.textSecondary,
       fontFamily: "CenturyGothic",
-      fontSize: 12,
+      fontSize: 14,
     };
     const favoriteBtnWrap = {
       padding: 7,
@@ -2311,7 +2330,7 @@ export default function SharedAppointmentScreen() {
             data={filteredAppointments}
             keyExtractor={((item: AppointmentGetDto) => item.id) as any}
             renderItem={renderItem as any}
-            extraData={openCardMenuId}
+            extraData={appointmentListExtraData}
             estimatedItemSize={292}
             scrollEventThrottle={16}
             contentContainerStyle={{
@@ -2444,7 +2463,7 @@ export default function SharedAppointmentScreen() {
       {/* Rating Bottom Sheet */}
       <BottomSheetModal
         ref={ratingSheet.ref}
-        enableDynamicSizing
+        snapPoints={ratingSheet.snapPoints}
         enableContentPanningGesture={false}
         enablePanDownToClose={ratingSheet.enablePanDownToClose}
         handleIndicatorStyle={{ backgroundColor: colors.sheetHandle }}

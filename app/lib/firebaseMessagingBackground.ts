@@ -66,6 +66,20 @@ if (!isExpoGo && NativeModules.RNFBAppModule) {
         try {
           const { notification, data } = remoteMessage ?? {};
 
+          // Sadece rozet senkronu (mark-all-read vb.): tray'de sahte bildirim gösterme.
+          if (data?.silentBadgeSync === '1') {
+            const badgeRaw = data?.badge;
+            if (typeof badgeRaw === 'string' && badgeRaw.length > 0) {
+              const badgeNum = parseInt(badgeRaw, 10);
+              if (!Number.isNaN(badgeNum) && badgeNum >= 0) {
+                try {
+                  await Notifications.setBadgeCountAsync(badgeNum);
+                } catch { /* ignore */ }
+              }
+            }
+            return;
+          }
+
           // Cihaz ikonu rozeti: backend data.badge gönderiyor.
           // iOS'ta APNs aps.badge zaten otomatik uygulanır, ama Android'de
           // launcher badge'i için manuel set etmek gerek (cihaz/launcher destekliyorsa).

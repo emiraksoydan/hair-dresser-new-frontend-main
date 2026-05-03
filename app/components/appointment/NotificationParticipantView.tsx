@@ -89,7 +89,7 @@ function MetaChip({
         },
       ]}
     >
-      <Icon source={icon as any} size={13} color="#d97706" />
+      <Icon source={icon as any} size={15} color="#d97706" />
       <Text
         style={[styles.metaChipText, { color: colors.sectionHeaderText }]}
         numberOfLines={2}
@@ -471,7 +471,7 @@ export const NotificationParticipantView: React.FC<
                 ) : null}
                 {payload.store.rating !== undefined ? (
                   <View style={styles.ratingRow}>
-                    <Icon source="star" size={14} color="#fbbf24" />
+                    <Icon source="star" size={17} color="#fbbf24" />
                     <Text style={styles.ratingText}>
                       {formatRating(payload.store.rating)}
                     </Text>
@@ -525,7 +525,7 @@ export const NotificationParticipantView: React.FC<
                 </View>
                 {payload.freeBarber?.rating !== undefined ? (
                   <View style={styles.ratingRow}>
-                    <Icon source="star" size={14} color="#fbbf24" />
+                    <Icon source="star" size={17} color="#fbbf24" />
                     <Text style={styles.ratingText}>
                       {formatRating(payload.freeBarber.rating)}
                     </Text>
@@ -570,7 +570,7 @@ export const NotificationParticipantView: React.FC<
                 ) : null}
                 {payload?.chair?.manuelBarberRating !== undefined ? (
                   <View style={styles.ratingRow}>
-                    <Icon source="star" size={14} color="#fbbf24" />
+                    <Icon source="star" size={17} color="#fbbf24" />
                     <Text style={styles.ratingText}>
                       {formatRating(payload.chair.manuelBarberRating)}
                     </Text>
@@ -672,7 +672,7 @@ const styles = StyleSheet.create({
     maxWidth: "100%",
   },
   metaChipText: {
-    fontSize: 12,
+    fontSize: 14,
     flexShrink: 1,
     fontFamily: "CenturyGothic",
   },
@@ -697,7 +697,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   ratingText: {
-    fontSize: 12,
+    fontSize: 14,
     color: "#fbbf24",
     fontFamily: "CenturyGothic-Bold",
   },

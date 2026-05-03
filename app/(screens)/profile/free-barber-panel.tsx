@@ -74,7 +74,7 @@ export default function MyPanelScreen() {
     pressBehavior: "none",
   });
   const ratingsSheet = useBottomSheet({
-    snapPoints: ["50%", "85%"],
+    snapPoints: ["100%"],
     enablePanDownToClose: true,
   });
 
@@ -164,7 +164,7 @@ export default function MyPanelScreen() {
         >
           <IconButton
             icon="arrow-left"
-            iconColor="#FACC15"
+            iconColor={colors.sectionHeaderText}
             size={20}
             onPress={() => router.back()}
             accessibilityLabel={t("common.goBack")}

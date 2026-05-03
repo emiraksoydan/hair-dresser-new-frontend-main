@@ -1,6 +1,0 @@
-{
-  "$schema": "https://unpkg.com/knip@5/schema.json",
-  "ignore": ["plugins/**", "scripts/**"],
-  "ignoreBinaries": ["powershell"],
-  "ignoreDependencies": ["@babel/core", "babel-preset-expo"]
-}

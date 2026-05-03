@@ -185,7 +185,7 @@ const FreeBarberBookingContent = ({
     enablePanDownToClose: true,
   });
   const ratingsSheet = useBottomSheet({
-    snapPoints: ["50%", "85%"],
+    snapPoints: ["100%"],
     enablePanDownToClose: true,
   });
   const myStoreSelectionSheet = useBottomSheet({
@@ -508,7 +508,7 @@ const FreeBarberBookingContent = ({
                     </View>
                   </View>
                   <View className="flex-row items-center gap-1 bg-black/30 px-2 py-1 rounded-lg">
-                    <Icon size={16} color="#FFA500" source="star" />
+                    <Icon size={18} color="#FFA500" source="star" />
                     <Text
                       className="font-century-gothic-bold text-white"
                       style={{ fontSize: 14 }}

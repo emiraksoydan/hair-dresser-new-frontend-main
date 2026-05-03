@@ -7,6 +7,7 @@ import { useFavoriteToggle } from "../../hook/useFavoriteToggle";
 import { CardImage } from "../common/CardImage";
 import { CardHeader } from "../common/CardHeader";
 import { FavoriteButton } from "../common/FavoriteButton";
+import { ENTITY_NUMBER } from "../../constants/entityDisplay";
 import { RatingSection } from "../common/RatingSection";
 import { StatusBadge } from "../common/StatusBadge";
 import { ServiceOfferingsList } from "../common/ServiceOfferingsList";
@@ -257,7 +258,7 @@ const FreeBarberMineCard: React.FC<Props> = ({
           </View>
           {freeBarber.customerNumber && (
             <View className="flex-row items-center mt-1">
-              <Text style={{ color: colors.textSecondary, fontSize: profileCompact ? 12 : 13, fontFamily: 'CenturyGothic' }}>
+              <Text style={{ color: colors.textSecondary, fontSize: profileCompact ? ENTITY_NUMBER.profileCompact : ENTITY_NUMBER.profileNormal, fontFamily: 'CenturyGothic' }}>
                 {t('card.freeBarberNumber')}{': #'}{freeBarber.customerNumber}
               </Text>
             </View>

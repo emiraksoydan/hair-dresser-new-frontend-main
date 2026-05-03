@@ -32,11 +32,11 @@ export const RatingSection: React.FC<RatingSectionProps> = ({
   const { t } = useLanguage();
   const { colors } = useTheme();
   const formattedRating = rating?.toFixed(1) || '0.0';
-  const starSize = starSizeProp ?? (compact ? 15 : 19);
-  const ratingFont = compact ? 14 : 17;
-  const reviewFont = compact ? 12 : 15;
-  const ratingLineHeight = compact ? 18 : 22;
-  const reviewLineHeight = compact ? 16 : 20;
+  const starSize = starSizeProp ?? (compact ? 18 : 22);
+  const ratingFont = compact ? 16 : 19;
+  const reviewFont = compact ? 13 : 16;
+  const ratingLineHeight = compact ? 20 : 24;
+  const reviewLineHeight = compact ? 18 : 22;
 
   return (
     <View className={`flex-row items-center gap-1 ${className}`}>

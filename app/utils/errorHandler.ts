@@ -175,6 +175,7 @@ const messageToKeyMap: Record<string, string> = {
   // ============================================================================
   'Serbest berber bulunamadı': 'errors.freebarberNotFound',
   'Serbest berber şu an müsait değil': 'errors.freebarberNotAvailable',
+  'Şu anda müsait değilsiniz; randevu alabilmek için müsait olmalısınız.': 'errors.freebarberSelfNotAvailable',
   'Serbest berber koordinatları geçersiz': 'errors.freebarberInvalidCoordinates',
   // Eski 10 km mesajları (geriye dönük uyumluluk) + yeni "izin verilen mesafe" varyantları
   'Serbest berber 10 km dışında. Yakın değilken randevu oluşturamazsın.': 'errors.freebarberDistanceExceeded',

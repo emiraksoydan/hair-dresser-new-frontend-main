@@ -58,7 +58,7 @@ const FavoritesList: React.FC<FavoritesListProps> = ({ mode = 'store' }) => {
 
     // Bottom sheet hooks
     const ratingsSheet = useBottomSheet({
-        snapPoints: ["50%", "85%"],
+        snapPoints: ["100%"],
         enablePanDownToClose: true,
     });
     const updateStoreSheet = useBottomSheet({

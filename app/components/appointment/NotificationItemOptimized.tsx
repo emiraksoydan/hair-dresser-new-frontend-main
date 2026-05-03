@@ -146,6 +146,7 @@ const areEqual = (prev: NotificationItemProps, next: NotificationItemProps) => {
   if (prev.item.isRead !== next.item.isRead) return false;
   if (prev.isProcessing !== next.isProcessing) return false;
   if (prev.isDeleting !== next.isDeleting) return false;
+  if (prev.userType !== next.userType) return false;
 
   // String comparison for payloadJson
   if (prev.item.payloadJson !== next.item.payloadJson) return false;
@@ -529,10 +530,19 @@ export const NotificationItemOptimized = React.memo<NotificationItemProps>(
 
       if (rRole === "store") {
         if (payload.freeBarber?.userId) {
+          const fbLat = payload.freeBarber.latitude;
+          const fbLng = payload.freeBarber.longitude;
+          const fbNums =
+            typeof fbLat === "number" &&
+            typeof fbLng === "number" &&
+            !Number.isNaN(fbLat) &&
+            !Number.isNaN(fbLng) &&
+            (fbLat !== 0 || fbLng !== 0);
           return {
             type: "freebarber",
             id: payload.freeBarber.userId,
             name: payload.freeBarber.displayName || "Serbest Berber",
+            ...(fbNums ? { lat: fbLat, lng: fbLng } : {}),
           };
         }
         if (payload.customer?.userId && customerLat != null && customerLng != null) {
@@ -571,10 +581,19 @@ export const NotificationItemOptimized = React.memo<NotificationItemProps>(
 
       if (rRole === "customer") {
         if (payload.freeBarber?.userId) {
+          const fbLat = payload.freeBarber.latitude;
+          const fbLng = payload.freeBarber.longitude;
+          const fbNums =
+            typeof fbLat === "number" &&
+            typeof fbLng === "number" &&
+            !Number.isNaN(fbLat) &&
+            !Number.isNaN(fbLng) &&
+            (fbLat !== 0 || fbLng !== 0);
           return {
             type: "freebarber",
             id: payload.freeBarber.userId,
             name: payload.freeBarber.displayName || "Serbest Berber",
+            ...(fbNums ? { lat: fbLat, lng: fbLng } : {}),
           };
         }
         if (payload.store?.storeId && payload.store.latitude != null && payload.store.longitude != null) {
@@ -942,9 +961,9 @@ export const NotificationItemOptimized = React.memo<NotificationItemProps>(
                   </View>
                 </View>
               )}
-            {/* Haritada Göster butonu — mapTarget hesaplandıysa her rol için göster.
-                FreeBarber hedefi → CANLI konum etiketi; diğerleri → statik. */}
-            {mapTarget && (
+            {/* Haritada Göster: onay/red bekleyen bildirimlerde yalnızca aksiyon hâlâ alınabilirken
+                (canShowButtons ile aynı mantık). Karar verildikten / süreç kapandıktan sonra gizlenir. */}
+            {mapTarget && (!isActionableType || canShowButtons) && (
               <TouchableOpacity
                 onPress={handleShowOnMap}
                 className="mt-2 rounded-xl py-3 items-center justify-center flex-row gap-2"

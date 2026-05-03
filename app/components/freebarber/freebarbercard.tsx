@@ -11,6 +11,7 @@ import { useCategoryHierarchy } from "../../hook/useCategoryHierarchy";
 import { CardImage } from "../common/CardImage";
 import { CardHeader } from "../common/CardHeader";
 import { FavoriteButton } from "../common/FavoriteButton";
+import { ENTITY_NUMBER } from "../../constants/entityDisplay";
 import { RatingSection } from "../common/RatingSection";
 import { StatusBadge } from "../common/StatusBadge";
 import { ServiceOfferingsList } from "../common/ServiceOfferingsList";
@@ -404,7 +405,7 @@ const FreeBarberCard: React.FC<Props> = ({
               </View>
               {freeBarber.customerNumber && (
                 <View className="flex-row items-center">
-                  <Text style={{ color: colors.textSecondary, fontSize: compactMeta ? 10 : 11, fontFamily: 'CenturyGothic' }}>
+                  <Text style={{ color: colors.textSecondary, fontSize: compactMeta ? ENTITY_NUMBER.cardCompact : ENTITY_NUMBER.cardNormal, fontFamily: 'CenturyGothic' }}>
                     {t('card.freeBarberNumber')}{': #'}{freeBarber.customerNumber}
                   </Text>
                 </View>

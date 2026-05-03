@@ -219,7 +219,7 @@ const Index = () => {
   });
 
   const ratingsSheet = useBottomSheet({
-    snapPoints: ["60%", "90%"],
+    snapPoints: ["100%"],
     enablePanDownToClose: true,
   });
 

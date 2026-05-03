@@ -3,6 +3,59 @@ import { UserType } from '../types';
 import { isExpired, attemptTokenRefreshWithReason } from '../store/baseQuery';
 
 const ACCOUNTS_KEY = 'multi_accounts_v1';
+// iOS'ta uygulama silinse bile Keychain bazı durumlarda kalır (özellikle ACCESSIBLE.AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY).
+// Bu sayede app silinip kurulunca tüm kayıtlı hesaplar geri yüklenebilir, sadece son aktif hesap değil.
+const KEYCHAIN_SERVICE = 'com.hairdresser.app.accounts';
+
+function getKeychain() {
+  try {
+    return require('react-native-keychain') as typeof import('react-native-keychain');
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Hesap listesini Keychain'e yedekler. AsyncStorage primary; Keychain backup.
+ * Yazma hatasını yutuyoruz — Keychain bazı emülatörlerde / Expo Go'da çalışmaz.
+ */
+async function backupAccountsToKeychain(serialized: string): Promise<void> {
+  const Keychain = getKeychain();
+  if (!Keychain?.setGenericPassword) return;
+  try {
+    await Keychain.setGenericPassword(
+      'accounts',
+      serialized,
+      {
+        service: KEYCHAIN_SERVICE,
+        // AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY: cihaz unlocked olduktan sonra erişilebilir,
+        // device transfer / restore'da kaybolmaz; sadece bu cihaza özel.
+        accessible: Keychain.ACCESSIBLE.AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY,
+      },
+    );
+  } catch {
+    /* sessizce devam */
+  }
+}
+
+/**
+ * Keychain'den hesap listesi oku — AsyncStorage boşsa fallback olarak kullanılır.
+ * Genellikle sadece app silinip yeniden kurulunca tetiklenir.
+ */
+async function restoreAccountsFromKeychain(): Promise<SavedAccount[] | null> {
+  const Keychain = getKeychain();
+  if (!Keychain?.getGenericPassword) return null;
+  try {
+    const result = await Keychain.getGenericPassword({ service: KEYCHAIN_SERVICE });
+    if (result && (result as any).password) {
+      const parsed = JSON.parse((result as any).password);
+      if (Array.isArray(parsed)) return parsed;
+    }
+  } catch {
+    /* sessizce devam */
+  }
+  return null;
+}
 
 /** Okuma-yazma yarışlarını önle (hesap geçişi + token listener aynı anda yazmasın). */
 let writeChain: Promise<unknown> = Promise.resolve();
@@ -35,7 +88,21 @@ export interface SavedAccount {
 export async function loadAllAccounts(): Promise<SavedAccount[]> {
   try {
     const s = await AsyncStorage.getItem(ACCOUNTS_KEY);
-    return s ? JSON.parse(s) : [];
+    if (s) {
+      const parsed = JSON.parse(s);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    }
+    // AsyncStorage boş — uygulama yeni silinip kurulmuş olabilir.
+    // Keychain'den kurtarmayı dene (iOS'ta uygulama silinse bile Keychain kalabiliyor).
+    const fromKeychain = await restoreAccountsFromKeychain();
+    if (fromKeychain && fromKeychain.length > 0) {
+      // AsyncStorage'a geri yükle ki sonraki çağrılar hızlı olsun
+      try {
+        await AsyncStorage.setItem(ACCOUNTS_KEY, JSON.stringify(fromKeychain));
+      } catch {}
+      return fromKeychain;
+    }
+    return [];
   } catch {
     return [];
   }
@@ -52,7 +119,10 @@ export async function upsertAccount(account: SavedAccount): Promise<void> {
       } else {
         accounts.push(account);
       }
-      await AsyncStorage.setItem(ACCOUNTS_KEY, JSON.stringify(accounts));
+      const serialized = JSON.stringify(accounts);
+      await AsyncStorage.setItem(ACCOUNTS_KEY, serialized);
+      // Keychain'e de yedekle — uninstall sonrası kurtarma için
+      await backupAccountsToKeychain(serialized);
     } catch {}
   });
 }
@@ -67,7 +137,9 @@ export async function updateAccountTokens(
       const idx = findAccountIndex(accounts, id);
       if (idx >= 0) {
         accounts[idx] = { ...accounts[idx], ...tokens };
-        await AsyncStorage.setItem(ACCOUNTS_KEY, JSON.stringify(accounts));
+        const serialized = JSON.stringify(accounts);
+        await AsyncStorage.setItem(ACCOUNTS_KEY, serialized);
+        await backupAccountsToKeychain(serialized);
       }
     } catch {}
   });
@@ -79,7 +151,9 @@ export async function removeAccount(id: string): Promise<void> {
       const accounts = await loadAllAccounts();
       const n = id.toLowerCase();
       const filtered = accounts.filter(a => a.id.toLowerCase() !== n);
-      await AsyncStorage.setItem(ACCOUNTS_KEY, JSON.stringify(filtered));
+      const serialized = JSON.stringify(filtered);
+      await AsyncStorage.setItem(ACCOUNTS_KEY, serialized);
+      await backupAccountsToKeychain(serialized);
     } catch {}
   });
 }
@@ -176,7 +250,9 @@ export async function updateAccountsPhoneByPreviousPhone(
         }
         return a;
       });
-      await AsyncStorage.setItem(ACCOUNTS_KEY, JSON.stringify(updated));
+      const serialized = JSON.stringify(updated);
+      await AsyncStorage.setItem(ACCOUNTS_KEY, serialized);
+      await backupAccountsToKeychain(serialized);
     } catch {}
   });
 }

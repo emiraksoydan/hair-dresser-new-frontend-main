@@ -109,6 +109,19 @@ export function useFirebaseMessaging() {
     try {
       unsub = messaging().onMessage(async (remoteMessage: RemoteMessage) => {
         try {
+          const data = remoteMessage?.data as Record<string, string> | undefined;
+          if (data?.silentBadgeSync === '1') {
+            const badgeRaw = data?.badge;
+            if (typeof badgeRaw === 'string' && badgeRaw.length > 0) {
+              const badgeNum = parseInt(badgeRaw, 10);
+              if (!Number.isNaN(badgeNum) && badgeNum >= 0) {
+                Notifications.setBadgeCountAsync(badgeNum).catch(() => { /* ignore */ });
+              }
+            }
+            refreshNotifications();
+            return;
+          }
+
           const title = remoteMessage?.notification?.title || 'Yeni bildirim';
           const body =
             remoteMessage?.notification?.body ||

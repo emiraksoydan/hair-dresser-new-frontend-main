@@ -106,7 +106,22 @@ export const RatingBottomSheet: React.FC<RatingBottomSheetProps> = ({
           comment: comment.trim() || null,
         };
 
-        const createResult = await createRating(dto);
+        // RETRY: bazen ilk deneme transient bir nedenle başarısız oluyor
+        // (network jitter, backend cold-start, EF first-query lock).
+        // Otomatik 1 retry ile bu durumu maskele — gerçek hata sonra raporlanır.
+        // RatingAlreadyExists gibi business hatalarında retry anlamsız;
+        // sadece network/5xx hatalarında tekrar dener.
+        const isTransient = (err: any) => {
+          const s = err?.status;
+          return s === 'FETCH_ERROR' || s === 'TIMEOUT_ERROR' || (typeof s === 'number' && s >= 500);
+        };
+
+        let createResult = await createRating(dto);
+        if ('error' in createResult && isTransient((createResult as any).error)) {
+          await new Promise((r) => setTimeout(r, 600));
+          createResult = await createRating(dto);
+        }
+
         if ("error" in createResult) {
           const errorMessage =
             (createResult.error as any)?.data?.message ||
@@ -267,7 +282,7 @@ export const RatingBottomSheet: React.FC<RatingBottomSheetProps> = ({
           <StarRating
             rating={rating}
             onChange={setRating}
-            starSize={40}
+            starSize={44}
             color="#fbbf24"
             emptyColor={isDark ? "#475569" : "#cbd5e1"}
             starStyle={{ marginHorizontal: 4 }}

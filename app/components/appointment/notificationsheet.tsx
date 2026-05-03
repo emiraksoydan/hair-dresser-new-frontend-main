@@ -4,6 +4,7 @@ import { useAuth } from "../../hook/useAuth";
 import {
   useGetAllNotificationsQuery,
   useMarkNotificationReadMutation,
+  useMarkAllNotificationsReadMutation,
   useDeleteNotificationMutation,
   useDeleteAllNotificationsMutation,
   useStoreDecisionMutation,
@@ -121,10 +122,12 @@ export function NotificationsSheet({
     useDeleteNotificationMutation();
   const [deleteAllNotifications, { isLoading: isDeletingAllNotifications }] =
     useDeleteAllNotificationsMutation();
+  const [markAllNotificationsRead, { isLoading: isMarkingAllNotificationsRead }] =
+    useMarkAllNotificationsReadMutation();
   const [deletingNotificationId, setDeletingNotificationId] = React.useState<string | null>(null);
   const { userType } = useAuth();
   const { t } = useLanguage();
-  const { isDark } = useTheme();
+  const { isDark, colors } = useTheme();
   const { alert, alertSuccess, alertError, confirm } = useAlert();
   const [storeDecision, { isLoading: isStoreDeciding }] =
     useStoreDecisionMutation();
@@ -171,14 +174,11 @@ export function NotificationsSheet({
       processingNotificationsRef.current.add(n.id);
 
       try {
-        // NO optimistic update - backend notification.updated event is source of truth
-        // Backend will send notification.updated event with correct isRead status
+        // RTK `markNotificationRead` optimistic: tüm getAllNotifications cache slotları + badge -1;
+        // SignalR `notification.updated` ile sunucu gerçeği pekişir.
         await markRead(n.id);
-        // Badge refetch via invalidatesTags (Notification LIST) in markNotificationRead
-        // notification.updated SignalR event will update the notification state
       } catch {
-        // Error handling is silent - backend events are source of truth
-        // If backend call fails, notification.updated event won't come, so state stays unchanged
+        // Hata: optimistic patch zaten geri alınır; SignalR gelmezse liste eski haline döner.
       } finally {
         // Remove from processing set after a short delay to allow backend event to arrive
         setTimeout(() => {
@@ -397,6 +397,33 @@ export function NotificationsSheet({
     );
   }, [deleteAllNotifications, onDeleteSuccess, onDeleteError, t, confirm, alertError]);
 
+  const handleMarkAllRead = useCallback(() => {
+    guard(async () => {
+      const result = await markAllNotificationsRead();
+      if ("error" in result) {
+        const errorMessage =
+          (result.error as any)?.data?.message ||
+          t("notification.markAllReadFailed");
+        if (onDeleteError) {
+          onDeleteError(errorMessage);
+        } else {
+          alertError(t("common.error"), errorMessage);
+        }
+        return;
+      }
+      if (onDeleteSuccess) {
+        onDeleteSuccess(t("notification.markAllReadSuccess"));
+      }
+    });
+  }, [
+    guard,
+    markAllNotificationsRead,
+    onDeleteSuccess,
+    onDeleteError,
+    t,
+    alertError,
+  ]);
+
   // Helper functions
   const formatTime = useCallback((timeStr?: string) => {
     if (!timeStr) return "";
@@ -491,37 +518,74 @@ export function NotificationsSheet({
   }, [refetch, bumpEndReachedGrace]);
 
   return (
-    <View className="flex-1 px-3">
-      <View className="flex-row justify-between items-center my-3">
-        <Text className="text-white text-lg font-bold">{t("navigation.notifications")}</Text>
-        <View className="flex-row items-center gap-3">
+    <View className="flex-1 px-3" style={{ paddingTop: 10 + Math.min(insets.top, 8) }}>
+      <View className="flex-row justify-between items-center mb-3 mt-1">
+        <Text className="flex-1 pr-2 text-white text-lg font-bold" numberOfLines={1}>
+          {t("navigation.notifications")}
+        </Text>
+        <View className="flex-row items-center gap-2 flex-shrink-0">
           {data && data.length > 0 && (
-            <TouchableOpacity
-              onPress={handleDeleteAll}
-              disabled={isDeletingAllNotifications}
-              className={`rounded-lg px-3 py-2 flex-row items-center gap-1.5 ${isDeletingAllNotifications ? "opacity-60" : ""}`}
-              style={{
-                backgroundColor: isDark ? "rgba(248,113,113,0.14)" : "rgba(254,202,202,0.55)",
-                borderWidth: 1,
-                borderColor: isDark ? "rgba(248,113,113,0.38)" : "rgba(220,38,38,0.22)",
-              }}
-            >
-              {isDeletingAllNotifications ? (
-                <ActivityIndicator size="small" color={isDark ? "#fca5a5" : "#dc2626"} />
-              ) : (
-                <Icon source="delete-sweep-outline" size={18} color={isDark ? "#fca5a5" : "#b91c1c"} />
+            <>
+              {data.some((n) => !n.isRead) && (
+                <TouchableOpacity
+                  onPress={handleMarkAllRead}
+                  disabled={isMarkingAllNotificationsRead}
+                  className={`rounded-lg px-2.5 py-2 flex-row items-center gap-1 ${isMarkingAllNotificationsRead ? "opacity-60" : ""}`}
+                  style={{
+                    backgroundColor: isDark ? "rgba(34,197,94,0.16)" : "rgba(187,247,208,0.55)",
+                    borderWidth: 1,
+                    borderColor: isDark ? "rgba(74,222,128,0.35)" : "rgba(22,163,74,0.22)",
+                  }}
+                >
+                  {isMarkingAllNotificationsRead ? (
+                    <ActivityIndicator size="small" color={isDark ? "#86efac" : "#15803d"} />
+                  ) : (
+                    <Icon source="email-open-multiple-outline" size={17} color={isDark ? "#86efac" : "#166534"} />
+                  )}
+                  <Text
+                    className="font-semibold text-xs"
+                    numberOfLines={1}
+                    style={{ color: isDark ? "#bbf7d0" : "#14532d", fontFamily: "CenturyGothic-Bold" }}
+                  >
+                    {t("notification.markAllRead")}
+                  </Text>
+                </TouchableOpacity>
               )}
-              <Text
-                className="font-semibold text-sm"
-                style={{ color: isDark ? "#fecaca" : "#991b1b", fontFamily: "CenturyGothic-Bold" }}
+              <TouchableOpacity
+                onPress={handleDeleteAll}
+                disabled={isDeletingAllNotifications}
+                className={`rounded-lg px-2.5 py-2 flex-row items-center gap-1 ${isDeletingAllNotifications ? "opacity-60" : ""}`}
+                style={{
+                  backgroundColor: isDark ? "rgba(248,113,113,0.14)" : "rgba(254,202,202,0.55)",
+                  borderWidth: 1,
+                  borderColor: isDark ? "rgba(248,113,113,0.38)" : "rgba(220,38,38,0.22)",
+                }}
               >
-                {t("notification.deleteAllNotifications")}
-              </Text>
-            </TouchableOpacity>
+                {isDeletingAllNotifications ? (
+                  <ActivityIndicator size="small" color={isDark ? "#fca5a5" : "#dc2626"} />
+                ) : (
+                  <Icon source="delete-sweep-outline" size={17} color={isDark ? "#fca5a5" : "#b91c1c"} />
+                )}
+                <Text
+                  className="font-semibold text-xs"
+                  numberOfLines={1}
+                  style={{ color: isDark ? "#fecaca" : "#991b1b", fontFamily: "CenturyGothic-Bold" }}
+                >
+                  {t("notification.deleteAllNotifications")}
+                </Text>
+              </TouchableOpacity>
+            </>
           )}
-          <TouchableOpacity onPress={onClose}>
-            <Text className="text-[#f05e23] font-semibold">{t("common.close")}</Text>
-          </TouchableOpacity>
+          {onClose ? (
+            <TouchableOpacity
+              onPress={onClose}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              accessibilityRole="button"
+              accessibilityLabel={t("common.close")}
+            >
+              <Icon source="close" size={24} color={colors.textTertiary} />
+            </TouchableOpacity>
+          ) : null}
         </View>
       </View>
 

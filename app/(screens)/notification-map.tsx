@@ -308,34 +308,27 @@ export default function NotificationMapScreen() {
         )}
       </View>
 
-      {/* Alt bilgi şeridi — safe area dahil */}
-      {targetCoords && (
+      {/* Alt bilgi şeridi kaldırıldı (kullanıcı isteği — koordinat ve "statik konum"
+          metinleri ekrandan çıkarıldı). FreeBarber CANLI modda küçük bir spinner
+          sağ üstte göstereceğiz. */}
+      {targetCoords && isLive && (fbQuery.isFetching || fbQuery.isLoading) && (
         <View
           style={{
-            paddingBottom: insets.bottom + 12,
-            paddingTop: 12,
-            paddingHorizontal: 16,
+            position: "absolute",
+            top: insets.top + 88,
+            right: 16,
             backgroundColor: colors.sheetBg,
-            borderTopWidth: 1,
-            borderTopColor: isDark ? "rgba(255,255,255,0.06)" : "rgba(15,23,42,0.06)",
+            borderRadius: 999,
+            paddingHorizontal: 10,
+            paddingVertical: 6,
             flexDirection: "row",
             alignItems: "center",
-            gap: 12,
+            gap: 6,
+            borderWidth: 1,
+            borderColor: isDark ? "rgba(255,255,255,0.1)" : "rgba(15,23,42,0.1)",
           }}
         >
-          <View style={{ flex: 1 }}>
-            <Text style={{ color: colors.textSecondary, fontSize: 11 }}>
-              {isLive
-                ? "FreeBarber konumu her 10 saniyede bir tazelenir."
-                : "Statik konum — değişmesi nadir."}
-            </Text>
-            <Text style={{ color: colors.sectionHeaderText, fontSize: 13, marginTop: 2 }}>
-              {targetCoords.lat.toFixed(5)}, {targetCoords.lng.toFixed(5)}
-            </Text>
-          </View>
-          {isLive && (fbQuery.isFetching || fbQuery.isLoading) && (
-            <ActivityIndicator size="small" color={GOLD} />
-          )}
+          <ActivityIndicator size="small" color={GOLD} />
         </View>
       )}
     </View>
