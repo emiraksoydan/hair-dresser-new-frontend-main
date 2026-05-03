@@ -135,6 +135,18 @@ module.exports = {
       "@react-native-firebase/app",
       "@react-native-firebase/messaging",
       /**
+       * KRİTİK: Expo SDK 54+ AppDelegate'i Swift olarak oluşturuyor.
+       * @react-native-firebase/app v21.x plugin'i Swift AppDelegate'e Firebase init
+       * eklemeyi atlıyor ("Unable to determine correct Firebase insertion point" uyarısı).
+       * Bu custom plugin atlanan adımı manuel yapar:
+       *   1. import FirebaseCore ekler
+       *   2. application(_:didFinishLaunchingWithOptions:) içine FirebaseApp.configure() ekler
+       *
+       * SIRA ÖNEMLİ: @react-native-firebase/app'TAN SONRA olmalı ki plist kopyalandıktan
+       * sonra init kodu eklensin.
+       */
+      "./plugins/withIosFirebaseInit",
+      /**
        * iOS: entitlements içine `aps-environment` yazar (Push). Sadece app.json'da olursa
        * app.config.js baskın geldiği için prebuild'te uygulanmaz — burada da tanımlı olmalı.
        * Mağaza: EAS production profili → mode production.
