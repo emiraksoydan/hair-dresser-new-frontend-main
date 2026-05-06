@@ -19,16 +19,33 @@ import { NativeModules, Platform } from 'react-native';
 
 const isExpoGo = Constants.appOwnership === 'expo';
 
-// Foreground'da (uygulama açıkken) gelen lokal bildirimleri banner+ses olarak göster.
+// Foreground sunum kuralı:
+// - Uzak push (FCM `notification` bloğu içeren) iOS'ta UNUserNotificationCenter delegate
+//   üzerinden bu handler'a düşer. Eğer izin verirsek: native banner gösterilir + ardından
+//   `messaging().onMessage` da fire eder ve orada `scheduleNotificationAsync` çağırırsak
+//   ÇİFT banner çıkar (kullanıcının raporladığı sorun #1).
+// - Bu nedenle uzak push'lar burada SUSTURULUR; göstermeyi tek bir noktadan
+//   (`useFirebaseMessaging.ts` foreground branch'inden) yönetiriz.
+// - Yerel olarak `scheduleNotificationAsync(...trigger:null)` ile schedule edilmiş
+//   bildirimler ise gösterilir.
+// - silentBadgeSync data-only push'lar zaten `notification` bloğu taşımadığı için
+//   bu handler'a alert olarak düşmez.
 Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowBanner: true,
-    shouldShowList: true,
-    shouldPlaySound: true,
-    shouldSetBadge: true,
-    // Geri uyumluluk: eski SDK'lar shouldShowAlert bekler.
-    shouldShowAlert: true,
-  }) as any,
+  handleNotification: async (notification) => {
+    // expo-notifications: trigger.type === 'push' → uzaktan gelen FCM push
+    const trigger: any = notification?.request?.trigger;
+    const isRemotePush =
+      trigger?.type === 'push' ||
+      // iOS bazı sürümlerde type yerine class bilgisi taşıyabilir
+      (typeof trigger === 'object' && trigger !== null && 'payload' in trigger);
+    return {
+      shouldShowBanner: !isRemotePush,
+      shouldShowList: !isRemotePush,
+      shouldPlaySound: !isRemotePush,
+      shouldSetBadge: false, // rozeti biz manuel set ediyoruz (badge.updated SignalR + FCM data.badge)
+      shouldShowAlert: !isRemotePush,
+    } as any;
+  },
 });
 
 // Android bildirim kanalı (8.0+): kendi ChannelId'imizi oluşturuyoruz.

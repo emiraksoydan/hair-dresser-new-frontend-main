@@ -51,16 +51,42 @@ function isNativeFirebaseReady(): boolean {
  * Kullanıcı oradan ilgili randevuya gider (mevcut akışa uyumlu).
  */
 export function useFirebaseMessaging() {
-  const { token } = useAuth();
+  const { token, userId } = useAuth();
   const dispatch = useDispatch();
   const { openNotifications } = useNotificationOpener();
   const lastHandledRef = useRef<string | null>(null);
+  // Aynı messageId iki kez işlenmesin (FCM bazı koşullarda tekrar deliver edebilir,
+  // veya iOS aynı mesajı hem foreground hem background event olarak verebilir).
+  const handledMessageIdsRef = useRef<Set<string>>(new Set());
 
-  // RTK Query cache'ini invalidate etmek için helper
-  const refreshNotifications = useCallback(() => {
+  // userId'i ref'e koyuyoruz — closure'lar her token değişiminde yeniden bağlanmasın.
+  const currentUserIdRef = useRef<string | null>(userId ?? null);
+  currentUserIdRef.current = userId ?? null;
+
+  // Bu push mevcut aktif kullanıcı için mi?
+  // ÖNEMLİ TASARIM KARARI: Multi-account cross-account push görünürlüğü AÇIK.
+  // - Banner / ses: HER push için gösterilir (cihazda kayıtlı hangi hesaba ait olursa olsun).
+  //   Çünkü kullanıcı diğer hesaplarına gelen bildirimleri de görmek istiyor (Gmail/Slack pattern).
+  // - Launcher rakamı (app icon badge): SADECE aktif hesaba ait push'larda güncellenir,
+  //   yoksa "A hesabındayım ama ikonda B'nin sayısı görünüyor" karmaşası olur.
+  // - Cache invalidate: SADECE aktif hesabın cache'i için. Aktif olmayan hesabın listesi
+  //   zaten yüklü değil; gereksiz refetch yapmıyoruz.
+  const isPushForCurrentUser = (data: Record<string, string> | undefined): boolean => {
+    const recipient = data?.recipientUserId;
+    const me = currentUserIdRef.current;
+    if (!recipient || !me) return true; // legacy push veya henüz user resolved değil → izin ver
+    return recipient.toLowerCase() === me.toLowerCase();
+  };
+
+  // FCM mesajı geldiğinde sadece HAFİF tazeleme yap. Önemli not: 'Notification' tag'ini
+  // invalidate ETMİYORUZ — çünkü SignalR `notification.received` event'i bildirimi
+  // cache'e otoritatif olarak ekliyor; aynı anda FCM-tetikli refetch yarışırsa
+  // SignalR ile eklenen item kaybolup refresh sonrası geri geliyor (sorun #4).
+  const refreshAfterPush = useCallback(() => {
     try {
-      // Bildirim listeleri ve rozet sayacı tazelensin.
-      dispatch(api.util.invalidateTags(['Notification', 'Appointment']));
+      // Yalnızca rozet sayaçları + randevu listeleri tazelensin.
+      // Bildirim listesi tazelemesi SignalR notification.received/updated tarafından yönetilir.
+      dispatch(api.util.invalidateTags([{ type: 'Appointment', id: 'LIST' }]));
     } catch {
       // ignore
     }
@@ -74,9 +100,15 @@ export function useFirebaseMessaging() {
       if (id && lastHandledRef.current === id) return;
       if (id) lastHandledRef.current = id;
 
+      const forCurrentUser = isPushForCurrentUser(msg.data);
+
       try {
-        refreshNotifications();
+        // Cache'i sadece aktif hesabın push'unda tazele.
+        if (forCurrentUser) refreshAfterPush();
         // Ekranın hazır olduğundan emin olmak için küçük bir gecikme.
+        // NOT: Yabancı hesap bildirimi tap'lenirse, openNotifications mevcut hesabın
+        // bildirim listesini açar — aradığı bildirimi görmez. Hesap geçişi entegrasyonu
+        // ileride eklenebilir; şimdilik en az bilgi olsun, app açılsın.
         setTimeout(() => {
           try {
             openNotifications();
@@ -88,7 +120,7 @@ export function useFirebaseMessaging() {
         // ignore
       }
     },
-    [openNotifications, refreshNotifications],
+    [openNotifications, refreshAfterPush],
   );
 
   // 1) Foreground mesajı (uygulama açıkken geldiğinde)
@@ -110,15 +142,34 @@ export function useFirebaseMessaging() {
       unsub = messaging().onMessage(async (remoteMessage: RemoteMessage) => {
         try {
           const data = remoteMessage?.data as Record<string, string> | undefined;
-          if (data?.silentBadgeSync === '1') {
-            const badgeRaw = data?.badge;
-            if (typeof badgeRaw === 'string' && badgeRaw.length > 0) {
-              const badgeNum = parseInt(badgeRaw, 10);
-              if (!Number.isNaN(badgeNum) && badgeNum >= 0) {
-                Notifications.setBadgeCountAsync(badgeNum).catch(() => { /* ignore */ });
-              }
+          // Bu push aktif kullanıcı için mi? — banner her zaman gösterilir, ama
+          // launcher rakamı + cache invalidate sadece aktif kullanıcıya uygulanır.
+          const forCurrentUser = isPushForCurrentUser(data);
+
+          // Aynı messageId iki kez işlenmesin (silent + alert vb.).
+          const dedupeKey = remoteMessage?.messageId || data?.notificationId;
+          if (dedupeKey) {
+            if (handledMessageIdsRef.current.has(dedupeKey)) return;
+            handledMessageIdsRef.current.add(dedupeKey);
+            if (handledMessageIdsRef.current.size > 100) {
+              const firstKey = handledMessageIdsRef.current.values().next().value;
+              if (firstKey) handledMessageIdsRef.current.delete(firstKey);
             }
-            refreshNotifications();
+          }
+
+          if (data?.silentBadgeSync === '1') {
+            // Sessiz rozet senkronu: banner/ses YOK, sadece launcher rakamı.
+            // Yabancı hesabın silentBadgeSync'i bizim launcher'ımızı bozmasın.
+            if (forCurrentUser) {
+              const badgeRaw = data?.badge;
+              if (typeof badgeRaw === 'string' && badgeRaw.length > 0) {
+                const badgeNum = parseInt(badgeRaw, 10);
+                if (!Number.isNaN(badgeNum) && badgeNum >= 0) {
+                  Notifications.setBadgeCountAsync(badgeNum).catch(() => { /* ignore */ });
+                }
+              }
+              refreshAfterPush();
+            }
             return;
           }
 
@@ -128,19 +179,21 @@ export function useFirebaseMessaging() {
             (remoteMessage?.data?.payload as string) ||
             '';
 
-          // Cache'i tazele (notification list / badge)
-          refreshNotifications();
-
-          // Cihaz ikonu rozeti: backend data.badge gönderiyor (APNs aps.badge ile aynı değer)
-          const badgeRaw = remoteMessage?.data?.badge;
-          if (typeof badgeRaw === 'string' && badgeRaw.length > 0) {
-            const badgeNum = parseInt(badgeRaw, 10);
-            if (!Number.isNaN(badgeNum) && badgeNum >= 0) {
-              Notifications.setBadgeCountAsync(badgeNum).catch(() => { /* ignore */ });
+          // Aktif kullanıcı için: cache + launcher rakamı tazele.
+          // Yabancı hesap için: cache'e dokunma, launcher'ı değiştirme — sadece banner göstereceğiz.
+          if (forCurrentUser) {
+            refreshAfterPush();
+            const badgeRaw = remoteMessage?.data?.badge;
+            if (typeof badgeRaw === 'string' && badgeRaw.length > 0) {
+              const badgeNum = parseInt(badgeRaw, 10);
+              if (!Number.isNaN(badgeNum) && badgeNum >= 0) {
+                Notifications.setBadgeCountAsync(badgeNum).catch(() => { /* ignore */ });
+              }
             }
           }
 
-          // Foreground'daysa lokal bildirim olarak göster.
+          // Foreground banner: cross-account görünürlük açık, hangi hesaba olursa olsun göster.
+          // setNotificationHandler uzak push'ları susturduğu için sadece BURADAN tek banner çıkar.
           await Notifications.scheduleNotificationAsync({
             content: {
               title,
@@ -161,7 +214,7 @@ export function useFirebaseMessaging() {
     return () => {
       try { unsub?.(); } catch { /* ignore */ }
     };
-  }, [token, refreshNotifications]);
+  }, [token, refreshAfterPush]);
 
   // 2) Uygulama background'dayken bildirime tıklandı
   useEffect(() => {
@@ -252,18 +305,24 @@ export function useFirebaseMessaging() {
   }, [token, handleNotificationTap]);
 
   // 5) App foreground'a döndüğünde bildirim listesini tazele
-  //    (background'da sessiz push geldiyse listelerde yoktu).
+  //    (background'dayken SignalR kopmuş ve event'ler kaçmış olabilir).
+  //    Bu, FCM-tetikli refresh'ten farklıdır: burada SignalR yokluğunu telafi ediyoruz.
   useEffect(() => {
     if (!token) return;
     const sub = AppState.addEventListener('change', (state) => {
       if (state === 'active') {
-        refreshNotifications();
+        try {
+          dispatch(api.util.invalidateTags([
+            { type: 'Notification', id: 'LIST' },
+            { type: 'Appointment', id: 'LIST' },
+          ]));
+        } catch { /* ignore */ }
       }
     });
     return () => {
       try { sub.remove(); } catch { /* ignore */ }
     };
-  }, [token, refreshNotifications]);
+  }, [token, dispatch]);
 
   // Uygulama active olduğunda app icon badge'ini in-app sayaçla SENKRONİZE et.
   // Eskiden 0'a setliyorduk ama kullanıcı app'i açıp hiçbir bildirimi okumadan

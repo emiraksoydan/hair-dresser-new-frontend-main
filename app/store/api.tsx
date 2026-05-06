@@ -381,6 +381,74 @@ function favoriteRowAlreadyInList(draft: FavoriteGetDto[] | undefined, targetId:
     );
 }
 
+/**
+ * storeDecision/freeBarberDecision/customerDecision mutation'larında optimistic
+ * payload patch (sorun #5 fix). Verilen appointmentId'ye ait tüm getAllNotifications
+ * cache slotlarındaki notification'ların payloadJson içine kullanıcının kararını yazar.
+ *
+ * - DecisionStatus enum: Pending=0, Approved=1, Rejected=2, NoAnswer=3
+ * - Approve geldiğinde: kararı Approved yap, ek olarak Customer-final akışta status'ü
+ *   Approved'a çevir (FreeBarber/Customer onayı sonrası nihai onay).
+ * - Reject geldiğinde: kararı Rejected yap, status'ü Rejected'a çevir.
+ *
+ * SignalR notification.updated bunu otoritatif olarak teyit eder; aynı veriyle.
+ */
+function patchNotificationDecisionsOptimistic(
+    dispatch: any,
+    getState: any,
+    appointmentId: string,
+    role: 'store' | 'freebarber' | 'customer',
+    approve: boolean,
+): { undo: () => void }[] {
+    const patches: { undo: () => void }[] = [];
+    try {
+        const queries = api.util.selectInvalidatedBy(getState(), [
+            { type: 'Notification' as const, id: 'LIST' },
+        ]);
+        const decisionField =
+            role === 'store' ? 'storeDecision'
+                : role === 'freebarber' ? 'freeBarberDecision'
+                    : 'customerDecision';
+        // 1=Approved, 2=Rejected (Entities.Concrete.Enums.DecisionStatus)
+        const newDecision = approve ? 1 : 2;
+        // ÖNEMLİ: status alanına DOKUNMUYORUZ — sadece decisionField'i değiştiriyoruz.
+        //
+        // Sebep: 3'lü StoreSelection akışında Store reject ettiğinde backend status'ü
+        // Pending'de bırakıyor (FreeBarber yeni dükkan seçebilsin). Optimistic'te status=2
+        // yazarsak SignalR teyit edince Pending'e geri döner → flicker.
+        //
+        // Buton gizleme zaten myDecision !== Pending kontrolüne dayanıyor
+        // (NotificationItemOptimized.tsx hasMyDecision); decision field'i değişince
+        // butonlar anında gizleniyor. Status banner'ı da myDecision'a göre belirleniyor
+        // ("approved"/"rejected"), status'a göre değil. Yani status'a hiç dokunmaya gerek yok.
+        for (const q of queries ?? []) {
+            if (q.endpointName !== 'getAllNotifications') continue;
+            const patch = dispatch(
+                api.util.updateQueryData('getAllNotifications', q.originalArgs as any, (draft: any) => {
+                    if (!Array.isArray(draft)) return;
+                    const ts = Date.now();
+                    for (const n of draft) {
+                        if (!n || n.appointmentId !== appointmentId) continue;
+                        if (!n.payloadJson || n.payloadJson.trim() === '' || n.payloadJson.trim() === '{}') continue;
+                        try {
+                            const payload = JSON.parse(n.payloadJson);
+                            payload[decisionField] = newDecision;
+                            n.payloadJson = JSON.stringify(payload);
+                            n._updatedAt = ts;
+                        } catch {
+                            // Parse edilemiyorsa dokunma — backend SignalR güncelleyecek.
+                        }
+                    }
+                }),
+            );
+            patches.push(patch);
+        }
+    } catch {
+        // Patch hatası: optimistic update yok say, mutation devam etsin.
+    }
+    return patches;
+}
+
 export const api = createApi({
     reducerPath: 'api',
     baseQuery: baseQueryWithReauth,
@@ -697,8 +765,24 @@ export const api = createApi({
                 method: 'POST',
                 params: { approve },
             }),
-            // NO optimistic update - backend SignalR events are source of truth
-            // Backend sends: notification.updated, badge.updated, appointment.updated
+            // Sorun #5 fix: SignalR notification.updated gelmeden buton "Onayla/Reddet"
+            // metniyle bir an geri dönüyordu (kullanıcı algısı: revert). Artık karar
+            // anında payloadJson'a yazılır → buton metni de anında değişir; SignalR
+            // teyit ettiğinde aynı veri olduğu için görünür değişim olmaz.
+            async onQueryStarted({ appointmentId, approve }, { dispatch, queryFulfilled, getState }) {
+                const patches = patchNotificationDecisionsOptimistic(
+                    dispatch,
+                    getState,
+                    appointmentId,
+                    'store',
+                    approve,
+                );
+                try {
+                    await queryFulfilled;
+                } catch {
+                    patches.forEach((p) => p.undo());
+                }
+            },
             invalidatesTags: (result, error, arg) => [
                 { type: 'Appointment', id: arg.appointmentId },
                 { type: 'Appointment', id: 'LIST' },
@@ -710,8 +794,20 @@ export const api = createApi({
                 method: 'POST',
                 params: { approve },
             }),
-            // NO optimistic update - backend SignalR events are source of truth
-            // Backend sends: notification.updated, badge.updated, appointment.updated
+            async onQueryStarted({ appointmentId, approve }, { dispatch, queryFulfilled, getState }) {
+                const patches = patchNotificationDecisionsOptimistic(
+                    dispatch,
+                    getState,
+                    appointmentId,
+                    'freebarber',
+                    approve,
+                );
+                try {
+                    await queryFulfilled;
+                } catch {
+                    patches.forEach((p) => p.undo());
+                }
+            },
             invalidatesTags: (result, error, arg) => [
                 { type: 'Appointment', id: arg.appointmentId },
                 { type: 'Appointment', id: 'LIST' },
@@ -724,8 +820,20 @@ export const api = createApi({
                 method: 'POST',
                 params: { approve },
             }),
-            // NO optimistic update - backend SignalR events are source of truth
-            // Backend sends: notification.updated, badge.updated, appointment.updated
+            async onQueryStarted({ appointmentId, approve }, { dispatch, queryFulfilled, getState }) {
+                const patches = patchNotificationDecisionsOptimistic(
+                    dispatch,
+                    getState,
+                    appointmentId,
+                    'customer',
+                    approve,
+                );
+                try {
+                    await queryFulfilled;
+                } catch {
+                    patches.forEach((p) => p.undo());
+                }
+            },
             invalidatesTags: (result, error, arg) => [
                 { type: 'Appointment', id: arg.appointmentId },
                 { type: 'Appointment', id: 'LIST' },
@@ -990,25 +1098,57 @@ export const api = createApi({
         }),
         deleteAllNotifications: builder.mutation<ApiResponse<boolean>, void>({
             query: () => ({ url: 'Notification/all', method: 'DELETE' }),
-            // OPTIMISTIC: tümünü hemen UI'dan boşalt; hata olursa invalidate ile gerçek listeyi getir
+            // Sorun #3 fix: Önceki implementasyon optimistic clear → response → invalidateTags
+            // sırası nedeniyle UI titreşiyordu (sil → boş → success snackbar → korunan
+            // bildirimler tekrar fetch ile geri geliyor → titreme).
+            //
+            // Yeni akış:
+            // 1) Aktif randevuya bağlı bildirimleri (Pending/Approved) optimistic patch'te
+            //    KORU; sadece silinebilir olanları çıkar. Bu, success sonrası refetch ile
+            //    "geri gelen" bildirim olmadığı için flicker üretmez.
+            // 2) Hata olursa undo.
+            // 3) Başarı durumunda artık invalidateTags YOK — patch zaten gerçek son durumu
+            //    yansıtır (backend de aynı kuralla siliyor). Yine de güvenlik için
+            //    success snackbar tarafından refetch çağrılmaz; tutarsızlık doğarsa
+            //    SignalR badge.updated bir sonraki cycle'da düzeltir.
             async onQueryStarted(_, { dispatch, queryFulfilled, getState }) {
                 const patches: { undo: () => void }[] = [];
                 const queries = api.util.selectInvalidatedBy(getState(), [
                     { type: 'Notification' as const, id: 'LIST' },
                 ]);
+                // Backend silme kuralı (NotificationManagerV2.DeleteAllAsync):
+                //   appointmentId yoksa → silinir
+                //   appointmentId varsa: appointment.status Pending/Approved değilse silinir
+                // Frontend'de appointment status notification.payloadJson içinde tutuluyor.
+                const isDeletableNotification = (n: any): boolean => {
+                    if (!n) return false;
+                    if (!n.appointmentId) return true;
+                    try {
+                        const payload = n.payloadJson ? JSON.parse(n.payloadJson) : null;
+                        // 0 = Pending, 1 = Approved (Entities.Concrete.Enums.AppointmentStatus)
+                        const status = payload?.status;
+                        return status !== 0 && status !== 1;
+                    } catch {
+                        // Parse edilemiyorsa muhafazakar davran — silinebilir say (eski davranış).
+                        return true;
+                    }
+                };
                 for (const q of queries ?? []) {
                     if (q.endpointName !== 'getAllNotifications') continue;
                     const patch = dispatch(
                         api.util.updateQueryData('getAllNotifications', q.originalArgs as any, (draft: any) => {
-                            if (Array.isArray(draft)) draft.length = 0;
+                            if (!Array.isArray(draft)) return;
+                            // Yerinde filtrele: silinebilir olanları çıkar, korunmaları bırak.
+                            for (let i = draft.length - 1; i >= 0; i--) {
+                                if (isDeletableNotification(draft[i])) draft.splice(i, 1);
+                            }
                         }),
                     );
                     patches.push(patch);
                 }
                 try {
                     await queryFulfilled;
-                    // Backend bazı bildirimleri silmeyebilir (aktif randevu vs); refetch ile gerçek durumu al
-                    dispatch(api.util.invalidateTags([{ type: 'Notification' as const, id: 'LIST' }]));
+                    // Başarı durumunda invalidate YOK — refetch flicker'ı tetikliyordu.
                 } catch {
                     patches.forEach((p) => p.undo());
                 }
