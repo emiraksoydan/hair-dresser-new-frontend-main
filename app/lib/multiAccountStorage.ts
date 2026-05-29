@@ -69,6 +69,49 @@ function withWriteLock<T>(fn: () => Promise<T>): Promise<T> {
   return run;
 }
 
+/**
+ * Per-account refresh deduplication.
+ * Aynı hesap için eş zamanlı iki refresh başlarsa ikinci çağrı ilkinin
+ * promise'ini bekler — aynı refresh token iki kez gönderilmez.
+ * Backend'in reuse-detection'ı (RevokeFamilyAsync) bu senaryo için devreye girer
+ * ve tüm token ailesini iptal eder; bunu önlemek için bu lock şart.
+ */
+const inProgressRefreshes = new Map<string, Promise<void>>();
+
+export async function refreshAccountIfNeeded(accountId: string): Promise<void> {
+  const key = accountId.toLowerCase();
+
+  // Zaten devam eden bir refresh varsa onu bekle (aynı promise)
+  const existing = inProgressRefreshes.get(key);
+  if (existing) return existing;
+
+  const p = (async () => {
+    // Fresh okuma: başka bir yol bu hesabı zaten refresh etmiş olabilir
+    const accounts = await loadAllAccounts();
+    const a = accounts.find(x => x.id.toLowerCase() === key);
+    if (!a || !a.refreshToken || !isExpired(a.accessToken)) return;
+
+    const result = await attemptTokenRefreshWithReason(a.refreshToken);
+    if (result.ok) {
+      await updateAccountTokens(a.id, {
+        accessToken: result.accessToken,
+        refreshToken: result.refreshToken,
+      });
+      await clearAccountReauthFlag(a.id);
+    } else if (result.reason === 'invalid') {
+      await markAccountNeedsReauth(a.id);
+    }
+    // network/unknown: sessizce geç, bir sonraki açılışta tekrar denenecek
+  })();
+
+  inProgressRefreshes.set(key, p);
+  try {
+    return await p;
+  } finally {
+    inProgressRefreshes.delete(key);
+  }
+}
+
 function findAccountIndex(accounts: SavedAccount[], id: string): number {
   const n = id.toLowerCase();
   return accounts.findIndex(a => a.id.toLowerCase() === n);
@@ -83,6 +126,9 @@ export interface SavedAccount {
   accessToken: string;
   refreshToken: string;
   savedAt: number;      // timestamp for ordering
+  /** Refresh token sunucu tarafından `invalid` döndüğünde set edilir.
+   *  Hesap listeden SİLİNMEZ — switcher'da "Tekrar giriş yap" CTA gösterilir. */
+  needsReauth?: boolean;
 }
 
 export async function loadAllAccounts(): Promise<SavedAccount[]> {
@@ -158,6 +204,53 @@ export async function removeAccount(id: string): Promise<void> {
   });
 }
 
+/**
+ * Hesabı silmek yerine `needsReauth: true` flag'le.
+ * Switcher'da "Tekrar giriş yap" CTA gösterilecek.
+ */
+export async function markAccountNeedsReauth(id: string): Promise<void> {
+  return withWriteLock(async () => {
+    try {
+      const accounts = await loadAllAccounts();
+      const idx = findAccountIndex(accounts, id);
+      if (idx < 0) return;
+      if (accounts[idx].needsReauth === true) return; // zaten flagli
+      accounts[idx] = { ...accounts[idx], needsReauth: true };
+      const serialized = JSON.stringify(accounts);
+      await AsyncStorage.setItem(ACCOUNTS_KEY, serialized);
+      await backupAccountsToKeychain(serialized);
+    } catch {}
+  });
+}
+
+/** Yeni token alındığında flag'i temizle. */
+export async function clearAccountReauthFlag(id: string): Promise<void> {
+  return withWriteLock(async () => {
+    try {
+      const accounts = await loadAllAccounts();
+      const idx = findAccountIndex(accounts, id);
+      if (idx < 0) return;
+      if (!accounts[idx].needsReauth) return;
+      const next = { ...accounts[idx] };
+      delete (next as any).needsReauth;
+      accounts[idx] = next;
+      const serialized = JSON.stringify(accounts);
+      await AsyncStorage.setItem(ACCOUNTS_KEY, serialized);
+      await backupAccountsToKeychain(serialized);
+    } catch {}
+  });
+}
+
+/** Görüntüleme: 5XXXXXXXXX veya E.164 → 05XXXXXXXXX */
+export function formatPhoneForDisplay(phone: string): string {
+  const digits = String(phone || '').replace(/\D/g, '');
+  let local = digits;
+  if (digits.startsWith('90') && digits.length >= 12) local = digits.slice(2);
+  else if (digits.startsWith('0') && digits.length === 11) local = digits.slice(1);
+  if (local.length === 10) return `0${local}`;
+  return phone || '';
+}
+
 export function normalizePhoneForCompare(phone: string): string {
   const digits = String(phone || '').replace(/\D/g, '');
   if (digits.startsWith('90') && digits.length >= 12) return digits.slice(2);
@@ -188,17 +281,7 @@ export async function refreshInactiveAccounts(activeUserId: string | null): Prom
   for (const a of accounts) {
     if (activeUserId && a.id.toLowerCase() === activeUserId.toLowerCase()) continue;
     if (!a.refreshToken) continue;
-    if (!isExpired(a.accessToken)) continue; // henüz süresi dolmamış, atla
-    const result = await attemptTokenRefreshWithReason(a.refreshToken);
-    if (result.ok) {
-      await updateAccountTokens(a.id, {
-        accessToken: result.accessToken,
-        refreshToken: result.refreshToken,
-      });
-    } else if (result.reason === 'invalid') {
-      await removeAccount(a.id);
-    }
-    // network/unknown: kaydı koru, bir sonraki açılışta tekrar dene
+    await refreshAccountIfNeeded(a.id);
   }
 }
 
@@ -211,20 +294,11 @@ export async function pruneStaleSavedAccounts(): Promise<void> {
   for (const a of accounts) {
     if (!isExpired(a.accessToken)) continue;
     if (!a.refreshToken) {
-      await removeAccount(a.id);
+      // Refresh token hiç yoksa hesap kullanılamaz; silmek yerine flagle.
+      await markAccountNeedsReauth(a.id);
       continue;
     }
-    const refreshed = await attemptTokenRefreshWithReason(a.refreshToken);
-    if (refreshed.ok) {
-      await updateAccountTokens(a.id, {
-        accessToken: refreshed.accessToken,
-        refreshToken: refreshed.refreshToken,
-      });
-    } else if (refreshed.reason === 'invalid') {
-      // Sunucu refresh'i reddetti; kayıt anlamsız
-      await removeAccount(a.id);
-    }
-    // network / unknown: kaydı tut; geçiş veya sonraki istekte yeniden denenir
+    await refreshAccountIfNeeded(a.id);
   }
 }
 

@@ -39,12 +39,13 @@ type Props = {
 
 export const BarberEditModal: React.FC<Props> = ({
   visible,
-  title = "Berber",
+  title,
   initialValues,
   onClose,
   storeId,
 }) => {
   const { t } = useLanguage();
+  const modalTitle = title ?? t("form.manuelBarberModalTitle");
   const { colors, isDark } = useTheme();
   const confirmBtn = primaryConfirmButtonColors(isDark);
   const cancelBtn = softCancelSurface(isDark);
@@ -163,7 +164,7 @@ export const BarberEditModal: React.FC<Props> = ({
   const submit = (values: BarberFormValues) => guard(async () => {
     try {
       if (!storeId || !storeId.trim()) {
-        dispatch(showSnack({ message: t("errors.storeNotFound") || "Dükkan bulunamadı", isError: true }));
+        dispatch(showSnack({ message: t("errors.storeNotFound"), isError: true }));
         return;
       }
       const isCreate = !values.id;
@@ -278,7 +279,7 @@ export const BarberEditModal: React.FC<Props> = ({
         <Dialog.Title
           style={{ color: colors.sectionHeaderText, fontFamily: "CenturyGothic-Bold" }}
         >
-          {title}
+          {modalTitle}
         </Dialog.Title>
         <Dialog.Content style={{ paddingBottom: 0, marginBottom: 0 }}>
           <View className="gap-3">

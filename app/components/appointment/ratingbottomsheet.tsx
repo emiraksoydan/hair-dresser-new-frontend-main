@@ -22,8 +22,17 @@ import { useAlert } from "../../hook/useAlert";
 import { useTheme } from "../../hook/useTheme";
 import { useActionGuard } from "../../hook/useActionGuard";
 
+import {
+  COLORS,
+  getTextOnGold,
+  getAppointmentAccentLabelFg,
+  getStarRatingScoreColor,
+  getStarRatingWidgetProps,
+} from "../../constants/colors";
+import { ThemedStarIcon } from "../common/ThemedStarIcon";
+
 /** Ana CTA — uygulamadaki sarı / altın vurgu (#FACC15) */
-const ACCENT = "#FACC15";
+const ACCENT = COLORS.UI.ACCENT_GOLD;
 
 const RATING_COMMENT_INPUT_ACCESSORY_ID = "rating-comment-input-accessory";
 
@@ -82,7 +91,7 @@ export const RatingBottomSheet: React.FC<RatingBottomSheetProps> = ({
 
   const sectionLabel = useMemo(
     () => ({
-      color: isDark ? "#fcd34d" : "#b45309",
+      color: getAppointmentAccentLabelFg(isDark),
       fontFamily: "CenturyGothic-Bold" as const,
       fontSize: 14,
       letterSpacing: 0.2,
@@ -90,6 +99,9 @@ export const RatingBottomSheet: React.FC<RatingBottomSheetProps> = ({
     }),
     [isDark],
   );
+
+  const starProps = useMemo(() => getStarRatingWidgetProps(isDark), [isDark]);
+  const scoreColor = useMemo(() => getStarRatingScoreColor(isDark), [isDark]);
 
   const handleSubmit = useCallback(
     () =>
@@ -238,7 +250,7 @@ export const RatingBottomSheet: React.FC<RatingBottomSheetProps> = ({
           <View style={{ flex: 1, minWidth: 0, paddingTop: 0 }}>
             <Text
               style={{
-                color: isDark ? "#fcd34d" : "#b45309",
+                color: getAppointmentAccentLabelFg(isDark),
                 fontFamily: "CenturyGothic-Bold",
                 fontSize: 12,
                 letterSpacing: 0.15,
@@ -283,15 +295,16 @@ export const RatingBottomSheet: React.FC<RatingBottomSheetProps> = ({
             rating={rating}
             onChange={setRating}
             starSize={44}
-            color="#fbbf24"
-            emptyColor={isDark ? "#475569" : "#cbd5e1"}
+            color={starProps.color}
+            emptyColor={starProps.emptyColor}
+            StarIconComponent={ThemedStarIcon}
             starStyle={{ marginHorizontal: 4 }}
           />
           {rating > 0 && (
             <Text
               style={{
                 marginLeft: 8,
-                color: "#f59e0b",
+                color: scoreColor,
                 fontFamily: "CenturyGothic-Bold",
                 fontSize: 17,
               }}
@@ -392,13 +405,13 @@ export const RatingBottomSheet: React.FC<RatingBottomSheetProps> = ({
           }}
         >
           {isLoading ? (
-            <ActivityIndicator color="white" size="small" />
+            <ActivityIndicator color={getTextOnGold(isDark)} size="small" />
           ) : (
             <>
-              <Icon source="send" size={20} color="white" />
+              <Icon source="send" size={20} color={getTextOnGold(isDark)} />
               <Text
                 style={{
-                  color: "#fff",
+                  color: getTextOnGold(isDark),
                   fontFamily: "CenturyGothic-Bold",
                   fontSize: 15,
                   marginLeft: 8,

@@ -3,7 +3,7 @@
  */
 
 import { BarberType, ImageGetDto, ServiceOfferingGetDto } from './common';
-import type { CreateImageDto, ServiceOfferingCreateDto, ServiceOfferingUpdateDto, UpdateImageDto } from './store';
+import type { CreateImageDto, ServiceOfferingCreateDto, ServiceOfferingUpdateDto, ServicePackageSyncItemDto, UpdateImageDto } from './store';
 
 export type FreeBarberCreateDto = {
   firstName: string;
@@ -16,6 +16,7 @@ export type FreeBarberCreateDto = {
   barberCertificateImageId?: string;
   beautySalonCertificateImageId?: string;
   offerings: ServiceOfferingCreateDto[];
+  servicePackages?: ServicePackageSyncItemDto[];
 };
 
 export type FreeBarberUpdateDto = {
@@ -30,6 +31,7 @@ export type FreeBarberUpdateDto = {
   barberCertificateImageId?: string;
   beautySalonCertificateImageId?: string;
   offerings: ServiceOfferingUpdateDto[];
+  servicePackages?: ServicePackageSyncItemDto[];
 };
 
 export type FreeBarGetDto = {

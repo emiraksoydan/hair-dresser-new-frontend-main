@@ -109,22 +109,14 @@ export const GlobalAlert: React.FC = () => {
             width: '100%',
             paddingHorizontal: 12,
             paddingTop: 4,
-            paddingBottom: 8,
+            paddingBottom: 12,
             margin: 0,
-            flexDirection: 'column',
+            flexDirection: buttons.length === 2 ? 'row' : 'column',
             alignItems: 'stretch',
+            justifyContent: 'center',
+            gap: buttons.length === 2 ? 10 : 0,
           }}
         >
-          <View
-            style={{
-              flexDirection: buttons.length > 2 ? 'column' : 'row',
-              flexWrap: 'wrap',
-              alignItems: buttons.length > 2 ? 'stretch' : 'center',
-              justifyContent: buttons.length === 2 ? 'center' : buttons.length === 1 ? 'center' : 'flex-start',
-              width: '100%',
-              paddingBottom: 12,
-            }}
-          >
             {buttons.map((button, index) => {
               const isCancel = button.style === 'cancel';
               const fontSize = buttons.length > 2 ? 15 : 14;
@@ -139,10 +131,10 @@ export const GlobalAlert: React.FC = () => {
                   activeOpacity={0.88}
                   onPress={() => handleButtonPress(button)}
                   style={{
-                    marginHorizontal: isPair ? 6 : 0,
+                    flex: isPair ? 1 : undefined,
                     marginBottom: buttons.length > 2 && index < buttons.length - 1 ? 10 : 0,
-                    alignSelf: isSingle ? 'stretch' : 'center',
-                    width: isSingle ? '100%' : undefined,
+                    alignSelf: isSingle ? 'stretch' : undefined,
+                    width: isSingle ? '100%' : isPair ? undefined : undefined,
                   }}
                 >
                   <View
@@ -150,9 +142,8 @@ export const GlobalAlert: React.FC = () => {
                     style={{
                       borderRadius: 12,
                       minHeight: 48,
-                      minWidth: isPair ? 128 : isSingle ? undefined : 120,
                       paddingVertical: 12,
-                      paddingHorizontal: 20,
+                      paddingHorizontal: isPair ? 12 : 20,
                       alignItems: 'center',
                       justifyContent: 'center',
                       borderWidth: 1.5,
@@ -176,7 +167,6 @@ export const GlobalAlert: React.FC = () => {
                 </TouchableOpacity>
               );
             })}
-          </View>
         </Dialog.Actions>
       </Dialog>
     </Portal>

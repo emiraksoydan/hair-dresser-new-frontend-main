@@ -29,16 +29,20 @@ import { useThemeContext } from '../../context/ThemeContext';
 import { usePermissionSwitches } from '../../hook/usePermissionSwitches';
 import { useSerialAsyncQueue } from '../../hook/useSerialAsyncQueue';
 import { useTheme } from '../../hook/useTheme';
-import { DEFAULT_AVATAR } from '../../constants/images';
 import { useSafeNavigation } from '../../hook/useSafeNavigation';
 import { useActionGuard } from '../../hook/useActionGuard';
 import { useAlert } from '../../hook/useAlert';
 import { getTabFabScrollPadding } from '../../components/layout/panelBottomOverlays';
-import { getProfilePaperSwitchProps } from '../../constants/colors';
+import {
+  COLORS,
+  getProfileNameFieldOutlineColor,
+  getProfilePaperSwitchProps,
+  getTextOnGold,
+} from '../../constants/colors';
 import { jwtDecode } from 'jwt-decode';
 import { loadAllAccounts, removeAccount } from '../../lib/multiAccountStorage';
 import { JwtPayload } from '../../types';
-import { updateAccountsPhoneByPreviousPhone } from '../../lib/multiAccountStorage';
+import { updateAccountsPhoneByPreviousPhone, formatPhoneForDisplay } from '../../lib/multiAccountStorage';
 import { useMultiAccount } from '../../context/MultiAccountContext';
 
 const createProfileSchema = (t: (key: string) => string) => z.object({
@@ -60,7 +64,7 @@ const Index = () => {
     const { t, currentLanguage } = useLanguage();
     const { themeMode, toggleTheme } = useThemeContext();
     const { locationGranted, notificationGranted, handleLocationToggle, handleNotificationToggle } = usePermissionSwitches();
-    const { runFcmDiagnostic } = useFcmToken();
+    const { runFcmDiagnostic } = useFcmToken({ autoRegisterOnMount: false });
     const { colors, isDark } = useTheme();
     const profileSchema = useMemo(() => createProfileSchema(t), [t, currentLanguage]);
     const resolver = useMemo(() => zodResolver(profileSchema), [profileSchema]);
@@ -155,18 +159,16 @@ const Index = () => {
     }, [enqueueSettingsPersist, updateSetting, dispatch, t]);
 
     // Memoize theme objects
-    const textInputTheme = useMemo(() => ({
-        roundness: 10,
-        colors: { onSurfaceVariant: "#fea60e", primary: "#fea60e" }
-    }), []);
+    const textInputTheme = useMemo(() => {
+        const outline = getProfileNameFieldOutlineColor(isDark, false);
+        return {
+            roundness: 10,
+            colors: { onSurfaceVariant: outline, primary: outline },
+        };
+    }, [isDark]);
 
-    // Memoize avatar source
-    const avatarSource = useMemo(() => {
-        if (userData?.data?.image?.imageUrl) {
-            return { uri: userData.data.image.imageUrl };
-        }
-        return DEFAULT_AVATAR;
-    }, [userData?.data?.image?.imageUrl]);
+    const profileImageUrl = userData?.data?.image?.imageUrl;
+    const hasProfileImage = Boolean(profileImageUrl);
 
     // Memoize full name
     const fullName = useMemo(() => {
@@ -571,23 +573,32 @@ const Index = () => {
                         height: 120,
                         borderRadius: 60,
                         borderWidth: 1.5,
-                        borderColor: '#fea60e',
+                        borderColor: COLORS.PROFILE.AVATAR_RING,
                         overflow: 'hidden',
                         justifyContent: 'center',
                         alignItems: 'center',
-                        backgroundColor: '#ffffff',
+                        backgroundColor: isDark ? colors.cardBg : COLORS.PROFILE.NAVY_AVATAR,
                     }}>
-                        <Avatar.Image
-                            size={120}
-                            source={avatarSource}
-                            theme={{ colors: { primaryContainer: '#ffffff' } }}
-                        />
+                        {hasProfileImage ? (
+                            <Avatar.Image
+                                size={120}
+                                source={{ uri: profileImageUrl! }}
+                                theme={{ colors: { primaryContainer: '#ffffff' } }}
+                            />
+                        ) : (
+                            <Avatar.Icon
+                                size={120}
+                                icon="account"
+                                color="#ffffff"
+                                style={{ backgroundColor: 'transparent' }}
+                            />
+                        )}
                     </View>
                     <IconButton
                         icon="pencil"
                         size={20}
-                        iconColor={colors.sectionHeaderText}
-                        style={{ position: 'absolute', bottom: -5, right: -0, backgroundColor: isDark ? '#38393b' : '#d1d5db', }}
+                        iconColor={isDark ? colors.sectionHeaderText : '#000000'}
+                        style={{ position: 'absolute', bottom: -5, right: -0, backgroundColor: isDark ? '#38393b' : '#ffffff' }}
                         loading={isProfileImageFlowBusy}
                         disabled={avatarImageActionsLocked}
                         onPress={handleImagePick}
@@ -639,8 +650,8 @@ const Index = () => {
                                         onBlur={onBlur}
                                         textColor={colors.sectionHeaderText}
                                         error={!!errors.firstName}
-                                        outlineColor={errors.firstName ? "#b00020" : "#fea60e"}
-                                        activeOutlineColor={errors.firstName ? "#b00020" : "#fea60e"}
+                                        outlineColor={getProfileNameFieldOutlineColor(isDark, !!errors.firstName)}
+                                        activeOutlineColor={getProfileNameFieldOutlineColor(isDark, !!errors.firstName)}
                                         theme={textInputTheme}
                                         style={{ backgroundColor: colors.cardBg, marginBottom: 0, fontFamily: 'CenturyGothic' }}
                                     />
@@ -662,8 +673,8 @@ const Index = () => {
                                         onBlur={onBlur}
                                         textColor={colors.sectionHeaderText}
                                         error={!!errors.lastName}
-                                        outlineColor={errors.lastName ? "#b00020" : "#fea60e"}
-                                        activeOutlineColor={errors.lastName ? "#b00020" : "#fea60e"}
+                                        outlineColor={getProfileNameFieldOutlineColor(isDark, !!errors.lastName)}
+                                        activeOutlineColor={getProfileNameFieldOutlineColor(isDark, !!errors.lastName)}
                                         theme={textInputTheme}
                                         style={{ backgroundColor: colors.cardBg, marginBottom: 0, fontFamily: 'CenturyGothic' }}
                                     />
@@ -690,27 +701,55 @@ const Index = () => {
                         control={control}
                         name="phoneNumber"
                         render={({ field: { value } }) => (
-                            <View className='flex-row items-center gap-2 mt-2'>
+                            <View style={{ flexDirection: 'row', gap: 8, marginTop: 8, alignItems: 'stretch' }}>
                                 <TextInput
                                     dense
                                     label={t('profile.phonePlaceholder')}
                                     mode="flat"
                                     value={value}
                                     editable={false}
-                                    textColor="#9ca3af"
+                                    textColor={isDark ? '#9ca3af' : COLORS.PROFILE.NAVY_BUTTON}
                                     underlineColor="transparent"
                                     activeUnderlineColor="transparent"
+                                    left={<TextInput.Icon icon="phone" size={18} color={isDark ? colors.sectionHeaderText : COLORS.PROFILE.NAVY_BUTTON} />}
                                     theme={{
                                         roundness: 10,
-                                        colors: { onSurfaceVariant: "#6b7280", primary: "#6b7280" }
+                                        colors: {
+                                            onSurfaceVariant: isDark ? '#6b7280' : COLORS.PROFILE.NAVY_BUTTON,
+                                            primary: isDark ? '#6b7280' : COLORS.PROFILE.NAVY_BUTTON,
+                                        },
                                     }}
-                                    style={{ backgroundColor: isDark ? '#1f2937' : '#f3f4f6', flex: 1, fontFamily: 'CenturyGothic', borderRadius: 8 }}
+                                    style={{
+                                        backgroundColor: isDark ? '#1f2937' : COLORS.PROFILE.PHONE_FIELD_BG_LIGHT,
+                                        flex: 1,
+                                        fontFamily: 'CenturyGothic',
+                                        fontSize: COLORS.PROFILE.PHONE_FIELD_FONT_SIZE,
+                                        borderRadius: 8,
+                                        minHeight: COLORS.PROFILE.PHONE_ROW_HEIGHT,
+                                    }}
+                                    contentStyle={{
+                                        minHeight: COLORS.PROFILE.PHONE_ROW_HEIGHT,
+                                        fontSize: COLORS.PROFILE.PHONE_FIELD_FONT_SIZE,
+                                        paddingVertical: 2,
+                                    }}
                                 />
                                 <TouchableOpacity
                                     onPress={() => setPhoneModalVisible(true)}
-                                    style={{ backgroundColor: '#3B83BD', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10 }}
+                                    style={{
+                                        backgroundColor: COLORS.PROFILE.NAVY_BUTTON,
+                                        borderRadius: 8,
+                                        paddingHorizontal: 14,
+                                        alignSelf: 'stretch',
+                                        justifyContent: 'center',
+                                        flexDirection: 'row',
+                                        alignItems: 'center',
+                                        gap: 6,
+                                    }}
                                 >
-                                    <Text style={{ color: 'white', fontFamily: 'CenturyGothic', fontSize: 12 }}>{t('profile.phoneChange')}</Text>
+                                    <Icon source="phone" size={18} color="#ffffff" />
+                                    <Text style={{ color: '#ffffff', fontFamily: 'CenturyGothic-Bold', fontSize: 13 }}>
+                                        {t('profile.phoneChange')}
+                                    </Text>
                                 </TouchableOpacity>
                             </View>
                         )}
@@ -721,8 +760,8 @@ const Index = () => {
                         loading={isUpdating}
                         disabled={!isDirty || isUpdating}
                         className="mt-4 mb-2"
-                        buttonColor="#fea60e"
-                        textColor="white"
+                        buttonColor={COLORS.UI.ACCENT_GOLD}
+                        textColor={getTextOnGold(isDark)}
                     >
                         {t('profile.save')}
                     </Button>
@@ -759,7 +798,7 @@ const Index = () => {
                     </TouchableOpacity>
                 </View>
 
-                <Text className='text-lg mb-4 font-century-gothic-bold' style={{ color: colors.sectionHeaderText }}>{t('profile.userActions') || 'Kullanıcı İşlemleri'}</Text>
+                <Text className='text-lg mb-4 font-century-gothic-bold' style={{ color: colors.sectionHeaderText }}>{t('profile.userActions')}</Text>
                 <View className='rounded-xl mb-6' style={{ backgroundColor: colors.cardBg }}>
                     <TouchableOpacity
                         onPress={() => router.push('/(screens)/profile/blocked-users')}
@@ -769,7 +808,7 @@ const Index = () => {
                     >
                         <View className='flex-row items-center'>
                             <Icon source="account-cancel" size={24} color="#ef4444" />
-                            <Text className='text-base ml-3' style={{ color: colors.sectionHeaderText }}>{t('profile.blockedUsers') || 'Engellenen Kullanıcılar'}</Text>
+                            <Text className='text-base ml-3' style={{ color: colors.sectionHeaderText }}>{t('profile.blockedUsers')}</Text>
                         </View>
                         <Icon source="chevron-right" size={24} color="#6b7280" />
                     </TouchableOpacity>
@@ -783,7 +822,7 @@ const Index = () => {
                     >
                         <View className='flex-row items-center'>
                             <Icon source="alert-circle-outline" size={24} color="#f59e0b" />
-                            <Text className='text-base ml-3' style={{ color: colors.sectionHeaderText }}>{t('profile.myComplaints') || 'Şikayetlerim'}</Text>
+                            <Text className='text-base ml-3' style={{ color: colors.sectionHeaderText }}>{t('profile.myComplaints')}</Text>
                         </View>
                         <Icon source="chevron-right" size={24} color="#6b7280" />
                     </TouchableOpacity>
@@ -796,7 +835,7 @@ const Index = () => {
                     >
                         <View className='flex-row items-center'>
                             <Icon source="message-text-outline" size={24} color="#10B981" />
-                            <Text className='text-base ml-3' style={{ color: colors.sectionHeaderText }}>{t('profile.myRequests') || 'İsteklerim'}</Text>
+                            <Text className='text-base ml-3' style={{ color: colors.sectionHeaderText }}>{t('profile.myRequests')}</Text>
                         </View>
                         <Icon source="chevron-right" size={24} color="#6b7280" />
                     </TouchableOpacity>
@@ -903,112 +942,56 @@ const Index = () => {
                             {...getProfilePaperSwitchProps(isDark)}
                         />
                     </View>
-                    <View style={{ height: 1, backgroundColor: colors.borderColor, marginVertical: 8 }} />
-                    <TouchableOpacity
-                        onPress={async () => {
-                            const result = await runFcmDiagnostic();
-                            Alert.alert(
-                                result.ok ? '✅ ' + result.message : '⚠️ ' + result.message,
-                                result.detail ?? '',
-                                [{ text: 'Tamam' }]
-                            );
-                        }}
-                        className='flex-row items-center justify-between py-2'
-                    >
-                        <View className='flex-1 mr-4'>
-                            <Text className='text-base font-century-gothic-bold' style={{ color: colors.sectionHeaderText }}>
-                                Bildirimleri Test Et
-                            </Text>
-                            <Text className='text-sm' style={{ color: colors.textSecondary }}>
-                                Push bildirimi gelmiyorsa bu butona basıp sonucu görün.
-                            </Text>
-                        </View>
-                        <Icon source="bell-check-outline" size={24} color={colors.textSecondary} />
-                    </TouchableOpacity>
+                    {__DEV__ && (
+                        <>
+                            <View style={{ height: 1, backgroundColor: colors.borderColor, marginVertical: 8 }} />
+                            <TouchableOpacity
+                                onPress={async () => {
+                                    const result = await runFcmDiagnostic();
+                                    Alert.alert(
+                                        result.ok ? '✅ ' + result.message : '⚠️ ' + result.message,
+                                        result.detail ?? '',
+                                        [{ text: t('common.ok') }]
+                                    );
+                                }}
+                                className='flex-row items-center justify-between py-2'
+                            >
+                                <View className='flex-1 mr-4'>
+                                    <Text className='text-base font-century-gothic-bold' style={{ color: colors.sectionHeaderText }}>
+                                        Bildirimleri Test Et
+                                    </Text>
+                                    <Text className='text-sm' style={{ color: colors.textSecondary }}>
+                                        Push bildirimi gelmiyorsa bu butona basıp sonucu görün.
+                                    </Text>
+                                </View>
+                                <Icon source="bell-check-outline" size={24} color={colors.textSecondary} />
+                            </TouchableOpacity>
+                        </>
+                    )}
                 </View>
 
-                {/* Abonelik Durumu */}
                 {subscriptionData?.data && (
                     <View className='mb-6'>
-                        <Text className='text-lg mb-4 font-century-gothic-bold' style={{ color: colors.sectionHeaderText }}>{t('subscription.title')}</Text>
-                        <View
-                            className='rounded-xl p-4'
-                            style={{
-                                backgroundColor:
-                                    subscriptionData.data.status === 'Banned' ? 'rgba(127,29,29,0.3)' :
-                                    subscriptionData.data.status === 'Expired' ? 'rgba(124,45,18,0.3)' :
-                                    subscriptionData.data.status === 'Active' ? 'rgba(20,83,45,0.3)' :
-                                    colors.cardBg,
-                                borderWidth: 1,
-                                borderColor:
-                                    subscriptionData.data.status === 'Banned' ? '#ef4444' :
-                                    subscriptionData.data.status === 'Expired' ? '#f97316' :
-                                    subscriptionData.data.status === 'Active' ? '#22c55e' :
-                                    '#fea60e',
-                            }}
+                        <Text className='text-lg mb-3 font-century-gothic-bold' style={{ color: colors.sectionHeaderText }}>{t('subscription.title')}</Text>
+                        <TouchableOpacity
+                            onPress={() => router.push('/(screens)/subscription')}
+                            activeOpacity={0.7}
+                            className='rounded-xl p-4 flex-row items-center justify-between'
+                            style={{ backgroundColor: colors.cardBg }}
                         >
-                            <View className='flex-row items-center mb-2'>
-                                <Icon
-                                    source={
-                                        subscriptionData.data.status === 'Banned' ? 'account-cancel' :
-                                        subscriptionData.data.status === 'Expired' ? 'clock-alert-outline' :
-                                        subscriptionData.data.status === 'Active' ? 'check-circle-outline' :
-                                        'clock-outline'
-                                    }
-                                    size={22}
-                                    color={
-                                        subscriptionData.data.status === 'Banned' ? '#ef4444' :
-                                        subscriptionData.data.status === 'Expired' ? '#f97316' :
-                                        subscriptionData.data.status === 'Active' ? '#22c55e' :
-                                        '#fea60e'
-                                    }
-                                />
-                                <Text
-                                    className='ml-2 text-base font-century-gothic-bold'
-                                    style={{
-                                        color:
-                                            subscriptionData.data.status === 'Banned' ? '#f87171' :
-                                            subscriptionData.data.status === 'Expired' ? '#fb923c' :
-                                            subscriptionData.data.status === 'Active' ? '#4ade80' :
-                                            '#fea60e',
-                                    }}
-                                >
-                                    {t(`subscription.status${subscriptionData.data.status}`)}
-                                </Text>
-                                {(subscriptionData.data.status === 'Trial' || subscriptionData.data.status === 'Active') && (
-                                    <Text className='text-sm ml-2' style={{ color: colors.textSecondary }}>
-                                        {subscriptionData.data.status === 'Trial'
-                                            ? t('subscription.trialDaysLeft').replace('{{days}}', String(subscriptionData.data.trialDaysLeft))
-                                            : t('subscription.subscriptionDaysLeft').replace('{{days}}', String(subscriptionData.data.subscriptionDaysLeft))
-                                        }
+                            <View className='flex-row items-center flex-1'>
+                                <Icon source="crown-outline" size={22} color={COLORS.PROFILE.ACCENT} />
+                                <View className='ml-3 flex-1'>
+                                    <Text className='text-base font-century-gothic-bold' style={{ color: colors.sectionHeaderText }}>
+                                        {t(`subscription.status${subscriptionData.data.status}`)}
                                     </Text>
-                                )}
+                                    <Text className='text-xs mt-1' style={{ color: colors.textSecondary }} numberOfLines={3}>
+                                        {t('subscription.processLaterShort')}
+                                    </Text>
+                                </View>
                             </View>
-                            <Text className='text-sm' style={{ color: colors.textSecondary }}>
-                                {subscriptionData.data.status === 'Banned' ? t('subscription.bannedInfo') :
-                                 subscriptionData.data.status === 'Expired' ? t('subscription.expiredInfo') :
-                                 subscriptionData.data.status === 'Trial' ? t('subscription.trialInfo') : ''}
-                            </Text>
-                            <TouchableOpacity
-                                onPress={() => router.push('/(screens)/subscription')}
-                                activeOpacity={0.8}
-                                style={{
-                                    marginTop: 12,
-                                    flexDirection: 'row',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    backgroundColor: '#fea60e',
-                                    borderRadius: 10,
-                                    paddingVertical: 10,
-                                    gap: 6,
-                                }}
-                            >
-                                <Icon source="crown-outline" size={16} color="#fff" />
-                                <Text style={{ color: '#fff', fontSize: 13, fontFamily: 'CenturyGothic-Bold' }}>
-                                    {t('subscription.viewPlans')}
-                                </Text>
-                            </TouchableOpacity>
-                        </View>
+                            <Icon source="chevron-right" size={22} color="#6b7280" />
+                        </TouchableOpacity>
                     </View>
                 )}
 
@@ -1017,8 +1000,8 @@ const Index = () => {
                     icon="account-plus-outline"
                     onPress={() => router.push({ pathname: '/(auth)', params: { addAccount: 'true' } } as any)}
                     contentStyle={{ alignItems: 'center', justifyContent: 'center' }}
-                    textColor="#fea60e"
-                    style={{ borderColor: '#fea60e', marginBottom: 8 }}
+                    textColor={getTextOnGold(isDark)}
+                    style={{ borderColor: COLORS.PROFILE.ACCENT, marginBottom: 8 }}
                 >
                     {t('accounts.addAccount')}
                 </Button>
@@ -1064,28 +1047,41 @@ const Index = () => {
                 <Text style={{ color: colors.sectionHeaderText, fontSize: 18, fontFamily: 'CenturyGothic-Bold', marginBottom: 8 }}>
                   {t('profile.deleteAccountConfirmTitle')}
                 </Text>
-                <Text style={{ color: '#9ca3af', fontSize: 14, marginBottom: 20, fontFamily: 'CenturyGothic' }}>
+                <Text style={{ color: '#9ca3af', fontSize: 14, marginBottom: 12, fontFamily: 'CenturyGothic' }}>
                   {t('profile.deleteAccountConfirmMessage')}
                 </Text>
-                <Button
-                  mode="contained"
-                  onPress={handleSendDeleteAccountOtp}
-                  loading={isSendingDeleteOtp}
-                  disabled={isSendingDeleteOtp}
-                  buttonColor="#ef4444"
-                  textColor="white"
-                  style={{ marginBottom: 8 }}
-                >
-                  {t('profile.deleteAccountOtpSend')}
-                </Button>
-                <Button
-                  mode="outlined"
-                  onPress={() => setDeleteAccountModalVisible(false)}
-                  textColor="#6b7280"
-                  style={{ borderColor: '#6b7280' }}
-                >
-                  {t('common.cancel')}
-                </Button>
+                {/* Aktif aboneliği olanlar için ekstra uyarı (Madde 8 / Phase B - B2). */}
+                {subscriptionData?.data?.status === 'Active' && subscriptionData.data.subscriptionEndDate && (
+                  <View style={{ backgroundColor: 'rgba(239,68,68,0.10)', borderColor: '#ef4444', borderWidth: 1, borderRadius: 10, padding: 12, marginBottom: 16 }}>
+                    <Text style={{ color: '#ef4444', fontSize: 13, fontFamily: 'CenturyGothic-Bold', marginBottom: 4 }}>
+                      {t('profile.deleteAccountSubscriptionWarningTitle')}
+                    </Text>
+                    <Text style={{ color: '#fca5a5', fontSize: 12, fontFamily: 'CenturyGothic', lineHeight: 17 }}>
+                      {t('profile.deleteAccountSubscriptionWarning')}
+                    </Text>
+                  </View>
+                )}
+                <View style={{ flexDirection: 'row', gap: 10 }}>
+                  <Button
+                    mode="outlined"
+                    onPress={() => setDeleteAccountModalVisible(false)}
+                    textColor="#6b7280"
+                    style={{ borderColor: '#6b7280', flex: 1 }}
+                  >
+                    {t('common.cancel')}
+                  </Button>
+                  <Button
+                    mode="contained"
+                    onPress={handleSendDeleteAccountOtp}
+                    loading={isSendingDeleteOtp}
+                    disabled={isSendingDeleteOtp}
+                    buttonColor="#ef4444"
+                    textColor="white"
+                    style={{ flex: 1 }}
+                  >
+                    {t('profile.deleteAccountOtpSend')}
+                  </Button>
+                </View>
               </>
             ) : (
               <>
@@ -1129,7 +1125,7 @@ const Index = () => {
                   onPress={handleSendDeleteAccountOtp}
                   loading={isSendingDeleteOtp}
                   disabled={isSendingDeleteOtp}
-                  textColor="#fea60e"
+                  textColor={COLORS.PROFILE.ACCENT}
                 >
                   {t('profile.deleteAccountOtpResend')}
                 </Button>
@@ -1151,7 +1147,9 @@ const Index = () => {
               {t('profile.phoneChangeOtpTitle')}
             </Text>
             <Text style={{ color: '#9ca3af', fontSize: 13, marginBottom: 16, fontFamily: 'CenturyGothic' }}>
-              {phoneChangeStep === 'input' ? t('profile.phoneChangeOtpDesc') : t('profile.phoneOtpSent')}
+              {phoneChangeStep === 'input'
+                ? t('profile.phoneChangeInputDesc')
+                : t('profile.phoneChangeOtpDesc', { phone: formatPhoneForDisplay(newPhoneInput) })}
             </Text>
 
             {phoneChangeStep === 'input' ? (
@@ -1164,10 +1162,20 @@ const Index = () => {
                   onChangeText={setNewPhoneInput}
                   keyboardType="phone-pad"
                   maxLength={10}
-                  textColor={colors.sectionHeaderText}
-                  outlineColor="#fea60e"
-                  theme={{ roundness: 10, colors: { onSurfaceVariant: "#fea60e", primary: "#fea60e" } }}
-                  style={{ backgroundColor: colors.cardBg, fontFamily: 'CenturyGothic' }}
+                  textColor={isDark ? colors.sectionHeaderText : '#171717'}
+                  outlineColor={isDark ? '#4b5563' : '#d1d5db'}
+                  activeOutlineColor={isDark ? '#9ca3af' : '#171717'}
+                  theme={{
+                    roundness: 10,
+                    colors: {
+                      onSurfaceVariant: isDark ? '#9ca3af' : '#525252',
+                      primary: isDark ? '#9ca3af' : '#171717',
+                    },
+                  }}
+                  style={{
+                    backgroundColor: isDark ? '#1f2937' : COLORS.PROFILE.PHONE_FIELD_BG_LIGHT,
+                    fontFamily: 'CenturyGothic',
+                  }}
                 />
                 <HelperText type="info" visible style={{ color: '#9ca3af', fontFamily: 'CenturyGothic' }}>
                   {t('profile.phoneFormat')}
@@ -1189,7 +1197,7 @@ const Index = () => {
                 <OtpInput
                   numberOfDigits={6}
                   onFilled={(code) => { setOtpCode(code); }}
-                  focusColor="#fea60e"
+                  focusColor={COLORS.PROFILE.ACCENT}
                   theme={{
                     containerStyle: { marginBottom: 12 },
                     pinCodeContainerStyle: {
@@ -1222,7 +1230,7 @@ const Index = () => {
                   mode="text"
                   onPress={() => setPhoneChangeStep('input')}
                   className="mt-1"
-                  textColor="#fea60e"
+                  textColor={COLORS.PROFILE.ACCENT}
                 >
                   {t('profile.phoneOtpResend')}
                 </Button>

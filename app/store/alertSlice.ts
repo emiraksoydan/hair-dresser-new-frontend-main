@@ -1,4 +1,5 @@
 import { createSlice, PayloadAction } from '@reduxjs/toolkit';
+import i18n from '../i18n/config';
 
 export interface AlertButton {
   text: string;
@@ -37,7 +38,7 @@ const alertSlice = createSlice({
     ) => {
       state.title = action.payload.title;
       state.message = action.payload.message;
-      state.buttons = action.payload.buttons || [{ text: 'Tamam' }];
+      state.buttons = action.payload.buttons || [{ text: i18n.t('common.ok') }];
       state.type = action.payload.type || 'info';
       state.visible = true;
     },

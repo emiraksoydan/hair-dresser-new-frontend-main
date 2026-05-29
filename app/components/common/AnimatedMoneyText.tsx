@@ -9,6 +9,8 @@ type Props = {
   locale?: string;
   durationMs?: number;
   enabled?: boolean;
+  /** Verilirse toLocaleString yerine kullanılır (örn. favori B/M) */
+  formatDisplay?: (n: number) => string;
 } & Omit<TextProps, "children">;
 
 export function AnimatedMoneyText({
@@ -19,6 +21,7 @@ export function AnimatedMoneyText({
   locale = "tr-TR",
   durationMs = 450,
   enabled = true,
+  formatDisplay,
   ...textProps
 }: Props) {
   const [display, setDisplay] = useState(value);
@@ -50,10 +53,16 @@ export function AnimatedMoneyText({
     };
   }, [value, durationMs, enabled]);
 
-  const formatted = display.toLocaleString(locale, {
-    minimumFractionDigits,
-    maximumFractionDigits,
-  });
+  const num =
+    maximumFractionDigits > 0 || minimumFractionDigits > 0
+      ? Number(display.toFixed(maximumFractionDigits))
+      : Math.round(display);
+  const formatted = formatDisplay
+    ? formatDisplay(num)
+    : num.toLocaleString(locale, {
+        minimumFractionDigits,
+        maximumFractionDigits,
+      });
 
   return (
     <Text {...textProps}>

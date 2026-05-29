@@ -1,6 +1,6 @@
 import { Icon } from "react-native-paper";
 import React from "react";
-import { View, TouchableOpacity, StyleSheet } from "react-native";
+import { View, TouchableOpacity, StyleSheet, ScrollView } from "react-native";
 
 import { Text } from "./Text";
 import { useTheme } from "../../hook/useTheme";
@@ -28,6 +28,7 @@ export const CategoryListSelect = React.memo(
     onChange,
     labelField = "label",
     valueField = "value",
+    maxHeight,
     singleSelect = false,
   }: CategoryListSelectProps) => {
     const { colors } = useTheme();
@@ -44,35 +45,47 @@ export const CategoryListSelect = React.memo(
       onChange(next);
     };
 
+    const listMaxH = maxHeight ?? 380;
+
+    const rows = data.map((item, index) => {
+      const itemValue = item[valueField] as string;
+      const itemLabel = item[labelField] as string;
+      const isSelected = valueSet.has(itemValue);
+
+      return (
+        <TouchableOpacity
+          key={`${itemValue}-${index}`}
+          onPress={() => toggleItem(itemValue)}
+          activeOpacity={0.7}
+          style={[
+            styles.item,
+            isSelected && [styles.itemSelected, { backgroundColor: colors.cardBg2 }],
+          ]}
+        >
+          <Text
+            className="flex-1"
+            style={[styles.label, { color: colors.sectionHeaderText }]}
+            numberOfLines={1}
+            ellipsizeMode="tail"
+          >
+            {itemLabel}
+          </Text>
+          <Icon source="chevron-right" size={20} color={isSelected ? "#FACC15" : "#6B7280"} />
+        </TouchableOpacity>
+      );
+    });
+
     return (
       <View style={[styles.container, { backgroundColor: colors.cardBg }]}>
-        {data.map((item, index) => {
-            const itemValue = item[valueField] as string;
-            const itemLabel = item[labelField] as string;
-            const isSelected = valueSet.has(itemValue);
-
-            return (
-              <TouchableOpacity
-                key={`${itemValue}-${index}`}
-                onPress={() => toggleItem(itemValue)}
-                activeOpacity={0.7}
-                style={[
-                  styles.item,
-                  isSelected && [styles.itemSelected, { backgroundColor: colors.cardBg2 }],
-                ]}
-              >
-                <Text
-                  className="flex-1"
-                  style={[styles.label, { color: colors.sectionHeaderText }]}
-                  numberOfLines={1}
-                  ellipsizeMode="tail"
-                >
-                  {itemLabel}
-                </Text>
-                <Icon source="chevron-right" size={20} color={isSelected ? "#FACC15" : "#6B7280"} />
-              </TouchableOpacity>
-            );
-          })}
+        <ScrollView
+          nestedScrollEnabled
+          keyboardShouldPersistTaps="always"
+          keyboardDismissMode="none"
+          style={{ maxHeight: listMaxH }}
+          showsVerticalScrollIndicator={data.length > 6}
+        >
+          {rows}
+        </ScrollView>
       </View>
     );
   },

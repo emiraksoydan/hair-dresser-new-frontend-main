@@ -2,7 +2,7 @@ import { useLocalSearchParams } from "expo-router";
 import React, { useCallback, useEffect, useMemo } from "react";
 import { StatusBar, View } from "react-native";
 
-import StoreBookingContent from "../../components/store/storebooking";
+import StoreBookingContent from "../../components/store/StoreBooking";
 import { BookingSwipePager } from "../../components/common/BookingSwipePager";
 import { useGetAllNotificationsQuery } from "../../store/api";
 import { useAuth } from "../../hook/useAuth";

@@ -130,37 +130,38 @@ export function PanelImageOverflowMenu({ images, panelCompare, galleryTitle }: P
           ]}
           pointerEvents={menuOpen ? "auto" : "none"}
         >
-          {menuItems.map((row, index) => (
-            <Pressable
-              key={row.key}
-              onPress={() => {
-                closeMenu();
-                row.onPress();
-              }}
-              style={({ pressed }) => [
-                styles.row,
-                index < menuItems.length - 1 && styles.rowSeparator,
-                pressed && {
-                  opacity: 0.9,
-                  backgroundColor: "rgba(250, 204, 21, 0.14)",
-                },
-              ]}
-              accessibilityRole="menuitem"
-            >
-              <View style={styles.rowInner}>
-                <View style={styles.rowIconWrap}>
-                  <Icon source={row.icon as any} size={18} color="#d97706" />
+          <View style={styles.menuList}>
+            {menuItems.map((row) => (
+              <Pressable
+                key={row.key}
+                onPress={() => {
+                  closeMenu();
+                  row.onPress();
+                }}
+                style={({ pressed }) => [
+                  styles.row,
+                  pressed && {
+                    opacity: 0.9,
+                    backgroundColor: "rgba(250, 204, 21, 0.14)",
+                  },
+                ]}
+                accessibilityRole="menuitem"
+              >
+                <View style={styles.rowInner}>
+                  <View style={styles.rowIconWrap}>
+                    <Icon source={row.icon as any} size={18} color="#d97706" />
+                  </View>
+                  <Text
+                    style={styles.rowLabel}
+                    numberOfLines={1}
+                    ellipsizeMode="tail"
+                  >
+                    {row.label}
+                  </Text>
                 </View>
-                <Text
-                  style={styles.rowLabel}
-                  numberOfLines={1}
-                  ellipsizeMode="tail"
-                >
-                  {row.label}
-                </Text>
-              </View>
-            </Pressable>
-          ))}
+              </Pressable>
+            ))}
+          </View>
         </MotiView>
 
         {menuOpen && (
@@ -206,35 +207,41 @@ const styles = StyleSheet.create({
     elevation: 12,
     overflow: "hidden",
   },
-  row: {
-    paddingVertical: 10,
-    paddingHorizontal: 14,
+  menuList: {
+    gap: 6,
+    paddingHorizontal: 2,
+    paddingVertical: 2,
   },
-  rowSeparator: {
-    borderBottomWidth: 1,
-    borderBottomColor: "rgba(250, 204, 21, 0.22)",
+  row: {
+    paddingVertical: 8,
+    paddingRight: 10,
+    paddingLeft: 18,
+    borderRadius: 8,
   },
   rowInner: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "flex-start",
-    gap: 10,
+    gap: 12,
     minWidth: 0,
+    paddingLeft: 6,
   },
   rowIconWrap: {
-    width: 30,
-    height: 30,
+    width: 32,
+    height: 32,
     borderRadius: 9,
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
     backgroundColor: "rgba(250, 204, 21, 0.16)",
+    marginRight: 2,
   },
   rowLabel: {
     flex: 1,
     flexShrink: 1,
     fontSize: 12.5,
-    lineHeight: 17,
+    lineHeight: 18,
+    paddingVertical: 2,
     fontFamily: "CenturyGothic-Bold",
     color: "#b45309",
   },

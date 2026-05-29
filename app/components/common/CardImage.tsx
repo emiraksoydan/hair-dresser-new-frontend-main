@@ -1,7 +1,8 @@
 import React from 'react';
-import { View, TouchableOpacity, Image } from 'react-native';
+import { View, TouchableOpacity } from 'react-native';
 import { ImageCarousel } from './imagecarousel';
 import { ImageGetDto } from '../../types';
+import { RetryableImage } from './RetryableImage';
 
 interface CardImageProps {
   images?: ImageGetDto[];
@@ -58,11 +59,11 @@ export const CardImage: React.FC<CardImageProps> = ({
     return (
       <View className={`relative ${className}`}>
         <TouchableOpacity onPress={onPress} activeOpacity={0.9}>
-          <Image
-            defaultSource={emptyImage}
+          <RetryableImage
+            uri={images[0].imageUrl}
+            fallbackSource={emptyImage}
             className={`${borderRadiusClass} mb-0`}
             style={{ width, height: imageHeight }}
-            source={{ uri: images[0].imageUrl }}
             resizeMode="cover"
           />
         </TouchableOpacity>
@@ -74,11 +75,11 @@ export const CardImage: React.FC<CardImageProps> = ({
   return (
     <View className={`relative ${className}`}>
       <TouchableOpacity onPress={onPress} activeOpacity={0.9}>
-        <Image
-          defaultSource={emptyImage}
+        <RetryableImage
+          uri={singleImageUrl}
+          fallbackSource={emptyImage}
           className={`${isList ? 'w-full' : ''} ${borderRadiusClass} mb-0`}
           style={{ width, height: imageHeight }}
-          source={singleImageUrl ? { uri: singleImageUrl } : emptyImage}
           resizeMode="cover"
         />
       </TouchableOpacity>

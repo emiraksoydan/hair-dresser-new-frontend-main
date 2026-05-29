@@ -11,6 +11,7 @@ import { ENTITY_NUMBER } from "../../constants/entityDisplay";
 import { RatingSection } from "../common/RatingSection";
 import { StatusBadge } from "../common/StatusBadge";
 import { ServiceOfferingsList } from "../common/ServiceOfferingsList";
+import { CardServicesPackagesSection } from "../common/CardServicesPackagesSection";
 import { getShortBarberTypeLabel } from "../../utils/card-helpers";
 import { useUpdateFreeBarberAvailabilityMutation } from "../../store/api";
 import { useAppDispatch } from "../../store/hook";
@@ -230,7 +231,10 @@ const FreeBarberMineCard: React.FC<Props> = ({
             )}
           </View>
           {!isList && (
-            <View className="flex-row pr-2 justify-between items-center" style={{ marginTop: -18 }}>
+            <View
+              className="flex-row pr-2 justify-between items-center"
+              style={{ marginTop: profileCompact ? -6 : -18 }}
+            >
               <Text style={{ color: colors.textSecondary }} className="text-sm font-century-gothic-sans-medium">
                 {getShortBarberTypeLabel(freeBarber.type)}
               </Text>
@@ -265,45 +269,63 @@ const FreeBarberMineCard: React.FC<Props> = ({
           )}
         </View>
       </View>
-      <View style={{ marginTop: profileCompact ? 8 : 16, paddingRight: 8 }}>
-        {mainOfferings.length > 0 && (
-          <ServiceOfferingsList
-            offerings={mainOfferings}
-            layout="vertical"
-            previewCount={3}
-            showExpandButton={true}
-          />
-        )}
-        {beautyOfferings.length > 0 && (
-          <View className="mt-3">
-            <Text style={{ color: colors.textSecondary }} className="text-base mb-1.5 font-century-gothic-sans-semibold">
-              {t("form.beautySalonServices")}
-            </Text>
-            <ServiceOfferingsList
-              offerings={beautyOfferings}
-              layout="vertical"
-              previewCount={3}
-              showExpandButton={true}
-            />
-          </View>
-        )}
-      </View>
+      <CardServicesPackagesSection
+        ownerId={freeBarber.id}
+        expanded={expanded}
+        className={profileCompact ? "mt-2" : "mt-4"}
+        renderServices={
+          <>
+            {mainOfferings.length > 0 && (
+              <ServiceOfferingsList
+                offerings={mainOfferings}
+                layout="vertical"
+                previewCount={3}
+                showExpandButton
+              />
+            )}
+            {beautyOfferings.length > 0 && (
+              <View className="mt-3">
+                <Text style={{ color: colors.textSecondary }} className="text-base mb-1.5 font-century-gothic-sans-semibold">
+                  {t("form.beautySalonServices")}
+                </Text>
+                <ServiceOfferingsList
+                  offerings={beautyOfferings}
+                  layout="vertical"
+                  previewCount={3}
+                  showExpandButton
+                />
+              </View>
+            )}
+          </>
+        }
+      />
     </View>
   );
 };
 
 export const FreeBarberMineCardComp = React.memo(
   FreeBarberMineCard,
-  (prev, next) =>
-    prev.freeBarber.id === next.freeBarber.id &&
-    prev.freeBarber.favoriteCount === next.freeBarber.favoriteCount &&
-    prev.freeBarber.fullName === next.freeBarber.fullName &&
-    prev.freeBarber.isAvailable === next.freeBarber.isAvailable &&
-    (prev.freeBarber.imageList?.map((i) => i.id).join(",") ?? "") ===
-    (next.freeBarber.imageList?.map((i) => i.id).join(",") ?? "") &&
-    prev.isList === next.isList &&
-    prev.expanded === next.expanded &&
-    prev.cardWidthFreeBarber === next.cardWidthFreeBarber &&
-    prev.showImageAnimation === next.showImageAnimation &&
-    prev.profileCompact === next.profileCompact,
+  (prev, next) => {
+    // imageList referans eşitliğini önce kontrol et (Immer değiştirmediyse aynıdır);
+    // değiştiyse uzunluk ve ID listesini karşılaştır — .map().join() sadece gerektiğinde çalışır.
+    const sameImages =
+      prev.freeBarber.imageList === next.freeBarber.imageList ||
+      (prev.freeBarber.imageList?.length === next.freeBarber.imageList?.length &&
+        (prev.freeBarber.imageList?.map((i) => i.id).join(",") ?? "") ===
+        (next.freeBarber.imageList?.map((i) => i.id).join(",") ?? ""));
+    return (
+      prev.freeBarber.id === next.freeBarber.id &&
+      prev.freeBarber.favoriteCount === next.freeBarber.favoriteCount &&
+      prev.freeBarber.fullName === next.freeBarber.fullName &&
+      prev.freeBarber.isAvailable === next.freeBarber.isAvailable &&
+      prev.freeBarber.rating === next.freeBarber.rating &&
+      prev.freeBarber.offerings === next.freeBarber.offerings &&
+      sameImages &&
+      prev.isList === next.isList &&
+      prev.expanded === next.expanded &&
+      prev.cardWidthFreeBarber === next.cardWidthFreeBarber &&
+      prev.showImageAnimation === next.showImageAnimation &&
+      prev.profileCompact === next.profileCompact
+    );
+  },
 );

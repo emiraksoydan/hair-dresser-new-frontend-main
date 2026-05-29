@@ -161,13 +161,13 @@ export default function NotificationMapScreen() {
   const headerLabel = useMemo(() => {
     switch (targetType) {
       case "freebarber":
-        return t("notification.mapFreeBarberLive") || "Serbest Berber Konumu (Canlı)";
+        return t("notification.mapFreeBarberLive");
       case "store":
-        return t("notification.mapStore") || "Dükkan Konumu";
+        return t("notification.mapStore");
       case "customer":
-        return t("notification.mapCustomer") || "Müşteri Konumu";
+        return t("notification.mapCustomer");
       default:
-        return "Harita";
+        return t("notification.mapTitle");
     }
   }, [targetType, t]);
 
@@ -263,7 +263,7 @@ export default function NotificationMapScreen() {
           <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
             <ActivityIndicator size="large" color={GOLD} />
             <Text style={{ color: colors.textSecondary, marginTop: 12 }}>
-              {t("common.loading") || "Yükleniyor..."}
+              {t("common.loading")}
             </Text>
           </View>
         ) : !targetCoords ? (
@@ -279,8 +279,8 @@ export default function NotificationMapScreen() {
               }}
             >
               {targetType === "customer"
-                ? t("notification.mapCustomerNotAvailable") || "Müşteri canlı konumu henüz desteklenmiyor."
-                : t("notification.mapNoLocation") || "Konum bilgisi bulunamadı."}
+                ? t("notification.mapCustomerNotAvailable")
+                : t("notification.mapNoLocation")}
             </Text>
             {targetType === "customer" && (
               <Text style={{ color: colors.textSecondary, marginTop: 8, textAlign: "center", fontSize: 13 }}>

@@ -46,6 +46,22 @@ function dedupeAppend<T>(
   return out;
 }
 
+function mergeFirstPageIntoAccumulated<T>(
+  prev: T[],
+  firstPage: T[],
+  idFn: (t: T) => string,
+): T[] {
+  if (prev.length === 0) return firstPage;
+
+  const firstPageIds = new Set(firstPage.map(idFn));
+  const out = [...firstPage];
+  for (const item of prev) {
+    if (firstPageIds.has(idFn(item))) continue;
+    out.push(item);
+  }
+  return out;
+}
+
 interface UseNearbyDiscoveryOptions {
   enabled: boolean;
   moveThresholdM?: number;
@@ -180,8 +196,12 @@ export function useNearbyDiscovery(
       if (useFiltered) {
         const res = await fetchPage(lat, lon, 0, 0);
         if (res === null) return;
-        setAccumulatedStores(res.stores ?? []);
-        setAccumulatedFreeBarbers(res.freeBarbers ?? []);
+        setAccumulatedStores((prev) =>
+          mergeFirstPageIntoAccumulated(prev, res.stores ?? [], (s) => String(s.id)),
+        );
+        setAccumulatedFreeBarbers((prev) =>
+          mergeFirstPageIntoAccumulated(prev, res.freeBarbers ?? [], (b) => String(b.id)),
+        );
         setHasMoreStores((res.stores?.length ?? 0) >= pageSize);
         setHasMoreFreeBarbers((res.freeBarbers?.length ?? 0) >= pageSize);
         suppressLoadMoreUntilMsRef.current = Date.now() + LOAD_MORE_GRACE_MS;

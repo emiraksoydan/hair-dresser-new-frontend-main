@@ -237,6 +237,46 @@ export function AIAssistantSheet({ sheetRef, accentColor, onClose }: Props) {
             </View>
           )}
 
+          {/* Fuzzy suggestions — intent=unknown ama berber/dükkan önerisi varsa */}
+          {phase === "done" &&
+            response?.intent === "unknown" &&
+            (response.suggestions?.length ?? 0) > 0 && (
+              <View style={styles.suggestionsContainer}>
+                <View style={styles.suggestionsHeader}>
+                  <Ionicons name="sparkles" size={14} color={accentColor} />
+                  <Text style={[styles.suggestionsTitle, { color: accentColor }]}>
+                    {t("ai.suggestions")}
+                  </Text>
+                </View>
+                {response.suggestions!.map((s, i) => (
+                  <View
+                    key={i}
+                    style={[
+                      styles.suggestionCard,
+                      {
+                        backgroundColor: isDark ? "#0f172a" : "#f8fafc",
+                        borderColor: isDark ? "#334155" : "#e2e8f0",
+                      },
+                    ]}
+                  >
+                    <Text style={[styles.suggestionName, { color: colors.text }]}>
+                      {s.name}
+                    </Text>
+                    {s.distanceKm != null && (
+                      <Text style={[styles.suggestionMeta, { color: colors.textSecondary }]}>
+                        {s.distanceKm.toFixed(1)} km
+                      </Text>
+                    )}
+                    {!!s.services && (
+                      <Text style={[styles.suggestionServices, { color: colors.textSecondary }]}>
+                        {s.services}
+                      </Text>
+                    )}
+                  </View>
+                ))}
+              </View>
+            )}
+
           {/* Error / kota (Gemini veya Whisper) */}
           {phase === "error" && (() => {
             // i18next "key yoksa key'in kendisini döndürür" şeklinde çalıştığı için
@@ -437,5 +477,37 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontFamily: "CenturyGothic",
     textAlign: "center",
+  },
+  suggestionsContainer: {
+    gap: 8,
+  },
+  suggestionsHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  suggestionsTitle: {
+    fontSize: 13,
+    fontFamily: "CenturyGothic-Bold",
+  },
+  suggestionCard: {
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    gap: 2,
+  },
+  suggestionName: {
+    fontSize: 13,
+    fontFamily: "CenturyGothic-Bold",
+  },
+  suggestionMeta: {
+    fontSize: 12,
+    fontFamily: "CenturyGothic",
+  },
+  suggestionServices: {
+    fontSize: 12,
+    fontFamily: "CenturyGothic",
+    marginTop: 2,
   },
 });

@@ -1,6 +1,7 @@
 import React, { ReactElement } from "react";
 import { FlatList, type RefreshControlProps } from "react-native";
 import { PerplexityListItem } from "../panel/PerplexityListItem";
+import { PANEL_FLAT_LIST_PERF } from "../../constants/panelFlatListPerf";
 
 type Props<T> = {
   data: T[];
@@ -17,6 +18,8 @@ type Props<T> = {
   ListFooterComponent?: React.ComponentType<any> | React.ReactElement | null;
   ListEmptyComponent?: React.ComponentType<any> | React.ReactElement | null;
   initialNumToRender?: number;
+  maxToRenderPerBatch?: number;
+  updateCellsBatchingPeriod?: number;
   windowSize?: number;
   onEndReached?: (() => void) | null;
   onEndReachedThreshold?: number;
@@ -37,8 +40,10 @@ export function PerplexityAnimatedList<T>({
   ListHeaderComponent,
   ListFooterComponent,
   ListEmptyComponent,
-  initialNumToRender,
-  windowSize,
+  initialNumToRender = PANEL_FLAT_LIST_PERF.initialNumToRender,
+  maxToRenderPerBatch = PANEL_FLAT_LIST_PERF.maxToRenderPerBatch,
+  updateCellsBatchingPeriod = PANEL_FLAT_LIST_PERF.updateCellsBatchingPeriod,
+  windowSize = PANEL_FLAT_LIST_PERF.windowSize,
   onEndReached,
   onEndReachedThreshold,
 }: Props<T>): ReactElement {
@@ -48,6 +53,7 @@ export function PerplexityAnimatedList<T>({
       keyExtractor={keyExtractor as any}
       scrollEventThrottle={16}
       showsVerticalScrollIndicator={false}
+      removeClippedSubviews={PANEL_FLAT_LIST_PERF.removeClippedSubviews}
       renderItem={({ item, index }: { item: any; index: number }) => (
         <PerplexityListItem>
           {renderItem({ item: item as T, index })}
@@ -63,6 +69,8 @@ export function PerplexityAnimatedList<T>({
       ListFooterComponent={ListFooterComponent}
       ListEmptyComponent={ListEmptyComponent}
       initialNumToRender={initialNumToRender}
+      maxToRenderPerBatch={maxToRenderPerBatch}
+      updateCellsBatchingPeriod={updateCellsBatchingPeriod}
       windowSize={windowSize}
       onEndReached={onEndReached ?? undefined}
       onEndReachedThreshold={onEndReachedThreshold}

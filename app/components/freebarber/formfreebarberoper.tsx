@@ -28,7 +28,8 @@ import {
   truncateFileName,
   resolveMimeType,
 } from "../../utils/form/pick-document";
-import { parseTR } from "../../utils/form/money-helper";
+import { formatPackagePriceFromApi, parseTR } from "../../utils/form/money-helper";
+import { isMonetaryWithinLimit, MAX_MONETARY_TRY_DISPLAY } from "../../constants/priceLimits";
 import {
   ImageOwnerType,
   ServiceOfferingCreateDto,
@@ -52,15 +53,15 @@ import {
   useUploadMultipleImagesMutation,
   useUploadImageMutation,
   useUpdateImageBlobMutation,
-  useAddServicePackageMutation,
-  useUpdateServicePackageMutation,
-  useDeleteServicePackageMutation,
   useLazyGetServicePackagesByOwnerQuery,
 } from "../../store/api";
 import {
   ServicePackageStep,
   type PackageFormItem,
 } from "../store/ServicePackageStep";
+import { FormPackagesPreview } from "../common/FormPackagesPreview";
+import { buildServicePackageSyncItems } from "../../utils/service-package-sync";
+import { useSyncPackagesWithServiceOptions } from "../../hook/useSyncPackagesWithServiceOptions";
 import { useCategoryHierarchy } from "../../hook/useCategoryHierarchy";
 import { useAuth } from "../../hook/useAuth";
 import { useLanguage } from "../../hook/useLanguage";
@@ -69,11 +70,16 @@ import { MESSAGES } from "../../constants/messages";
 import { useCanPerformAction } from "../../hook/useCanPerformAction";
 import { StepFormIndicator } from "../common/StepFormIndicator";
 import { useTheme } from "../../hook/useTheme";
+import {
+  getFormNavButtonColors,
+  getFormPreviewPriceColor,
+  getProfileNameFieldOutlineColor,
+} from "../../constants/colors";
 import { useActionGuard } from "../../hook/useActionGuard";
 import { SheetCloseButton } from "../common/SheetCloseButton";
 
 // --- Schema Definitions ---
-const createLocationSchema = (t: (key: string) => string) =>
+const createLocationSchema = (t: (key: string, options?: Record<string, unknown>) => string) =>
   z
     .object({
       latitude: z.number({ required_error: t("form.locationRequired") }),
@@ -90,7 +96,7 @@ const ImageAssetSchema = z.object({
   type: z.string().optional(),
 });
 
-const createCertificateImageField = (t: (key: string) => string) =>
+const createCertificateImageField = (t: (key: string, options?: Record<string, unknown>) => string) =>
   z
     .custom<{
       uri: string;
@@ -104,7 +110,7 @@ const createCertificateImageField = (t: (key: string) => string) =>
     .pipe(ImageAssetSchema)
     .optional();
 
-const createSchema = (t: (key: string) => string) =>
+const createSchema = (t: (key: string, options?: Record<string, unknown>) => string) =>
   z.object({
     name: z
       .string({ required_error: t("form.nameRequired") })
@@ -157,6 +163,15 @@ const createSchema = (t: (key: string) => string) =>
             return !isNaN(num) && num >= 0; // 0 veya daha büyük olmalı
           },
           { message: t("form.priceCannotBeNegative") },
+        )
+        .refine(
+          (val) => {
+            if (!val || val.trim() === "") return true;
+            const num = parseFloat(val.replace(/\./g, "").replace(",", "."));
+            if (isNaN(num) || num < 0) return true;
+            return isMonetaryWithinLimit(num);
+          },
+          { message: t("form.priceExceedsPlatformMax", { max: MAX_MONETARY_TRY_DISPLAY }) },
         ),
     ),
     location: createLocationSchema(t),
@@ -272,7 +287,8 @@ export const FormFreeBarberOperation = React.memo(
     const dispatch = useAppDispatch();
     const { userId } = useAuth();
     const { t, currentLanguage } = useLanguage();
-    const { colors } = useTheme();
+    const { colors, isDark } = useTheme();
+    const formNav = React.useMemo(() => getFormNavButtonColors(isDark), [isDark]);
 
     const stepLabels = React.useMemo(() => {
       const base = [
@@ -315,9 +331,6 @@ export const FormFreeBarberOperation = React.memo(
       React.useState(false);
     const [isSubmitting, setIsSubmitting] = React.useState(false);
     const [fbFormPackages, setFbFormPackages] = React.useState<PackageFormItem[]>([]);
-    const [addServicePackage] = useAddServicePackageMutation();
-    const [updateServicePackageMutation] = useUpdateServicePackageMutation();
-    const [deleteServicePackageMutation] = useDeleteServicePackageMutation();
     const [triggerGetPackagesByOwner] = useLazyGetServicePackagesByOwnerQuery();
     const [loadedImages, setLoadedImages] = React.useState<Set<number>>(
       new Set(),
@@ -646,19 +659,18 @@ export const FormFreeBarberOperation = React.memo(
       initialDataLoadedRef.current = true;
     }, [enabled, isEdit, data, parentCategories, isCategoryLoading, findParentHierarchyFromServices, reset, getValues]);
 
-    // Edit modunda mevcut paketleri yükle (data yüklendikten sonra)
     useEffect(() => {
       if (!enabled || !isEdit || !freeBarberId || !data) return;
       triggerGetPackagesByOwner(freeBarberId).then((res) => {
         if (res.data && Array.isArray(res.data) && res.data.length > 0) {
-          // Backend'den gelen paket itemlarında serviceName snapshot var.
-          // fbServiceOptions ID olarak serviceName kullandığından, serviceName ile eşleştiriyoruz.
           const mapped: PackageFormItem[] = res.data.map((pkg: any) => ({
             localId: pkg.id,
             id: pkg.id,
             packageName: pkg.packageName,
-            totalPrice: String(pkg.totalPrice),
-            serviceOfferingIds: pkg.items?.map((item: any) => item.serviceName ?? item.serviceOfferingId) ?? [],
+            totalPrice: formatPackagePriceFromApi(pkg.totalPrice),
+            serviceOfferingIds:
+              pkg.items?.map((item: any) => item.serviceName ?? item.serviceOfferingId) ??
+              [],
           }));
           setFbFormPackages(mapped);
         }
@@ -768,6 +780,12 @@ export const FormFreeBarberOperation = React.memo(
       });
       return options;
     }, [selectedCategories, selectedBeautySalonCategories]);
+
+    useSyncPackagesWithServiceOptions(
+      fbFormPackages,
+      fbServiceOptions,
+      setFbFormPackages,
+    );
 
     // Memoized category label lookup map to avoid O(n²) operations
     const categoryLabelMap = useMemo(() => {
@@ -1155,6 +1173,11 @@ export const FormFreeBarberOperation = React.memo(
           barberCertificateImageId: certImageId,
           beautySalonCertificateImageId: beautyCertImageId,
           isAvailable: isEdit ? form.isAvailable : true,
+          servicePackages: buildServicePackageSyncItems(
+            fbFormPackages,
+            (id) => fbServiceOptions.find((o) => o.id === id)?.label ?? id,
+            { preferServiceNames: true },
+          ),
         };
         // Payload validation passed, proceed with submission
 
@@ -1175,9 +1198,23 @@ export const FormFreeBarberOperation = React.memo(
               isError: true,
             }),
           );
+          setIsSubmitting(false);
           return;
         }
         const result = mutationResult.data;
+        if (!result?.success) {
+          const errorMessage = isEdit
+            ? MESSAGES.FORM.FREEBARBER_UPDATE_ERROR
+            : MESSAGES.FORM.FREEBARBER_CREATE_ERROR;
+          dispatch(
+            showSnack({
+              message: result?.message || errorMessage,
+              isError: true,
+            }),
+          );
+          setIsSubmitting(false);
+          return;
+        }
         if (result?.success) {
           let uploadError: string | null = null;
           const hasImageChanges = isEdit
@@ -1302,89 +1339,6 @@ export const FormFreeBarberOperation = React.memo(
               }),
             );
           }
-          // Paket senkronizasyonu
-          const ownerId = isEdit
-            ? (data?.id ?? freeBarberId ?? "")
-            : (mutationResult.data?.data ?? "");
-          if (ownerId && fbFormPackages.length > 0) {
-            // serviceName → serviceOfferingId map
-            let offeringNameToId: Map<string, string>;
-            if (!isEdit) {
-              // Create: panel henüz oluşturuldu, offerings ID'lerini çek
-              const panelRes = await triggerGetFreeBarberPanel(ownerId);
-              offeringNameToId = new Map(
-                (panelRes.data?.offerings ?? []).map((o: any) => [o.serviceName, o.id]),
-              );
-            } else {
-              offeringNameToId = new Map(
-                (data?.offerings ?? []).map((o: any) => [o.serviceName, o.id]),
-              );
-            }
-            const resolveIds = (names: string[]) =>
-              names.map((n) => offeringNameToId.get(n)).filter((id): id is string => !!id);
-
-            if (!isEdit) {
-              // Create modunda: paketleri sırayla ekle (yarış koşullarını azaltır)
-              for (const pkg of fbFormPackages) {
-                const totalPriceNum = parseFloat(pkg.totalPrice.replace(",", ".")) || 0;
-                const serviceOfferingIds = resolveIds(pkg.serviceOfferingIds);
-                if (!totalPriceNum || totalPriceNum <= 0 || serviceOfferingIds.length === 0) continue;
-                await addServicePackage({
-                  ownerId,
-                  packageName: pkg.packageName,
-                  totalPrice: totalPriceNum,
-                  serviceOfferingIds,
-                }).unwrap();
-              }
-            } else {
-              // Update modunda: ekle / güncelle / sil
-              const existingPkgsRes = await triggerGetPackagesByOwner(ownerId);
-              const existingPkgs = existingPkgsRes.data ?? [];
-              const existingIds = new Set(existingPkgs.map((p: any) => p.id));
-              const formIds = new Set(fbFormPackages.filter((p) => p.id).map((p) => p.id!));
-
-              // Silinecekler
-              for (const p of existingPkgs.filter((x: any) => !formIds.has(x.id))) {
-                await deleteServicePackageMutation(p.id).unwrap();
-              }
-
-              // Eklenecekler
-              const toAdd = fbFormPackages.filter((p) => !p.id);
-              for (const pkg of toAdd) {
-                const totalPriceNum = parseFloat(pkg.totalPrice.replace(",", ".")) || 0;
-                const serviceOfferingIds = resolveIds(pkg.serviceOfferingIds);
-                if (!totalPriceNum || totalPriceNum <= 0 || serviceOfferingIds.length === 0) continue;
-                await addServicePackage({
-                  ownerId,
-                  packageName: pkg.packageName,
-                  totalPrice: totalPriceNum,
-                  serviceOfferingIds,
-                }).unwrap();
-              }
-
-              // Güncellenecekler
-              const toUpdate = fbFormPackages.filter((p) => p.id && existingIds.has(p.id));
-              for (const pkg of toUpdate) {
-                const totalPriceNum = parseFloat(pkg.totalPrice.replace(",", ".")) || 0;
-                const serviceOfferingIds = resolveIds(pkg.serviceOfferingIds);
-                if (!totalPriceNum || totalPriceNum <= 0 || serviceOfferingIds.length === 0) continue;
-                await updateServicePackageMutation({
-                  id: pkg.id!,
-                  ownerId,
-                  packageName: pkg.packageName,
-                  totalPrice: totalPriceNum,
-                  serviceOfferingIds,
-                }).unwrap();
-              }
-            }
-          } else if (ownerId && isEdit) {
-            // Edit modunda paket listesi boşsa mevcut paketleri sil
-            const existingPkgsRes = await triggerGetPackagesByOwner(ownerId);
-            const existingPkgs = existingPkgsRes.data ?? [];
-            for (const p of existingPkgs) {
-              await deleteServicePackageMutation(p.id).unwrap();
-            }
-          }
 
           // Refresh panel data to show updated images
           try {
@@ -1397,16 +1351,6 @@ export const FormFreeBarberOperation = React.memo(
             // panel refresh failed; mutation succeeded — still close sheet
           }
           onClose?.();
-        } else {
-          const errorMessage = isEdit
-            ? MESSAGES.FORM.FREEBARBER_UPDATE_ERROR
-            : MESSAGES.FORM.FREEBARBER_CREATE_ERROR;
-          dispatch(
-            showSnack({
-              message: result?.message || errorMessage,
-              isError: true,
-            }),
-          );
         }
         } finally {
           setIsSubmitting(false);
@@ -1427,9 +1371,7 @@ export const FormFreeBarberOperation = React.memo(
         uploadMultipleImages,
         updateImageBlob,
         fbFormPackages,
-        addServicePackage,
-        updateServicePackageMutation,
-        deleteServicePackageMutation,
+        fbServiceOptions,
         triggerGetPackagesByOwner,
         triggerGetFreeBarberPanel,
       ],
@@ -1712,13 +1654,13 @@ export const FormFreeBarberOperation = React.memo(
                                 onChangeText={onChange}
                                 onBlur={onBlur}
                                 textColor={colors.sectionHeaderText}
-                                outlineColor={errors.name ? "#b00020" : colors.borderColor2}
-                                activeOutlineColor={errors.name ? "#b00020" : "#FACC15"}
+                                outlineColor={getProfileNameFieldOutlineColor(isDark, !!errors.name)}
+                                activeOutlineColor={getProfileNameFieldOutlineColor(isDark, !!errors.name)}
                                 theme={{
                                   roundness: 10,
                                   colors: {
-                                    onSurfaceVariant: "gray",
-                                    primary: "#FACC15",
+                                    onSurfaceVariant: colors.textSecondary,
+                                    primary: getProfileNameFieldOutlineColor(isDark, false),
                                   },
                                 }}
                                 style={{ backgroundColor: colors.cardBg }}
@@ -1744,13 +1686,13 @@ export const FormFreeBarberOperation = React.memo(
                                 onChangeText={onChange}
                                 onBlur={onBlur}
                                 textColor={colors.sectionHeaderText}
-                                outlineColor={errors.surname ? "#b00020" : colors.borderColor2}
-                                activeOutlineColor={errors.surname ? "#b00020" : "#FACC15"}
+                                outlineColor={getProfileNameFieldOutlineColor(isDark, !!errors.surname)}
+                                activeOutlineColor={getProfileNameFieldOutlineColor(isDark, !!errors.surname)}
                                 theme={{
                                   roundness: 10,
                                   colors: {
-                                    onSurfaceVariant: "gray",
-                                    primary: "#FACC15",
+                                    onSurfaceVariant: colors.textSecondary,
+                                    primary: getProfileNameFieldOutlineColor(isDark, false),
                                   },
                                 }}
                                 style={{ backgroundColor: colors.cardBg }}
@@ -2294,7 +2236,22 @@ export const FormFreeBarberOperation = React.memo(
                         <RowList label={t("form.mainCategories")} items={(getValues("selectedMainCategories") ?? []).map((id: string) => categoryLabelMap.get(id) ?? id)} colors={colors} />
                         <RowList label={t("form.mainHeadings")} items={(getValues("selectedMainHeadings") ?? []).map((id: string) => categoryLabelMap.get(id) ?? id)} colors={colors} />
                         <RowList label={t("form.subHeadings")} items={(getValues("selectedSubHeadings") ?? []).map((id: string) => categoryLabelMap.get(id) ?? id)} colors={colors} />
-                        <RowList label={t("form.servicesTitle")} items={(getValues("selectedCategories") ?? []).map((id: string) => categoryLabelMap.get(id) ?? id)} colors={colors} />
+                        <RowList
+                          label={t("form.servicesTitle")}
+                          items={(getValues("selectedCategories") ?? []).map(
+                            (id: string) => categoryLabelMap.get(id) ?? id,
+                          )}
+                          colors={colors}
+                        />
+                        {fbFormPackages.length > 0 && (
+                          <FormPackagesPreview
+                            packages={fbFormPackages}
+                            serviceOptions={fbServiceOptions}
+                            colors={colors}
+                            title={t("servicePackage.title")}
+                            currencySymbol={t("card.currencySymbol")}
+                          />
+                        )}
                         {/* Sertifika Resmi */}
                         {getValues("certificateImage")?.uri && (
                           <View className="py-1.5" style={{ borderBottomWidth: 1, borderBottomColor: colors.borderColor }}>
@@ -2325,7 +2282,7 @@ export const FormFreeBarberOperation = React.memo(
                                     {categoryLabelMap.get(displayName) ?? displayName}
                                     {isBs ? ` (${t("form.beautySalonCategories")})` : ""}
                                   </Text>
-                                  <Text className="text-lg text-[#FACC15]">{typeof price === "string" ? price : ""}</Text>
+                                  <Text className="text-lg" style={{ color: getFormPreviewPriceColor() }}>{typeof price === "string" ? price : ""}</Text>
                                 </View>
                               );
                             })}
@@ -2372,8 +2329,8 @@ export const FormFreeBarberOperation = React.memo(
                   className="flex-1 font-century-gothic"
                   mode="outlined"
                   onPress={handlePrevStep}
-                  buttonColor="#FACC15"
-                  textColor="#FACC15"
+                  textColor={formNav.prevText}
+                  style={{ borderColor: formNav.prevBorder }}
                   labelStyle={{ fontSize: 16 }}
                 >
                   {t("form.stepPrev")}
@@ -2384,8 +2341,8 @@ export const FormFreeBarberOperation = React.memo(
                   className="font-century-gothic flex-1"
                   mode="contained"
                   onPress={handleNextStep}
-                  buttonColor="#FACC15"
-                  textColor="#1F2937"
+                  buttonColor={formNav.nextBg}
+                  textColor={formNav.nextText}
                   labelStyle={{ fontSize: 16 }}
                 >
                   {t("form.stepNext")}

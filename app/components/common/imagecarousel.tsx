@@ -3,6 +3,7 @@ import { View, Image, Dimensions, StyleProp, ViewStyle } from 'react-native';
 import Carousel from 'react-native-reanimated-carousel';
 import { useTheme } from '../../hook/useTheme';
 import { ImageGetDto } from '../../types/common';
+import { RetryableImage } from './RetryableImage';
 
 interface ImageCarouselProps {
   images: ImageGetDto[];
@@ -69,9 +70,9 @@ export const ImageCarousel: React.FC<ImageCarouselProps> = React.memo(({
     const first = imageData[0];
     return (
       <View style={[{ width, height, overflow: 'hidden', borderRadius: borderRadiusValue }, containerStyle]}>
-        <Image
-          source={first?.imageUrl ? { uri: first.imageUrl } : emptyImage}
-          defaultSource={emptyImage}
+        <RetryableImage
+          uri={first?.imageUrl}
+          fallbackSource={emptyImage}
           style={{
             width: '100%',
             height: '100%',
@@ -104,9 +105,9 @@ export const ImageCarousel: React.FC<ImageCarouselProps> = React.memo(({
               overflow: 'hidden',
             }}
           >
-            <Image
-              source={item.imageUrl ? { uri: item.imageUrl } : emptyImage}
-              defaultSource={emptyImage}
+            <RetryableImage
+              uri={item.imageUrl}
+              fallbackSource={emptyImage}
               style={{
                 width: '100%',
                 height: '100%',

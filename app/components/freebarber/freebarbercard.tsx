@@ -2,10 +2,11 @@ import React, { useCallback, useState, useEffect, useRef, useMemo } from "react"
 import { View, TouchableOpacity } from "react-native";
 
 import { Text } from "../common/Text";
-import { FreeBarGetDto, FavoriteTargetType } from "../../types";
+import { FreeBarGetDto, FavoriteTargetType, BarberStoreMineDto } from "../../types";
 import { useFavoriteToggle } from "../../hook/useFavoriteToggle";
-import { useCallFreeBarberMutation, useLazyGetServicePackagesByOwnerQuery } from "../../store/api";
-import { Icon } from "react-native-paper";
+import { useCallFreeBarberMutation } from "../../store/api";
+import { CardServicesPackagesSection } from "../common/CardServicesPackagesSection";
+import { Icon, TextInput } from "react-native-paper";
 import { useLanguage } from "../../hook/useLanguage";
 import { useCategoryHierarchy } from "../../hook/useCategoryHierarchy";
 import { CardImage } from "../common/CardImage";
@@ -21,7 +22,13 @@ import { useAlert } from "../../hook/useAlert";
 import { useTheme } from "../../hook/useTheme";
 import { PanelImageOverflowMenu } from "../panel/PanelImageOverflowMenu";
 import { useActionGuard } from "../../hook/useActionGuard";
+import { useAppDispatch } from "../../store/hook";
+import { requestAppointmentListTab } from "../../store/appointmentUiSlice";
+import { AppointmentFilter } from "../../types/appointment";
 import { COLORS } from "../../constants/colors";
+import { BottomSheetModal, BottomSheetFlatList } from "@gorhom/bottom-sheet";
+import { useBottomSheet } from "../../hook/useBottomSheet";
+import { getErrorMessage } from "../../utils/errorHandler";
 
 type Props = {
   freeBarber: FreeBarGetDto;
@@ -35,10 +42,14 @@ type Props = {
   mode?: "default" | "barbershop";
   onPressRatings?: (freeBarberId: string, freeBarberName: string) => void;
   onCallFreeBarber?: (freeBarberId: string) => void;
+  /** Tek dükkan için geriye dönük uyumluluk. `mineStores` verilirse önceliği alır. */
   storeId?: string;
+  /** Birden fazla dükkan olduğunda seçim sheet'i gösterilir. */
+  mineStores?: BarberStoreMineDto[];
   showImageAnimation?: boolean;
   panelCompare?: { selected: boolean; onPress: () => void; hidden?: boolean };
   compactMeta?: boolean;
+  disableImageNavigation?: boolean;
 };
 
 /** “Berberi çağır” / “Randevu al” — tema sarısı (#FACC15), kenarlık yok, siyah metin */
@@ -65,27 +76,19 @@ const FreeBarberCard: React.FC<Props> = ({
   onPressRatings,
   onCallFreeBarber,
   storeId,
+  mineStores,
   showImageAnimation = true,
   panelCompare,
   compactMeta = false,
+  disableImageNavigation = false,
 }) => {
   const { colors, isDark } = useTheme();
   const carouselWidth = Math.max(0, cardWidthFreeBarber - 20);
   const { t } = useLanguage();
   const { alertSuccess, alertError, confirm } = useAlert();
+  const dispatch = useAppDispatch();
   const guard = useActionGuard();
   const { getAllServicesForType } = useCategoryHierarchy({});
-  const [activeTab, setActiveTab] = useState<'services' | 'packages'>('services');
-  const [triggerGetPackages, { data: packagesData, isFetching: packagesFetching }] = useLazyGetServicePackagesByOwnerQuery();
-  const fbPackages = packagesData ?? [];
-
-  const handleTabPress = useCallback((tab: 'services' | 'packages') => {
-    setActiveTab(tab);
-    if (tab === 'packages' && !packagesData) {
-      triggerGetPackages(freeBarber.id);
-    }
-  }, [freeBarber.id, packagesData, triggerGetPackages]);
-
   const hasBeautySalonCertificate = Boolean(
     freeBarber.type === 2 || freeBarber.beautySalonCertificateImageId,
   );
@@ -122,8 +125,9 @@ const FreeBarberCard: React.FC<Props> = ({
     });
 
   const handlePressCard = useCallback(() => {
+    if (disableImageNavigation) return;
     onPressUpdate?.(freeBarber);
-  }, [onPressUpdate, freeBarber]);
+  }, [disableImageNavigation, onPressUpdate, freeBarber]);
 
   const handlePressAppointment = useCallback(() => {
     if (onPressAppointment) {
@@ -144,42 +148,87 @@ const FreeBarberCard: React.FC<Props> = ({
     previousAvailableRef.current = isAvailable;
   }, [isAvailable]);
 
-  const handleCallFreeBarber = useCallback(async () => {
-    if (!storeId) {
-      // Multi-store selection needed -> Go to detail view
-      onPressUpdate?.(freeBarber);
+  const myStoreSelectionSheet = useBottomSheet({
+    snapPoints: ["50%", "95%"],
+    enablePanDownToClose: true,
+  });
+
+  const [selectedMyStoreId, setSelectedMyStoreId] = useState<string | null>(null);
+  const [storeSearchQuery, setStoreSearchQuery] = useState("");
+
+  const effectiveStores: BarberStoreMineDto[] = useMemo(() => {
+    if (mineStores && mineStores.length > 0) return mineStores;
+    return [];
+  }, [mineStores]);
+
+  const filteredStores = useMemo(() => {
+    const query = storeSearchQuery.trim().toLocaleLowerCase("tr-TR");
+    if (!query) return effectiveStores;
+    return effectiveStores.filter((store) => {
+      const name = store.storeName?.toLocaleLowerCase("tr-TR") ?? "";
+      const address = store.addressDescription?.toLocaleLowerCase("tr-TR") ?? "";
+      return name.includes(query) || address.includes(query);
+    });
+  }, [effectiveStores, storeSearchQuery]);
+
+  const doCallFreeBarber = useCallback(async (targetStoreId: string) => {
+    const targetStore = effectiveStores.find((s) => s.id === targetStoreId);
+    if (targetStore && !targetStore.isOpenNow) {
+      alertError(t("common.error"), t("errors.storeNotOpen"));
       return;
     }
+    if (!isAvailable) {
+      alertError(t("common.error"), t("booking.freebarberNotAvailable"));
+      return;
+    }
+    const freeBarberUserId = freeBarber.freeBarberUserId;
+    if (!freeBarberUserId) {
+      alertError(t("common.error"), t("booking.freebarberUserNotFound"));
+      return;
+    }
+    const callResult = await callFreeBarber({ storeId: targetStoreId, freeBarberUserId });
+    if ("error" in callResult) {
+      const errorMessage = (callResult.error as any)?.data?.message || t("booking.barberCallFailed");
+      alertError(t("common.error"), errorMessage);
+      return;
+    }
+    setHasCalled(true);
+    dispatch(requestAppointmentListTab({ filter: AppointmentFilter.Pending }));
+    alertSuccess(t("common.success"), t("booking.barberCalled"));
+    onCallFreeBarber?.(freeBarber.id);
+  }, [
+    effectiveStores,
+    isAvailable,
+    freeBarber.freeBarberUserId,
+    freeBarber.id,
+    callFreeBarber,
+    alertError,
+    alertSuccess,
+    dispatch,
+    onCallFreeBarber,
+    t,
+  ]);
+
+  const handleCallFreeBarber = useCallback(() => {
+    // mineStores yoksa eski storeId prop'una bak
+    if (effectiveStores.length === 0 && !storeId) {
+      alertError(t("common.error"), t("booking.selectStoreFirst"));
+      return;
+    }
+
+    if (effectiveStores.length > 1) {
+      setStoreSearchQuery("");
+      myStoreSelectionSheet.present();
+      return;
+    }
+
+    const targetStoreId = effectiveStores.length === 1 ? effectiveStores[0].id : storeId!;
 
     confirm(
       t("booking.callBarber"),
       t("card.callBarberConfirm", { name: freeBarber.fullName }),
       () => guard(async () => {
-        const freeBarberUserId = freeBarber.freeBarberUserId;
-        if (!freeBarberUserId) {
-          alertError(
-            t("common.error"),
-            t("booking.freebarberUserNotFound"),
-          );
-          return;
-        }
-
-        const callResult = await callFreeBarber({
-          storeId,
-          freeBarberUserId,
-        });
-        if ("error" in callResult) {
-          const errorMessage =
-            (callResult.error as any)?.data?.message ||
-            t("booking.barberCallFailed");
-          alertError(t("common.error"), errorMessage);
-          return;
-        }
-        setHasCalled(true);
-        alertSuccess(t("common.success"), t("booking.barberCalled"));
-        if (onCallFreeBarber) {
-          onCallFreeBarber(freeBarber.id);
-        }
+        await doCallFreeBarber(targetStoreId);
       }),
       undefined,
       t("booking.callBarber"),
@@ -187,17 +236,17 @@ const FreeBarberCard: React.FC<Props> = ({
     );
   }, [
     guard,
+    effectiveStores,
     storeId,
-    freeBarber.id,
     freeBarber.fullName,
-    callFreeBarber,
-    onCallFreeBarber,
+    myStoreSelectionSheet,
+    doCallFreeBarber,
     confirm,
     alertError,
-    alertSuccess,
     t,
   ]);
   return (
+    <>
     <View
       style={{ width: cardWidthFreeBarber, marginBottom: 12 }}
       className="mt-4"
@@ -412,42 +461,18 @@ const FreeBarberCard: React.FC<Props> = ({
               )}
             </View>
           </View>
-          <View className={`rounded-xl pr-2 ${compactMeta ? "mt-2" : "mt-4"}`}>
-            {/* Hizmetler / Paketler Tab */}
-            <View className="flex-row mb-2 rounded-lg overflow-hidden" style={{ backgroundColor: colors.cardBg2, borderWidth: 1, borderColor: colors.borderColor }}>
-              <TouchableOpacity
-                onPress={() => handleTabPress('services')}
-                activeOpacity={0.7}
-                className="flex-1 py-2 items-center flex-row justify-center gap-1"
-                style={{ backgroundColor: activeTab === 'services' ? (isDark ? 'rgba(96,165,250,0.18)' : 'rgba(96,165,250,0.12)') : 'transparent' }}
-              >
-                <Icon source="scissors-cutting" size={14} color={activeTab === 'services' ? '#60a5fa' : colors.textSecondary} />
-                <Text style={{ fontSize: 13, fontFamily: 'CenturyGothic-Bold', color: activeTab === 'services' ? '#60a5fa' : colors.textSecondary }}>
-                  {t('common.services')}
-                </Text>
-              </TouchableOpacity>
-              <View style={{ width: 1, backgroundColor: colors.borderColor }} />
-              <TouchableOpacity
-                onPress={() => handleTabPress('packages')}
-                activeOpacity={0.7}
-                className="flex-1 py-2 items-center flex-row justify-center gap-1"
-                style={{ backgroundColor: activeTab === 'packages' ? (isDark ? 'rgba(167,139,250,0.18)' : 'rgba(167,139,250,0.12)') : 'transparent' }}
-              >
-                <Icon source="tag-multiple-outline" size={14} color={activeTab === 'packages' ? '#a78bfa' : colors.textSecondary} />
-                <Text style={{ fontSize: 13, fontFamily: 'CenturyGothic-Bold', color: activeTab === 'packages' ? '#a78bfa' : colors.textSecondary }}>
-                  {t('servicePackage.tabPackages')}
-                </Text>
-              </TouchableOpacity>
-            </View>
-
-            {activeTab === 'services' && (
+          <CardServicesPackagesSection
+            ownerId={freeBarber.id}
+            expanded={expanded}
+            className={compactMeta ? "mt-2" : "mt-4"}
+            renderServices={
               <>
                 {mainOfferings.length > 0 && (
                   <ServiceOfferingsList
                     offerings={mainOfferings}
                     layout="vertical"
                     previewCount={3}
-                    showExpandButton={true}
+                    showExpandButton
                   />
                 )}
                 {beautyOfferings.length > 0 && (
@@ -459,57 +484,140 @@ const FreeBarberCard: React.FC<Props> = ({
                       offerings={beautyOfferings}
                       layout="vertical"
                       previewCount={3}
-                      showExpandButton={true}
+                      showExpandButton
                     />
                   </View>
                 )}
               </>
-            )}
-            {activeTab === 'packages' && (
-              packagesFetching ? (
-                <View className="py-4 items-center">
-                  <Icon source="loading" size={20} color={colors.textSecondary} />
-                </View>
-              ) : (fbPackages as any[]).length === 0 ? (
-                <View className="py-3 items-center">
-                  <Text style={{ color: colors.textSecondary, fontSize: 13, fontFamily: 'CenturyGothic' }}>
-                    {t('servicePackage.noPackagesYet')}
-                  </Text>
-                </View>
-              ) : (
-                <View style={{ gap: 6 }}>
-                  {(fbPackages as any[]).slice(0, 3).map((pkg: any) => (
-                    <View key={pkg.id} className="px-3 py-2.5 rounded-xl" style={{ backgroundColor: colors.cardBg2, borderWidth: 1, borderColor: isDark ? 'rgba(167,139,250,0.25)' : 'rgba(167,139,250,0.2)' }}>
-                      <View className="flex-row items-center justify-between">
-                        <View className="flex-row items-center gap-1.5 flex-1 mr-2">
-                          <Icon source="tag-multiple-outline" size={14} color="#a78bfa" />
-                          <Text style={{ fontFamily: 'CenturyGothic-Bold', fontSize: 14, color: colors.sectionHeaderText, flex: 1 }} numberOfLines={1}>
-                            {pkg.packageName}
-                          </Text>
-                        </View>
-                        <Text style={{ fontFamily: 'CenturyGothic-Bold', fontSize: 14, color: '#a78bfa' }}>
-                          {pkg.totalPrice} {t('card.currencySymbol')}
-                        </Text>
-                      </View>
-                      {(pkg.items ?? []).length > 0 && (
-                        <Text style={{ fontFamily: 'CenturyGothic', fontSize: 12, color: colors.textSecondary, marginTop: 3, marginLeft: 20 }} numberOfLines={1}>
-                          {(pkg.items as any[]).map((i: any) => i.serviceName).join(' · ')}
-                        </Text>
-                      )}
-                    </View>
-                  ))}
-                  {(fbPackages as any[]).length > 3 && (
-                    <Text style={{ fontSize: 12, fontFamily: 'CenturyGothic', color: '#a78bfa', textAlign: 'center', paddingVertical: 4 }}>
-                      {t('servicePackage.morePackages', { count: (fbPackages as any[]).length - 3 })}
-                    </Text>
-                  )}
-                </View>
-              )
-            )}
-          </View>
+            }
+          />
         </View>
       </View>
     </View>
+
+    <BottomSheetModal
+      ref={myStoreSelectionSheet.ref}
+      stackBehavior="push"
+      index={0}
+      snapPoints={myStoreSelectionSheet.snapPoints}
+      enableDynamicSizing={false}
+      enablePanDownToClose={myStoreSelectionSheet.enablePanDownToClose}
+      handleIndicatorStyle={{ backgroundColor: colors.sheetHandle }}
+      backgroundStyle={{ backgroundColor: colors.sheetBg }}
+      backdropComponent={myStoreSelectionSheet.makeBackdrop()}
+      onChange={myStoreSelectionSheet.handleChange}
+    >
+      <Text
+        className="text-lg mb-1 mt-2"
+        style={{ color: colors.sectionHeaderText, fontFamily: "CenturyGothic-Bold", paddingHorizontal: 16 }}
+      >
+        {t("navigation.shops")}
+      </Text>
+      <Text className="text-sm mb-3" style={{ color: colors.textSecondary, paddingHorizontal: 16 }}>
+        {t("booking.selectStoreFirst")}
+      </Text>
+      <View style={{ paddingHorizontal: 16, marginBottom: 10 }}>
+        <TextInput
+          value={storeSearchQuery}
+          onChangeText={setStoreSearchQuery}
+          mode="outlined"
+          dense
+          placeholder={t("common.searchPlaceholder")}
+          left={<TextInput.Icon icon="magnify" />}
+          right={
+            storeSearchQuery.length > 0 ? (
+              <TextInput.Icon icon="close" onPress={() => setStoreSearchQuery("")} />
+            ) : undefined
+          }
+          textColor={colors.sectionHeaderText}
+          outlineColor={colors.borderColor}
+          activeOutlineColor="#3b82f6"
+          placeholderTextColor={colors.textSecondary}
+          style={{ backgroundColor: colors.cardBg2 }}
+          theme={{
+            roundness: 12,
+            colors: {
+              onSurfaceVariant: colors.textSecondary,
+              primary: "#3b82f6",
+            },
+          }}
+        />
+      </View>
+      <BottomSheetFlatList<BarberStoreMineDto>
+        data={filteredStores}
+        keyExtractor={(s: BarberStoreMineDto) => s.id}
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 24 }}
+        ListEmptyComponent={
+          <View className="items-center py-8">
+            <Icon source="store-search-outline" size={28} color={colors.textSecondary} />
+            <Text className="mt-2 text-sm" style={{ color: colors.textSecondary }}>
+              {t("common.noSearchResults")}
+            </Text>
+          </View>
+        }
+        renderItem={({ item }: { item: BarberStoreMineDto }) => (
+          <TouchableOpacity
+            onPress={() => {
+              setSelectedMyStoreId(item.id);
+              myStoreSelectionSheet.dismiss();
+              void guard(async () => {
+                try {
+                  await doCallFreeBarber(item.id);
+                } catch (error: any) {
+                  const errorMsg = getErrorMessage(error);
+                  if (errorMsg) alertError(t("common.error"), errorMsg);
+                }
+              });
+            }}
+            className="rounded-xl px-3 py-3 mb-2 border"
+            style={{
+              backgroundColor: colors.cardBg2,
+              borderColor: selectedMyStoreId === item.id ? "#3b82f6" : colors.borderColor,
+              borderWidth: selectedMyStoreId === item.id ? 2 : 1,
+            }}
+          >
+            <View className="flex-row items-center justify-between">
+              <Text
+                className="text-base flex-1 mr-2"
+                style={{ color: colors.sectionHeaderText, fontFamily: "CenturyGothic-Bold" }}
+                numberOfLines={2}
+              >
+                {item.storeName}
+              </Text>
+              <View
+                className="px-2 py-0.5 rounded-full"
+                style={{
+                  backgroundColor: item.isOpenNow
+                    ? "rgba(34,197,94,0.15)"
+                    : "rgba(239,68,68,0.15)",
+                }}
+              >
+                <Text
+                  className="text-xs"
+                  style={{
+                    color: item.isOpenNow ? "#22c55e" : "#ef4444",
+                    fontFamily: "CenturyGothic-Bold",
+                  }}
+                >
+                  {item.isOpenNow ? t("status.open") : t("status.closed")}
+                </Text>
+              </View>
+            </View>
+            {item.addressDescription ? (
+              <Text
+                className="text-xs mt-1"
+                style={{ color: colors.textSecondary }}
+                numberOfLines={2}
+              >
+                {item.addressDescription}
+              </Text>
+            ) : null}
+          </TouchableOpacity>
+        )}
+      />
+    </BottomSheetModal>
+    </>
   );
 };
 
@@ -536,6 +644,7 @@ export const FreeBarberCardInner = React.memo(FreeBarberCard, (prev, next) => {
     prev.typeLabelColor === next.typeLabelColor &&
     prev.mode === next.mode &&
     prev.storeId === next.storeId &&
+    prev.mineStores === next.mineStores &&
     prev.onPressUpdate === next.onPressUpdate &&
     prev.onPressAppointment === next.onPressAppointment &&
     prev.onPressRatings === next.onPressRatings &&

@@ -96,7 +96,7 @@ export default function ComplaintsPage() {
     }, [refetch]);
 
     const renderComplaintItem = ({ item, index }: { item: ComplaintGetDto; index: number }) => {
-        const displayName = item.targetUserName || "Bilinmeyen Kullanıcı";
+        const displayName = item.targetUserName || t("chatDefaults.userDefaultName");
         const imageUrl = item.targetUserImage;
         const userTypeName = getUserTypeName(item.targetUserType);
 

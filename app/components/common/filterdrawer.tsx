@@ -14,11 +14,16 @@ import Animated, {
     runOnJS,
 } from 'react-native-reanimated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import { Divider, Icon, TextInput } from "react-native-paper";
+import { Divider, Icon, TextInput, MD3DarkTheme, MD3LightTheme, PaperProvider } from "react-native-paper";
 import { MultiSelect } from 'react-native-element-dropdown';
 import { useCategoryHierarchy } from '../../hook/useCategoryHierarchy';
 import { useLanguage } from '../../hook/useLanguage';
 import { useTheme } from '../../hook/useTheme';
+import {
+    COLORS,
+    getFilterInputOutlineColor,
+    getTextOnGold,
+} from '../../constants/colors';
 
 const DRAWER_WIDTH = Dimensions.get('window').width * 0.85;
 
@@ -90,6 +95,49 @@ interface FilterDrawerProps {
     currentFilterCriteriaJson?: string;
 }
 
+/** Min / max fiyat — Paper global temayı bypass eder */
+const FilterPriceInput = ({
+    label,
+    value,
+    onChangeText,
+    placeholder,
+}: {
+    label: string;
+    value: string;
+    onChangeText: (text: string) => void;
+    placeholder?: string;
+}) => {
+    const { colors, isDark } = useTheme();
+    const outline = getFilterInputOutlineColor(isDark);
+    const [focused, setFocused] = useState(false);
+
+    return (
+        <TextInput
+            label={label}
+            mode="outlined"
+            dense
+            keyboardType="numeric"
+            value={value}
+            onChangeText={onChangeText}
+            placeholder={placeholder}
+            textColor={colors.sectionHeaderText}
+            outlineColor={focused ? outline : colors.borderColor}
+            activeOutlineColor={outline}
+            onFocus={() => setFocused(true)}
+            onBlur={() => setFocused(false)}
+            theme={{
+                roundness: 12,
+                colors: {
+                    onSurfaceVariant: colors.textSecondary,
+                    primary: outline,
+                    outline,
+                },
+            }}
+            style={{ backgroundColor: colors.cardBg2 }}
+        />
+    );
+};
+
 // Chip bileşeni - tekrar kullanılabilir
 const FilterChipItem = ({ label, selected, onPress }: { label: string; selected: boolean; onPress: () => void }) => {
     const { colors } = useTheme();
@@ -160,7 +208,21 @@ export const FilterDrawer: React.FC<FilterDrawerProps> = ({
     currentFilterCriteriaJson,
 }) => {
     const { t } = useLanguage();
-    const { colors } = useTheme();
+    const { colors, isDark } = useTheme();
+    const filterOutline = getFilterInputOutlineColor(isDark);
+    const filterPaperTheme = useMemo(() => {
+        const base = isDark ? MD3DarkTheme : MD3LightTheme;
+        return {
+            ...base,
+            roundness: 12,
+            colors: {
+                ...base.colors,
+                primary: filterOutline,
+                outline: filterOutline,
+                onSurfaceVariant: colors.textSecondary,
+            },
+        };
+    }, [isDark, filterOutline, colors.textSecondary]);
     const insets = useSafeAreaInsets();
     const translateX = useSharedValue(-DRAWER_WIDTH);
     const visibleValue = useSharedValue(visible ? 1 : 0);
@@ -190,7 +252,7 @@ export const FilterDrawer: React.FC<FilterDrawerProps> = ({
         },
         inputSearchStyle: {
             backgroundColor: colors.cardBg2,
-            borderColor: '#FACC15',
+            borderColor: filterOutline,
             borderWidth: 1,
             borderRadius: 8,
             color: colors.sectionHeaderText,
@@ -203,12 +265,12 @@ export const FilterDrawer: React.FC<FilterDrawerProps> = ({
         selectedStyle: {
             borderRadius: 8,
             backgroundColor: colors.borderColor,
-            borderColor: '#FACC15',
+            borderColor: filterOutline,
             paddingHorizontal: 8,
             paddingVertical: 4,
             margin: 2,
         },
-    }), [colors]);
+    }), [colors, filterOutline]);
     const prevMainCategoryRef = useRef(selectedMainCategory);
     const prevMainHeadingsRef = useRef(selectedMainHeadings);
     const prevSubHeadingsRef = useRef(selectedSubHeadings);
@@ -398,6 +460,7 @@ export const FilterDrawer: React.FC<FilterDrawerProps> = ({
                 {/* Drawer */}
                 <GestureDetector gesture={panGesture}>
                     <Animated.View style={[styles.drawer, { backgroundColor: colors.sheetBg }, drawerStyle]}>
+                        <PaperProvider theme={filterPaperTheme}>
                         <KeyboardAvoidingView
                             style={{ flex: 1 }}
                             behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -676,34 +739,20 @@ export const FilterDrawer: React.FC<FilterDrawerProps> = ({
                             </Text>
                             <View className="flex-row items-center gap-3 mb-4">
                                 <View className="flex-1">
-                                    <TextInput
+                                    <FilterPriceInput
                                         label={t('filters.minPrice')}
-                                        mode="outlined"
-                                        dense
-                                        keyboardType="numeric"
                                         value={minPrice}
                                         onChangeText={(text) => onChangeMinPrice(text.replace(/[^\d]/g, ''))}
                                         placeholder="0"
-                                        textColor={colors.sectionHeaderText}
-                                        outlineColor={colors.borderColor}
-                                        theme={{ roundness: 12, colors: { onSurfaceVariant: colors.textSecondary, primary: '#FACC15' } }}
-                                        style={{ backgroundColor: colors.cardBg2, borderWidth: 0 }}
                                     />
                                 </View>
                                 <Text style={{ color: colors.textSecondary, marginTop: 8 }}>-</Text>
                                 <View className="flex-1">
-                                    <TextInput
+                                    <FilterPriceInput
                                         label={t('filters.maxPrice')}
-                                        mode="outlined"
-                                        dense
-                                        keyboardType="numeric"
                                         value={maxPrice}
                                         onChangeText={(text) => onChangeMaxPrice(text.replace(/[^\d]/g, ''))}
                                         placeholder="∞"
-                                        textColor={colors.sectionHeaderText}
-                                        outlineColor={colors.borderColor}
-                                        theme={{ roundness: 12, colors: { onSurfaceVariant: colors.textSecondary, primary: '#FACC15' } }}
-                                        style={{ backgroundColor: colors.cardBg2, borderWidth: 0 }}
                                     />
                                 </View>
                             </View>
@@ -771,8 +820,8 @@ export const FilterDrawer: React.FC<FilterDrawerProps> = ({
                                             onChangeText={setSaveNameInput}
                                             textColor={colors.sectionHeaderText}
                                             outlineColor={colors.borderColor}
-                                            activeOutlineColor="#FACC15"
-                                            theme={{ roundness: 10, colors: { onSurfaceVariant: colors.textSecondary } }}
+                                            activeOutlineColor={filterOutline}
+                                            theme={{ roundness: 10, colors: { onSurfaceVariant: colors.textSecondary, primary: filterOutline, outline: filterOutline } }}
                                             style={{ flex: 1, backgroundColor: colors.cardBg2, height: 44 }}
                                         />
                                         <TouchableOpacity
@@ -819,15 +868,31 @@ export const FilterDrawer: React.FC<FilterDrawerProps> = ({
                             {/* Temizle */}
                             <TouchableOpacity
                                 onPress={onClearFilters}
-                                style={{ width: '100%', borderWidth: 1.5, borderColor: '#FACC15', borderRadius: 12, paddingVertical: 12, alignItems: 'center', justifyContent: 'center' }}
+                                style={{
+                                    width: '100%',
+                                    borderWidth: 1.5,
+                                    borderColor: COLORS.UI.ACCENT_GOLD,
+                                    borderRadius: 12,
+                                    paddingVertical: 12,
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                }}
                                 activeOpacity={0.8}
                             >
-                                <Text style={{ color: '#FACC15', fontSize: 14, fontWeight: '600', fontFamily: 'CenturyGothic' }}>
+                                <Text
+                                    style={{
+                                        color: isDark ? COLORS.UI.ACCENT_GOLD : getTextOnGold(false),
+                                        fontSize: 14,
+                                        fontWeight: '600',
+                                        fontFamily: 'CenturyGothic',
+                                    }}
+                                >
                                     {t('filters.clear')}
                                 </Text>
                             </TouchableOpacity>
                         </View>
                         </KeyboardAvoidingView>
+                        </PaperProvider>
                     </Animated.View>
                 </GestureDetector>
             </View>

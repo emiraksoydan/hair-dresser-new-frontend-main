@@ -14,7 +14,7 @@ import { store } from './store/redux-store';
 import { Platform } from 'react-native';
 import * as SplashScreen from 'expo-splash-screen';
 import { rehydrateTokens } from './store/baseQuery';
-import { Stack, Tabs, Link } from 'expo-router';
+import { Stack, Tabs, Link, useRouter } from 'expo-router';
 import {
   BottomSheetModalProvider,
 } from '@gorhom/bottom-sheet';
@@ -38,6 +38,11 @@ import { useTheme } from './hook/useTheme';
 // import { BrandIntro } from './components/splash/BrandIntro';
 import { MultiAccountProvider, useMultiAccount } from './context/MultiAccountContext';
 import { NotificationOpenerProvider } from './context/NotificationOpenerContext';
+import { useAppDispatch, useAppSelector } from './store/hook';
+import { resetUserBanned } from './store/bannedSlice';
+import { loadAllAccounts } from './lib/multiAccountStorage';
+import { api } from './store/api';
+import { resetSignalRState } from './store/signalrSlice';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -157,6 +162,7 @@ const RootLayout = () => {
                 <GlobalSnackbar />
                 <GlobalAlert />
                 <AccountSwitchOverlay />
+                <BanDetector />
                 </NotificationOpenerProvider>
               </MultiAccountProvider>
             </BottomSheetModalProvider>
@@ -180,6 +186,46 @@ function FcmTokenBootstrap() {
 
 function FirebaseMessagingBootstrap() {
   useFirebaseMessaging();
+  return null;
+}
+
+/**
+ * Admin tarafından banlanan hesabı algılar.
+ * baseQuery 403+banned:true alınca triggerUserBanned() dispatch eder;
+ * bu bileşen flag'i izleyip diğer hesaba geçer veya giriş sayfasına yönlendirir.
+ */
+function BanDetector() {
+  const bannedTriggered = useAppSelector((s) => s.banned.triggered);
+  const dispatch = useAppDispatch();
+  const { currentUserId, switchAccount } = useMultiAccount();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (!bannedTriggered) return;
+    dispatch(resetUserBanned());
+
+    (async () => {
+      const allAccounts = await loadAllAccounts();
+      const others = allAccounts.filter(
+        (a) =>
+          a.id.toLowerCase() !== (currentUserId ?? '').toLowerCase() &&
+          !a.needsReauth &&
+          !!a.refreshToken,
+      );
+
+      if (others.length > 0) {
+        const next = [...others].sort((a, b) => b.savedAt - a.savedAt)[0]!;
+        await switchAccount(next);
+      } else {
+        await resetSignalRState();
+        dispatch(api.util.resetApiState());
+        tokenStore.clear();
+        await clearStoredTokens();
+        router.replace('(auth)' as any);
+      }
+    })();
+  }, [bannedTriggered, currentUserId, dispatch, router, switchAccount]);
+
   return null;
 }
 

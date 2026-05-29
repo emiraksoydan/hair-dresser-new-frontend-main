@@ -11,7 +11,7 @@ import { CardHeader } from '../common/CardHeader';
 import { FavoriteButton } from '../common/FavoriteButton';
 import { RatingSection } from '../common/RatingSection';
 import { StatusBadge } from '../common/StatusBadge';
-import { ServiceOfferingsList } from '../common/ServiceOfferingsList';
+import { CardServicesPackagesSection } from '../common/CardServicesPackagesSection';
 import { getBarberTypeLabel } from '../../utils/card-helpers';
 import { useTheme } from '../../hook/useTheme';
 import { PanelImageOverflowMenu } from '../panel/PanelImageOverflowMenu';
@@ -130,7 +130,10 @@ const StoreMineCard: React.FC<Props> = ({ store, isList, expanded, cardWidthStor
                         </View>
 
                         {!isList && (
-                            <View className="flex-row justify-between pr-2">
+                            <View
+                                className="flex-row justify-between pr-2"
+                                style={{ marginTop: profileCompact ? 2 : 0 }}
+                            >
                                 <Text style={{ color: colors.textSecondary }} className="text-sm font-century-gothic-sans-medium">{getBarberTypeLabel(store.type)}</Text>
                                 <FavoriteButton
                                     isFavorite={isFavorite}
@@ -158,14 +161,12 @@ const StoreMineCard: React.FC<Props> = ({ store, isList, expanded, cardWidthStor
                         </View>
                     </View>
                 </View>
-                <View className="rounded-xl pr-2  mt-4">
-                    <ServiceOfferingsList
-                        offerings={store.serviceOfferings || []}
-                        layout="vertical"
-                        previewCount={3}
-                        showExpandButton={true}
-                    />
-                </View>
+                <CardServicesPackagesSection
+                    ownerId={store.id}
+                    serviceOfferings={store.serviceOfferings || []}
+                    expanded={expanded}
+                    className={profileCompact ? 'mt-2' : 'mt-4'}
+                />
             </View>
         </View>
     );
@@ -173,14 +174,26 @@ const StoreMineCard: React.FC<Props> = ({ store, isList, expanded, cardWidthStor
 
 export const StoreMineCardComp = React.memo(
     StoreMineCard,
-    (prev, next) =>
-        prev.store === next.store &&
-        prev.isList === next.isList &&
-        prev.expanded === next.expanded &&
-        prev.cardWidthStore === next.cardWidthStore &&
-        prev.showImageAnimation === next.showImageAnimation &&
-        prev.panelCompare?.selected === next.panelCompare?.selected &&
-        prev.panelCompare?.hidden === next.panelCompare?.hidden &&
-        prev.panelCompare?.onPress === next.panelCompare?.onPress &&
-        prev.profileCompact === next.profileCompact
+    (prev, next) => {
+        const sameStore =
+            prev.store.id === next.store.id &&
+            prev.store.storeName === next.store.storeName &&
+            prev.store.isOpenNow === next.store.isOpenNow &&
+            prev.store.rating === next.store.rating &&
+            prev.store.reviewCount === next.store.reviewCount &&
+            prev.store.favoriteCount === next.store.favoriteCount &&
+            prev.store.imageList === next.store.imageList &&
+            prev.store.serviceOfferings === next.store.serviceOfferings;
+        return (
+            sameStore &&
+            prev.isList === next.isList &&
+            prev.expanded === next.expanded &&
+            prev.cardWidthStore === next.cardWidthStore &&
+            prev.showImageAnimation === next.showImageAnimation &&
+            prev.panelCompare?.selected === next.panelCompare?.selected &&
+            prev.panelCompare?.hidden === next.panelCompare?.hidden &&
+            prev.panelCompare?.onPress === next.panelCompare?.onPress &&
+            prev.profileCompact === next.profileCompact
+        );
+    }
 );

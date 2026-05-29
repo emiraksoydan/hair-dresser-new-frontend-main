@@ -17,6 +17,11 @@ import { useAuth } from "../../hook/useAuth";
 import { useLanguage } from "../../hook/useLanguage";
 import { getBarberTypeName } from "../../utils/store/barber-type";
 import { useTheme } from "../../hook/useTheme";
+import { getErrorMessage } from "../../utils/errorHandler";
+import { COLORS, getTextOnGold, getStarRatingWidgetProps } from "../../constants/colors";
+import { ThemedStarIcon } from "../common/ThemedStarIcon";
+
+const GOLD = COLORS.UI.ACCENT_GOLD;
 
 const RATINGS_PAGE_SIZE = 30;
 /** RN `onEndReached` ilk layout'ta yanlış tetiklenebilir — footer spinner flash'ını önler. */
@@ -35,13 +40,16 @@ export const RatingsBottomSheet: React.FC<RatingsBottomSheetProps> = ({
 }) => {
   const { userId } = useAuth();
   const { t } = useLanguage();
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
+  const onGoldFg = getTextOnGold(isDark);
   const dispatch = useAppDispatch();
 
   // Query'yi normal şekilde çalıştır - sheet açıldığında component mount olur ve query otomatik tetiklenir
   const {
     data: ratings,
     isLoading,
+    isError,
+    error: ratingsQueryError,
     refetch,
   } = useGetRatingsByTargetQuery(
     { targetId, limit: RATINGS_PAGE_SIZE },
@@ -53,6 +61,11 @@ export const RatingsBottomSheet: React.FC<RatingsBottomSheetProps> = ({
   const hasMoreRef = useRef(true);
   const lastLoadedBeforeRef = useRef<string | null>(null);
   const suppressEndReachedUntilMsRef = useRef(0);
+  const [selectedRatingFilter, setSelectedRatingFilter] = useState<
+    number | null
+  >(null); // null = Hepsi
+  const [showOnlyMine, setShowOnlyMine] = useState(false);
+
   const bumpEndReachedGrace = useCallback(() => {
     suppressEndReachedUntilMsRef.current = Date.now() + RATINGS_END_REACHED_GRACE_MS;
   }, []);
@@ -60,6 +73,20 @@ export const RatingsBottomSheet: React.FC<RatingsBottomSheetProps> = ({
   useEffect(() => {
     bumpEndReachedGrace();
   }, [bumpEndReachedGrace]);
+
+  // Başka işletme / hedef seçildiğinde filtre ve sayfalama state'ini sıfırla
+  useEffect(() => {
+    setShowOnlyMine(false);
+    setSelectedRatingFilter(null);
+    hasMoreRef.current = true;
+    lastLoadedBeforeRef.current = null;
+    bumpEndReachedGrace();
+  }, [targetId, bumpEndReachedGrace]);
+
+  // Filtre değişince RN FlatList bazen hemen onEndReached tetikler — hayalet sayfalama isteğini kes
+  useEffect(() => {
+    bumpEndReachedGrace();
+  }, [showOnlyMine, selectedRatingFilter, bumpEndReachedGrace]);
 
   const loadOlderRatings = useCallback(async () => {
     if (!targetId) return;
@@ -109,12 +136,14 @@ export const RatingsBottomSheet: React.FC<RatingsBottomSheetProps> = ({
     refetch();
   }, [refetch, bumpEndReachedGrace]);
 
-  const [selectedRatingFilter, setSelectedRatingFilter] = useState<
-    number | null
-  >(null); // null = Hepsi
-  const [showOnlyMine, setShowOnlyMine] = useState(false);
-
   const safeRatings = Array.isArray(ratings) ? ratings : [];
+
+  // useMemo'dan ÖNCE tanımlanmalı — aksi halde "Benim yorumlarım" filtresinde isMyRating undefined kalır
+  const isMyRating = useCallback((rating: RatingGetDto) => {
+    if (!rating.ratedFromId || !userId) return false;
+    return rating.ratedFromId === userId;
+  }, [userId]);
+
   const formatDateTime = (dateStr: string) => {
     try {
       const date = new Date(dateStr);
@@ -136,22 +165,11 @@ export const RatingsBottomSheet: React.FC<RatingsBottomSheetProps> = ({
     if (showOnlyMine) result = result.filter((r: RatingGetDto) => isMyRating(r));
     if (selectedRatingFilter !== null) result = result.filter((r: RatingGetDto) => Math.round(r.score) === selectedRatingFilter);
     return result;
-  }, [safeRatings, selectedRatingFilter, showOnlyMine]);
+  }, [safeRatings, selectedRatingFilter, showOnlyMine, isMyRating]);
 
   // UserType ve BarberType'a göre görünen isim
   const getDisplayName = (rating: RatingGetDto) => {
-    return rating.ratedFromName || "Anonim";
-  };
-
-  // Kullanıcının kendi yorumu mu kontrol et
-  // Backend'de RatedFromId her zaman User ID (userId) olarak set ediliyor
-  // Bu yüzden tüm user type'lar için userId ile karşılaştırma yapılmalı
-  const isMyRating = (rating: RatingGetDto) => {
-    if (!rating.ratedFromId || !userId) return false;
-
-    // Backend'de RatedFromId her zaman User ID olarak set ediliyor
-    // Bu yüzden direkt userId ile karşılaştır
-    return rating.ratedFromId === userId;
+    return rating.ratedFromName || t("favorites.unknown");
   };
 
   const renderRatingItem = ({ item }: { item: RatingGetDto }) => {
@@ -159,6 +177,7 @@ export const RatingsBottomSheet: React.FC<RatingsBottomSheetProps> = ({
     const displayName = getDisplayName(item);
     const imageUrl = item.ratedFromImage;
     const roundedScore = Math.round(item.score);
+    const starProps = getStarRatingWidgetProps(isDark);
 
     return (
       <View className="mb-4">
@@ -177,8 +196,11 @@ export const RatingsBottomSheet: React.FC<RatingsBottomSheetProps> = ({
             />
             {/* "Sizin yorumunuz" badge */}
             {isMyComment && (
-              <View className="absolute -top-1 -right-1 bg-[#FACC15] rounded-full px-1.5 py-0.5">
-                <Text className="text-white text-[8px] font-bold">
+              <View
+                className="absolute -top-1 -right-1 rounded-full px-1.5 py-0.5"
+                style={{ backgroundColor: GOLD }}
+              >
+                <Text className="text-[8px] font-bold" style={{ color: onGoldFg }}>
                   {t("rating.yourBadge")}
                 </Text>
               </View>
@@ -201,14 +223,14 @@ export const RatingsBottomSheet: React.FC<RatingsBottomSheetProps> = ({
                   <View
                     className="rounded-full px-2 py-0.5"
                     style={{
-                      backgroundColor: "rgba(250, 204, 21, 0.18)",
+                      backgroundColor: isDark ? "rgba(250, 204, 21, 0.18)" : GOLD,
                       borderWidth: 1,
-                      borderColor: "rgba(250, 204, 21, 0.4)",
+                      borderColor: isDark ? "rgba(250, 204, 21, 0.4)" : GOLD,
                     }}
                   >
                     <Text
                       className="text-[10px] font-century-gothic-bold"
-                      style={{ color: "#b45309" }}
+                      style={{ color: onGoldFg }}
                     >
                       {item.ratedFromUserType === UserType.Customer
                         ? t("card.customer")
@@ -258,10 +280,15 @@ export const RatingsBottomSheet: React.FC<RatingsBottomSheetProps> = ({
           </View>
 
           {/* Rating badge - sağ tarafta */}
-          <View className="bg-[#FACC15] rounded-full w-10 h-10 items-center justify-center">
-            <Text className="text-white font-bold text-sm">
-              ★ {roundedScore}
-            </Text>
+          <View
+            style={{ backgroundColor: GOLD, borderRadius: 10, paddingHorizontal: 8, paddingVertical: 5, alignItems: "center", justifyContent: "center" }}
+          >
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 2 }}>
+              <ThemedStarIcon size={14} color={starProps.color} type="full" index={0} />
+              <Text style={{ fontSize: 11, fontFamily: "CenturyGothic-Bold", color: onGoldFg }}>
+                {roundedScore}
+              </Text>
+            </View>
           </View>
         </View>
       </View>
@@ -270,12 +297,12 @@ export const RatingsBottomSheet: React.FC<RatingsBottomSheetProps> = ({
 
   const ratingFilters = [
     { label: t("rating.all"), value: null },
-    { label: "★ 5", value: 5 },
-    { label: "★ 4", value: 4 },
-    { label: "★ 3", value: 3 },
-    { label: "★ 2", value: 2 },
-    { label: "★ 1", value: 1 },
-  ];
+    { value: 5 },
+    { value: 4 },
+    { value: 3 },
+    { value: 2 },
+    { value: 1 },
+  ] as { label?: string; value: number | null }[];
 
   return (
     <BottomSheetView style={{ flex: 1, backgroundColor: colors.sheetBg }}>
@@ -285,18 +312,42 @@ export const RatingsBottomSheet: React.FC<RatingsBottomSheetProps> = ({
           {t("card.reviews")}
         </Text>
 
-        {/* Benim Yorumlarım Toggle */}
+        {/* Benim Yorumlarım + (filtre açıkken) görsel geri — tüm yorumlara dön */}
         {!isLoading && safeRatings.length > 0 && (
-          <TouchableOpacity
-            onPress={() => setShowOnlyMine(v => !v)}
-            className={`self-start mb-3 flex-row items-center gap-1.5 rounded-full px-3 py-1.5 ${showOnlyMine ? 'bg-[#FACC15]' : 'border border-[#FACC15] bg-transparent'}`}
-            activeOpacity={0.8}
-          >
-            <Icon source="account-heart" size={14} color={showOnlyMine ? '#fff' : '#FACC15'} />
-            <Text className={`text-xs font-semibold ${showOnlyMine ? 'text-white' : 'text-[#FACC15]'}`}>
-              {t("rating.myReviews")}
-            </Text>
-          </TouchableOpacity>
+          <View className="flex-row items-center gap-2 mb-3 flex-wrap">
+            {showOnlyMine && (
+              <TouchableOpacity
+                onPress={() => {
+                  bumpEndReachedGrace();
+                  setShowOnlyMine(false);
+                }}
+                className="flex-row items-center gap-1 rounded-full px-2.5 py-1.5 bg-transparent"
+                style={{ borderWidth: 1, borderColor: GOLD }}
+                activeOpacity={0.8}
+                accessibilityRole="button"
+                accessibilityLabel={t("rating.all")}
+              >
+                <Icon source="arrow-left" size={16} color={onGoldFg} />
+                <Text className="text-xs font-semibold" style={{ color: onGoldFg }}>{t("rating.all")}</Text>
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity
+              onPress={() => setShowOnlyMine(v => !v)}
+              className="flex-row items-center gap-1.5 rounded-full px-3 py-1.5"
+              style={
+                showOnlyMine
+                  ? { backgroundColor: GOLD }
+                  : { borderWidth: 1, borderColor: GOLD, backgroundColor: 'transparent' }
+              }
+              activeOpacity={0.8}
+              accessibilityState={{ selected: showOnlyMine }}
+            >
+              <Icon source="account-heart" size={14} color={onGoldFg} />
+              <Text className="text-xs font-semibold" style={{ color: onGoldFg }}>
+                {t("rating.myReviews")}
+              </Text>
+            </TouchableOpacity>
+          </View>
         )}
 
         {/* Rating Filtreleri - Sadece veri varsa göster */}
@@ -306,30 +357,35 @@ export const RatingsBottomSheet: React.FC<RatingsBottomSheetProps> = ({
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={{ gap: 8, paddingRight: 16 }}
           >
-            {ratingFilters.map(
-              (filter: { label: string; value: number | null }) => {
+            {ratingFilters.map((filter) => {
                 const isSelected = selectedRatingFilter === filter.value;
+                const starProps = getStarRatingWidgetProps(isDark);
                 return (
                   <TouchableOpacity
                     key={filter.value ?? "all"}
                     onPress={() => setSelectedRatingFilter(filter.value)}
-                    className={`rounded-full px-4 py-2 ${
+                    className="rounded-full px-3 py-2"
+                    style={
                       isSelected
-                        ? "bg-[#FACC15]"
-                        : "bg-transparent border border-[#FACC15]"
-                    }`}
+                        ? { backgroundColor: GOLD }
+                        : { backgroundColor: 'transparent', borderWidth: 1, borderColor: GOLD }
+                    }
                   >
-                    <Text
-                      className={`text-sm font-medium ${
-                        isSelected ? "text-white" : "text-[#FACC15]"
-                      }`}
-                    >
-                      {filter.label}
-                    </Text>
+                    {filter.label ? (
+                      <Text className="text-sm font-medium" style={{ color: onGoldFg }}>
+                        {filter.label}
+                      </Text>
+                    ) : (
+                      <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+                        <ThemedStarIcon size={14} color={starProps.color} type="full" index={0} />
+                        <Text className="text-sm font-medium" style={{ color: onGoldFg }}>
+                          {filter.value}
+                        </Text>
+                      </View>
+                    )}
                   </TouchableOpacity>
                 );
-              },
-            )}
+              })}
           </ScrollView>
         )}
       </View>
@@ -337,7 +393,27 @@ export const RatingsBottomSheet: React.FC<RatingsBottomSheetProps> = ({
       {/* Yorumlar listesi */}
       {isLoading ? (
         <View className="flex-1 items-center justify-center">
-          <ActivityIndicator size="large" color="#FACC15" />
+          <ActivityIndicator size="large" color={onGoldFg} />
+        </View>
+      ) : isError && safeRatings.length === 0 ? (
+        <View className="flex-1 items-center justify-center px-4">
+          <Icon source="alert-circle-outline" size={64} color="#6b7280" />
+          <Text className="text-base mt-4 text-center px-2" style={{ color: colors.sectionHeaderText }}>
+            {getErrorMessage(ratingsQueryError) || t("error.serviceUnavailable")}
+          </Text>
+          <TouchableOpacity
+            onPress={() => {
+              bumpEndReachedGrace();
+              hasMoreRef.current = true;
+              lastLoadedBeforeRef.current = null;
+              refetch();
+            }}
+            className="mt-6 rounded-xl px-6 py-3"
+            style={{ backgroundColor: GOLD }}
+            activeOpacity={0.85}
+          >
+            <Text className="font-century-gothic-bold" style={{ color: onGoldFg }}>{t("common.retry")}</Text>
+          </TouchableOpacity>
         </View>
       ) : safeRatings.length === 0 ? (
         <View className="flex-1 items-center justify-center px-4">
@@ -366,7 +442,7 @@ export const RatingsBottomSheet: React.FC<RatingsBottomSheetProps> = ({
           ListFooterComponent={
             isLoadingOlder ? (
               <View style={{ paddingVertical: 12 }}>
-                <ActivityIndicator size="small" color="#FACC15" />
+                <ActivityIndicator size="small" color={onGoldFg} />
               </View>
             ) : null
           }

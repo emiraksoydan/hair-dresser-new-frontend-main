@@ -16,19 +16,25 @@ import {
   updateAccountTokens,
   pruneStaleSavedAccounts,
   refreshInactiveAccounts,
+  markAccountNeedsReauth,
+  clearAccountReauthFlag,
+  removeAccount,
+  refreshAccountIfNeeded,
   SavedAccount,
 } from '../lib/multiAccountStorage';
+import { clearStoredTokens } from '../lib/tokenStorage';
 import { showSnack } from '../store/snackbarSlice';
 import { UserType } from '../types';
 import { tokenStore, bumpTokenEpoch } from '../lib/tokenStore';
 import { saveTokens } from '../lib/tokenStorage';
 import { resetSignalRState } from '../store/signalrSlice';
 import { api } from '../store/api';
-import { clearRefreshLock, isExpired, attemptTokenRefreshWithReason } from '../store/baseQuery';
+import { clearRefreshLock, isExpired } from '../store/baseQuery';
 import { useAppDispatch } from '../store/hook';
 import { JwtPayload } from '../types';
 import { pathByUserType } from '../utils/auth/redirect-by-user-type';
 import { useRouter } from 'expo-router';
+import { API_CONFIG } from '../constants/api';
 
 const NAME_ID_CLAIM =
   'http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier';
@@ -89,6 +95,16 @@ interface MultiAccountContextValue {
   registerOpenAccountSwitcher: (fn: () => void) => void;
   /** Opens the account switcher sheet (registered by BaseTabLayout) */
   openAccountSwitcher: () => void;
+  /** Hesap → unread notification count (sadece aktif olmayan hesaplar için anlamlı;
+   *  aktif hesabın gerçek değeri RTK Query Badge'de). */
+  accountBadges: Record<string, number>;
+  /** Switcher açılınca tetiklenir: tüm aktif olmayan hesapların `Badge` endpoint'ini
+   *  paralel çağırıp local cache'i tazeler. 60s memoize edilir. */
+  refreshAccountBadges: (force?: boolean) => Promise<void>;
+  /** Foreground push geldiğinde cross-account unread sayısını lokal arttırır. */
+  incrementAccountBadge: (userId: string, by?: number) => void;
+  /** Kayıtlı hesabı cihaz listesinden siler (yeniden giriş isteyen dahil). Aktif hesapsa kalan hesaba geçer veya çıkış. */
+  removeSavedAccount: (id: string) => Promise<void>;
 }
 
 const MultiAccountContext = createContext<MultiAccountContextValue>({
@@ -100,7 +116,13 @@ const MultiAccountContext = createContext<MultiAccountContextValue>({
   switchAccount: async () => { },
   registerOpenAccountSwitcher: () => { },
   openAccountSwitcher: () => { },
+  accountBadges: {},
+  refreshAccountBadges: async () => { },
+  incrementAccountBadge: () => { },
+  removeSavedAccount: async () => { },
 });
+
+const ACCOUNT_BADGE_TTL_MS = 60_000;
 
 export const useMultiAccount = () => useContext(MultiAccountContext);
 
@@ -110,11 +132,80 @@ export const MultiAccountProvider: React.FC<{ children: React.ReactNode }> = ({
   const [accounts, setAccounts] = useState<SavedAccount[]>([]);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [isSwitchingAccount, setIsSwitchingAccount] = useState(false);
+  const [accountBadges, setAccountBadges] = useState<Record<string, number>>({});
+  const accountBadgesFetchedAtRef = useRef<Record<string, number>>({});
   const router = useRouter();
   const dispatch = useAppDispatch();
   const openSwitcherRef = useRef<(() => void) | null>(null);
   /** Aynı anda iki kez switchAccount (çift dokunuş / yarış) token ve navigasyonu bozar. */
   const accountSwitchLockRef = useRef(false);
+
+  // Tek hesap için unread notification count'u manuel fetch ile çek.
+  // RTK Query baseQuery aktif token'ı kullandığı için aktif olmayan hesaplara erişim için
+  // doğrudan `fetch` kullanıyoruz; her hesabın kendi accessToken'ı header'a yerleştirilir.
+  const fetchAccountBadge = useCallback(async (account: SavedAccount): Promise<number | null> => {
+    if (!account.accessToken) return null;
+    if (account.needsReauth) return null;
+    try {
+      const url = `${API_CONFIG.BASE_URL}Badge`;
+      const res = await fetch(url, {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${account.accessToken}`,
+          Accept: 'application/json',
+        },
+      });
+      if (!res.ok) return null;
+      const json: any = await res.json().catch(() => null);
+      const count: unknown =
+        json?.data?.notificationUnreadCount ??
+        json?.data?.NotificationUnreadCount ??
+        json?.notificationUnreadCount;
+      if (typeof count === 'number' && count >= 0) return count;
+      return null;
+    } catch {
+      return null;
+    }
+  }, []);
+
+  const refreshAccountBadges = useCallback(async (force = false) => {
+    const all = await loadAllAccounts();
+    const now = Date.now();
+    const targets = all.filter((a) => {
+      // Aktif hesap atlanır — onun değeri RTK Query getBadgeCounts içinde otoritatif tutulur.
+      if (currentUserId && a.id.toLowerCase() === currentUserId.toLowerCase()) return false;
+      if (!a.accessToken || a.needsReauth) return false;
+      if (force) return true;
+      const last = accountBadgesFetchedAtRef.current[a.id] ?? 0;
+      return now - last > ACCOUNT_BADGE_TTL_MS;
+    });
+    if (targets.length === 0) return;
+    // Her hesap için paralel — N=2-3 zaten küçük.
+    const results = await Promise.all(
+      targets.map(async (a) => ({ id: a.id, count: await fetchAccountBadge(a) })),
+    );
+    setAccountBadges((prev) => {
+      const next = { ...prev };
+      for (const r of results) {
+        if (r.count !== null) {
+          next[r.id] = r.count;
+          accountBadgesFetchedAtRef.current[r.id] = now;
+        }
+      }
+      return next;
+    });
+  }, [currentUserId, fetchAccountBadge]);
+
+  const incrementAccountBadge = useCallback((userId: string, by = 1) => {
+    if (!userId) return;
+    setAccountBadges((prev) => {
+      const k = userId;
+      const cur = prev[k] ?? 0;
+      const nv = Math.max(0, cur + by);
+      if (nv === cur) return prev;
+      return { ...prev, [k]: nv };
+    });
+  }, []);
 
   const refreshAccounts = useCallback(async () => {
     const loaded = await loadAllAccounts();
@@ -125,7 +216,9 @@ export const MultiAccountProvider: React.FC<{ children: React.ReactNode }> = ({
     await persistActiveTokensToSavedAccounts();
     await pruneStaleSavedAccounts();
     await refreshAccounts();
-  }, [refreshAccounts]);
+    // Sheet açılırken badge'leri tazele — fire-and-forget; sheet açılması bunu beklemez.
+    void refreshAccountBadges();
+  }, [refreshAccounts, refreshAccountBadges]);
 
   /**
    * Uygulama açılışında aktif token var ama bu hesap storage'a hiç kaydedilmemişse
@@ -202,6 +295,8 @@ export const MultiAccountProvider: React.FC<{ children: React.ReactNode }> = ({
               accessToken: token,
               refreshToken: tokenStore.refresh,
             });
+            // Yeni token alındı → reauth flag'ini temizle (re-login flow'undan dönüyor olabilir)
+            void clearAccountReauthFlag(uid).then(() => refreshAccounts());
           }
         } catch { }
       }
@@ -266,23 +361,26 @@ export const MultiAccountProvider: React.FC<{ children: React.ReactNode }> = ({
           freshTarget = freshAccounts.find(a => a.id === target.id) ?? target;
         } catch { /* storage hatası: state'den gelen target kullanılır */ }
 
+        // Access süresi dolmuşsa refresh dene.
+        // refreshAccountIfNeeded: eş zamanlı başka bir refresh varsa (startup veya
+        // pruneStaleSavedAccounts) aynı promise'i bekler — token iki kez gönderilmez.
+        if (isExpired(freshTarget.accessToken) && freshTarget.refreshToken) {
+          await refreshAccountIfNeeded(target.id);
+        }
+
+        // Refresh sonrası storage'dan taze oku (refreshAccountIfNeeded güncelledi)
         let finalAccessToken = freshTarget.accessToken;
         let finalRefreshToken = freshTarget.refreshToken;
-        let lastRefreshReason: string | null = null;
-
-        // Access süresi dolmuşsa refresh dene.
-        if (isExpired(freshTarget.accessToken) && freshTarget.refreshToken) {
-          const refreshResult = await attemptTokenRefreshWithReason(freshTarget.refreshToken);
-          lastRefreshReason = refreshResult.ok ? null : refreshResult.reason;
-          if (refreshResult.ok) {
-            finalAccessToken = refreshResult.accessToken;
-            finalRefreshToken = refreshResult.refreshToken;
-            void updateAccountTokens(target.id, {
-              accessToken: finalAccessToken,
-              refreshToken: finalRefreshToken,
-            });
+        try {
+          const afterRefresh = await loadAllAccounts();
+          const updated = afterRefresh.find(a => a.id === target.id);
+          if (updated) {
+            finalAccessToken = updated.accessToken;
+            finalRefreshToken = updated.refreshToken;
           }
-        }
+        } catch { /* storage hatası: freshTarget kullanılır */ }
+
+        const lastRefreshReason = isExpired(finalAccessToken) && freshTarget.needsReauth ? 'invalid' : null;
 
         // Hâlâ kullanılamıyorsa: kayıtlı hesabı listeden silme; yalnızca kullanıcıya bilgi ver.
         if (isExpired(finalAccessToken)) {
@@ -295,10 +393,14 @@ export const MultiAccountProvider: React.FC<{ children: React.ReactNode }> = ({
               isError: true,
             }),
           );
+          // Listeyi tazele ki yeni `needsReauth` flag'i UI'a yansısın.
+          void refreshAccounts();
           tokenStore.setAccountSwitching(false);
           setIsSwitchingAccount(false);
           return;
         }
+
+        await resetSignalRState();
 
         tokenStore.set({
           accessToken: finalAccessToken,
@@ -337,8 +439,6 @@ export const MultiAccountProvider: React.FC<{ children: React.ReactNode }> = ({
         fallbackTimer = setTimeout(closeSwitchingFlags, 2000);
         InteractionManager.runAfterInteractions(closeSwitchingFlags);
 
-        // 7. SignalR'ı arka planda temizle
-        void resetSignalRState();
       } catch {
         tokenStore.setAccountSwitching(false);
         setIsSwitchingAccount(false);
@@ -357,6 +457,52 @@ export const MultiAccountProvider: React.FC<{ children: React.ReactNode }> = ({
     openSwitcherRef.current?.();
   }, []);
 
+  const removeSavedAccount = useCallback(
+    async (id: string) => {
+      const idLower = id.toLowerCase();
+      const isRemovingActive =
+        currentUserId != null && currentUserId.toLowerCase() === idLower;
+
+      await removeAccount(id);
+
+      setAccountBadges((prev) => {
+        const next = { ...prev };
+        for (const k of Object.keys(next)) {
+          if (k.toLowerCase() === idLower) delete next[k];
+        }
+        return next;
+      });
+      for (const k of Object.keys(accountBadgesFetchedAtRef.current)) {
+        if (k.toLowerCase() === idLower) delete accountBadgesFetchedAtRef.current[k];
+      }
+
+      await refreshAccounts();
+
+      if (isRemovingActive) {
+        const remaining = await loadAllAccounts();
+        if (remaining.length > 0) {
+          const nextAcc = [...remaining].sort((a, b) => b.savedAt - a.savedAt)[0]!;
+          await switchAccount(nextAcc);
+        } else {
+          await resetSignalRState();
+          dispatch(api.util.resetApiState());
+          tokenStore.clear();
+          await clearStoredTokens();
+          setCurrentUserId(null);
+          router.replace("(auth)" as any);
+        }
+      }
+
+      dispatch(
+        showSnack({
+          message: i18n.t("accounts.removedFromList"),
+          isError: false,
+        }),
+      );
+    },
+    [currentUserId, refreshAccounts, switchAccount, dispatch, router],
+  );
+
   // Also expose upsertAccount so auth can call it via context (optional helper)
   const value = useMemo<MultiAccountContextValue>(
     () => ({
@@ -368,6 +514,10 @@ export const MultiAccountProvider: React.FC<{ children: React.ReactNode }> = ({
       switchAccount,
       registerOpenAccountSwitcher,
       openAccountSwitcher,
+      accountBadges,
+      refreshAccountBadges,
+      incrementAccountBadge,
+      removeSavedAccount,
     }),
     [
       accounts,
@@ -378,6 +528,10 @@ export const MultiAccountProvider: React.FC<{ children: React.ReactNode }> = ({
       switchAccount,
       registerOpenAccountSwitcher,
       openAccountSwitcher,
+      accountBadges,
+      refreshAccountBadges,
+      incrementAccountBadge,
+      removeSavedAccount,
     ]
   );
 

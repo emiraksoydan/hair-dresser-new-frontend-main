@@ -13,6 +13,7 @@ import Animated, {
 
 import { Text } from './Text';
 import { COLORS } from '../../constants/colors';
+import { badgeCountLabel } from '../../utils/badgeDisplay';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -34,6 +35,8 @@ interface CustomCurvedTabBarProps {
    */
   chipBackground?: string;
   chipForeground?: string;
+  /** Sarı yüzen sekme içindeki ikon rengi (açık modda siyah) */
+  onGoldIconColor?: string;
   backgroundColor?: string;
   inactiveIconColor?: string;
   height?: number;
@@ -75,9 +78,6 @@ const CurvedBackground: React.FC<{
 
 const DOUBLE_TAP_DELAY = 450; // ms
 
-/** Şeftali “Berber çağır” zeminli yüzen alanlarda ikon rengi */
-const ICON_TINT = "#FFFFFF";
-
 export const CustomCurvedTabBar: React.FC<CustomCurvedTabBarProps> = ({
   tabs,
   activeIndex,
@@ -85,6 +85,7 @@ export const CustomCurvedTabBar: React.FC<CustomCurvedTabBarProps> = ({
   onTabDoubleTap,
   chipBackground = COLORS.UI.ACCENT_GOLD,
   chipForeground = COLORS.UI.ACCENT_GOLD,
+  onGoldIconColor = COLORS.UI.TEXT_ON_GOLD,
   backgroundColor = '#1a1b25',
   inactiveIconColor = '#9CA3AF',
   height = 60,
@@ -208,7 +209,7 @@ export const CustomCurvedTabBar: React.FC<CustomCurvedTabBarProps> = ({
             <Icon
               source={tab.icon}
               size={24}
-              color={isActive ? ICON_TINT : inactiveIconColor}
+              color={isActive ? onGoldIconColor : inactiveIconColor}
             />
           </AnimatedView>
           <AnimatedView style={tabLabelAnimatedStyle}>
@@ -228,10 +229,12 @@ export const CustomCurvedTabBar: React.FC<CustomCurvedTabBarProps> = ({
         {tab.badgeCount !== undefined && tab.badgeCount > 0 && !isActive && (
           <View style={styles.badge}>
             <Text
-              style={styles.badgeText}
-              includeFontPadding={Platform.OS === 'android' ? false : undefined}
+              style={[
+                styles.badgeText,
+                Platform.OS === 'android' ? { includeFontPadding: false } : null,
+              ]}
             >
-              {tab.badgeCount > 99 ? '99+' : tab.badgeCount}
+              {badgeCountLabel(tab.badgeCount)}
             </Text>
           </View>
         )}
@@ -300,19 +303,19 @@ export const CustomCurvedTabBar: React.FC<CustomCurvedTabBarProps> = ({
             <Icon
               source={tabs[activeIndex]?.iconFocused || tabs[activeIndex]?.icon || 'home'}
               size={20}
-              color={ICON_TINT}
+              color={onGoldIconColor}
             />
           </AnimatedView>
           {tabs[activeIndex]?.badgeCount !== undefined &&
             tabs[activeIndex]!.badgeCount! > 0 && (
               <View style={styles.floatBadge}>
                 <Text
-                  style={styles.floatBadgeText}
-                  includeFontPadding={Platform.OS === 'android' ? false : undefined}
+                  style={[
+                    styles.floatBadgeText,
+                    Platform.OS === 'android' ? { includeFontPadding: false } : null,
+                  ]}
                 >
-                  {tabs[activeIndex]!.badgeCount! > 99
-                    ? '99+'
-                    : tabs[activeIndex]!.badgeCount}
+                  {badgeCountLabel(tabs[activeIndex]!.badgeCount!)}
                 </Text>
               </View>
             )}

@@ -3,7 +3,7 @@ import { View, ScrollView, TouchableOpacity, ActivityIndicator } from "react-nat
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Icon } from "react-native-paper";
 import { Text } from "../components/common/Text";
-import SearchBar from "../components/common/searchbar";
+import SearchBar from "../components/common/SearchBar";
 import { useLanguage } from "../hook/useLanguage";
 import { useTheme } from "../hook/useTheme";
 import { useSafeNavigation } from "../hook/useSafeNavigation";

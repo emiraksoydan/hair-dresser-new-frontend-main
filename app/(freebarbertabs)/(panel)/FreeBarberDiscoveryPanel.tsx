@@ -11,15 +11,15 @@ import { Icon } from "react-native-paper";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Text } from "../../components/common/Text";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useBottomSheet } from "../../hook/useBottomSheet";
-import SearchBar from "../../components/common/searchbar";
+import { useFullHeightBottomSheet } from "../../hook/useBottomSheet";
+import SearchBar from "../../components/common/SearchBar";
 import { SkeletonComponent } from "../../components/common/skeleton";
 import MotiViewExpand from "../../components/common/motiviewexpand";
 import { MotiView } from "moti";
 import { toggleExpand } from "../../utils/common/expand-toggle";
-import { FilterDrawer } from "../../components/common/filterdrawer";
+import { FilterDrawer } from "../../components/common/FilterDrawer";
 import { BottomSheetModal } from "@gorhom/bottom-sheet";
-import { StoreCardInner } from "../../components/store/storecard";
+import { StoreCardInner } from "../../components/store/StoreCard";
 import { useLanguage } from "../../hook/useLanguage";
 import { useTheme } from "../../hook/useTheme";
 import { useNearbyStores } from "../../hook/useNearByStore";
@@ -34,7 +34,7 @@ import { useSafeNavigation } from "../../hook/useSafeNavigation";
 import { Marker } from "react-native-maps";
 import { OsmMapView as MapView } from "../../components/common/OsmMapView";
 import { safeCoord } from "../../utils/location/geo";
-import StoreBookingContent from "../../components/store/storebooking";
+import StoreBookingContent from "../../components/store/StoreBooking";
 import {
   useGetAllCategoriesQuery,
   useGetFreeBarberMinePanelQuery,
@@ -55,12 +55,15 @@ import {
   shouldShowDiscoveryConnectivityError,
 } from "../../utils/panelDiscoveryErrors";
 import { SavedFilterChips } from "../../components/common/savedfilterchips";
-import { RatingsBottomSheet } from "../../components/rating/ratingsbottomsheet";
+import { RatingsBottomSheet } from "../../components/rating/RatingsBottomSheet";
 import { useBackendFilters } from "../../hook/useBackendFilters";
 import { DEFAULT_DISTANCE_PRESET_ID } from "../../constants/filterDefaults";
+import { PANEL_FLAT_LIST_PERF } from "../../constants/panelFlatListPerf";
+import { useAuth } from "../../hook/useAuth";
+import { UserType } from "../../types";
 import { useActionGuard } from "../../hook/useActionGuard";
 import { useSubscriptionGuard } from "../../hook/useSubscriptionGuard";
-import { StoreMarker } from "../../components/common/storemarker";
+import { StoreMarker } from "../../components/common/StoreMarker";
 import { DeferredRender } from "../../components/common/deferredrender";
 import { isOtherUsersStore } from "../../utils/compare-eligibility";
 import { PanelCollapsibleTop } from "../../components/panel/PanelCollapsibleTop";
@@ -79,6 +82,8 @@ const Index = () => {
   const guard = useActionGuard();
   const { withSubscription } = useSubscriptionGuard();
   const freeBarberPanelSheet = useFreeBarberPanelSheet();
+  const { userType } = useAuth();
+  const isFreeBarber = userType === UserType.FreeBarber;
 
   const { data: notifications = [], refetch: refetchNotifications } =
     useGetAllNotificationsQuery();
@@ -291,6 +296,16 @@ const Index = () => {
     useState<BarberStoreGetDto | null>(null);
   const mapRef = useRef<any>(null);
 
+  useEffect(() => {
+    if (!isMapMode || !hasMoreStores || loadingMoreStores) return;
+
+    const timeout = setTimeout(() => {
+      void loadMoreStores();
+    }, 120);
+
+    return () => clearTimeout(timeout);
+  }, [isMapMode, hasMoreStores, loadingMoreStores, loadMoreStores]);
+
   // Sekme odağında manualFetch kaldırıldı — skeleton flicker. Pull-to-refresh + arka plan yenileme hook'ta.
 
   // Bildirimden gelen focusRegion varsa harita moduna geç
@@ -314,13 +329,10 @@ const Index = () => {
   usePanelMoreFab(panelMapFabItems);
 
   // Bottom sheet hooks
-  const mapDetailSheet = useBottomSheet({
-    snapPoints: ["92%", "100%"],
+  const mapDetailSheet = useFullHeightBottomSheet({
     enablePanDownToClose: true,
-    enableOverDrag: true,
   });
-  const ratingsSheet = useBottomSheet({
-    snapPoints: ["100%"],
+  const ratingsSheet = useFullHeightBottomSheet({
     enablePanDownToClose: true,
   });
 
@@ -679,6 +691,12 @@ const Index = () => {
     }
   }, [isMapMode, focusRegion, location?.latitude, location?.longitude]);
 
+  const _renderItemRef = useRef<((args: { item: any }) => React.ReactElement | null) | null>(null);
+  const renderListItem = useCallback(
+    (args: { item: any }) => (_renderItemRef.current?.(args) ?? null) as React.ReactElement | null,
+    [],
+  );
+
   return (
     <View className="flex flex-1 px-3" style={{ backgroundColor: colors.screenBg, overflow: "hidden" }}>
       <View
@@ -705,27 +723,29 @@ const Index = () => {
             onFilterPress={() => setFilterDrawerVisible(true)}
           />
           </View>
-          <TouchableOpacity
-            activeOpacity={0.7}
-            onPress={handleViewMyPanelPress}
-            style={{
-              flexDirection: "row",
-              alignItems: "center",
-              minHeight: 40,
-              paddingHorizontal: 12,
-              paddingVertical: 8,
-              borderTopWidth: StyleSheet.hairlineWidth,
-              borderTopColor: colors.borderColor2,
-            }}
-          >
-            <Text
-              numberOfLines={2}
-              style={{ flex: 1, fontSize: 13, lineHeight: 18, color: colors.textSecondary, fontFamily: "CenturyGothic-Bold" }}
+          {isFreeBarber && (
+            <TouchableOpacity
+              activeOpacity={0.7}
+              onPress={handleViewMyPanelPress}
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                minHeight: 44,
+                paddingHorizontal: 12,
+                paddingVertical: 9,
+                borderTopWidth: StyleSheet.hairlineWidth,
+                borderTopColor: colors.borderColor2,
+              }}
             >
-              {t("panel.viewMyPanel")}
-            </Text>
-            <Icon source="chevron-right" size={18} color={colors.textTertiary} />
-          </TouchableOpacity>
+              <Text
+                numberOfLines={2}
+                style={{ flex: 1, fontSize: 15, lineHeight: 22, color: colors.textSecondary, fontFamily: "CenturyGothic-Bold" }}
+              >
+                {t("panel.viewMyPanel")}
+              </Text>
+              <Icon source="chevron-right" size={18} color={colors.textTertiary} />
+            </TouchableOpacity>
+          )}
           {savedFilters.length > 0 && (
             <View
               style={{
@@ -771,9 +791,9 @@ const Index = () => {
           data={listData}
           keyExtractor={(item) => item.id}
           scrollEventThrottle={16}
-          contentContainerStyle={{ paddingBottom: 80 + insets.bottom }}
+          contentContainerStyle={{ paddingBottom: 80 + insets.bottom, flexGrow: 1 }}
           showsVerticalScrollIndicator={false}
-          removeClippedSubviews={false}
+          keyboardShouldPersistTaps="handled"
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
@@ -781,11 +801,7 @@ const Index = () => {
               tintColor="#f05e23"
             />
           }
-          // Performance optimizations - removeClippedSubviews kaldırıldı (overlap sorununa neden oluyordu)
-          maxToRenderPerBatch={5}
-          updateCellsBatchingPeriod={100}
-          initialNumToRender={5}
-          windowSize={3}
+          {...PANEL_FLAT_LIST_PERF}
           // Infinite-scroll: filtered endpoint'te offset ile bir sonraki sayfayı iste.
           // `hasMore=false` veya `loadingMore=true` iken loadMore kendi içinde no-op.
           onEndReached={hasMoreStores ? loadMoreStores : undefined}
@@ -797,7 +813,7 @@ const Index = () => {
               </View>
             ) : null
           }
-          renderItem={({ item }) => {
+          renderItem={(_renderItemRef.current = ({ item }) => {
             if (item.type === "stores-header") {
               return (
                 <View className="flex flex-row justify-between items-center mt-4">
@@ -935,7 +951,7 @@ const Index = () => {
               );
             }
             return null;
-          }}
+          }, renderListItem)}
         />
       </View>
 
@@ -1024,6 +1040,8 @@ const Index = () => {
         ref={mapDetailSheet.ref}
         onChange={mapDetailSheet.handleChange}
         snapPoints={mapDetailSheet.snapPoints}
+        index={0}
+        enableDynamicSizing={false}
         enablePanDownToClose={mapDetailSheet.enablePanDownToClose}
         handleComponent={() => null}
         backgroundStyle={{ backgroundColor: colors.sheetBg }}
@@ -1045,6 +1063,10 @@ const Index = () => {
                 isFreeBarber={true}
                 mode={effectiveAppointmentId ? "add-store" : undefined}
                 appointmentId={effectiveAppointmentId}
+                onSuccessClose={() => {
+                  mapDetailSheet.dismiss();
+                  setSelectedMapItem(null);
+                }}
               />
             )}
           </DeferredRender>
@@ -1055,6 +1077,9 @@ const Index = () => {
       <BottomSheetModal
         ref={ratingsSheet.ref}
         snapPoints={ratingsSheet.snapPoints}
+        index={0}
+        enableDynamicSizing={false}
+        enableContentPanningGesture={true}
         enablePanDownToClose={ratingsSheet.enablePanDownToClose}
         handleIndicatorStyle={{ backgroundColor: colors.sheetHandle }}
         backgroundStyle={{ backgroundColor: colors.sheetBg }}

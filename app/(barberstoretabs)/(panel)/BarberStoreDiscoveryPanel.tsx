@@ -13,13 +13,14 @@ import { Icon } from "react-native-paper";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Text } from "../../components/common/Text";
 import { OsmMapView as MapView } from "../../components/common/OsmMapView";
-import SearchBar from "../../components/common/searchbar";
+import SearchBar from "../../components/common/SearchBar";
 import { BottomSheetModal } from "@gorhom/bottom-sheet";
-import { useBottomSheet } from "../../hook/useBottomSheet";
+import { useFullHeightBottomSheet } from "../../hook/useBottomSheet";
 import MotiViewExpand from "../../components/common/motiviewexpand";
 import { toggleExpand } from "../../utils/common/expand-toggle";
 import { SkeletonComponent } from "../../components/common/skeleton";
-import { FreeBarGetDto } from "../../types";
+import { FreeBarGetDto, UserType } from "../../types";
+import { useAuth } from "../../hook/useAuth";
 import {
   useGetMineStoresQuery,
   useGetSettingQuery,
@@ -37,13 +38,14 @@ import {
   shouldShowDiscoveryConnectivityError,
 } from "../../utils/panelDiscoveryErrors";
 import { SavedFilterChips } from "../../components/common/savedfilterchips";
-import { FilterDrawer } from "../../components/common/filterdrawer";
-import { FreeBarberCardInner } from "../../components/freebarber/freebarbercard";
-import FreeBarberBookingContent from "../../components/freebarber/freebarberbooking";
+import { FilterDrawer } from "../../components/common/FilterDrawer";
+import { FreeBarberCardInner } from "../../components/freebarber/FreeBarberCard";
+import FreeBarberBookingContent from "../../components/freebarber/FreeBarberBooking";
 import { useNearbyStoresControl } from "../../hook/useNearByFreeBarberForStore";
+import { PANEL_FLAT_LIST_PERF } from "../../constants/panelFlatListPerf";
 import { safeCoord } from "../../utils/location/geo";
-import { BarberMarker } from "../../components/freebarber/barbermarker";
-import { RatingsBottomSheet } from "../../components/rating/ratingsbottomsheet";
+import { BarberMarker } from "../../components/freebarber/BarberMarker";
+import { RatingsBottomSheet } from "../../components/rating/RatingsBottomSheet";
 import { useBackendFilters } from "../../hook/useBackendFilters";
 import { DEFAULT_FILTER_RADIUS_KM, DEFAULT_DISTANCE_PRESET_ID } from "../../constants/filterDefaults";
 import { DeferredRender } from "../../components/common/deferredrender";
@@ -72,6 +74,9 @@ const Index = () => {
   const { withSubscription } = useSubscriptionGuard();
   const barberStoreSheet = useBarberStoreSheet();
   const isFocused = useIsFocused();
+
+  const { userType } = useAuth();
+  const isBarberStore = userType === UserType.BarberStore;
 
   // Current user for filters
   const { data: currentUser } = useGetMeQuery();
@@ -167,8 +172,16 @@ const Index = () => {
   );
   const mapRef = useRef<any>(null);
 
-  const manualFetchRef = React.useRef(manualFetch);
-  manualFetchRef.current = manualFetch;
+  useEffect(() => {
+    if (!isMapMode || !hasMoreFreeBarbers || loadingMoreFreeBarbers) return;
+
+    const timeout = setTimeout(() => {
+      void loadMoreFreeBarbers();
+    }, 120);
+
+    return () => clearTimeout(timeout);
+  }, [isMapMode, hasMoreFreeBarbers, loadingMoreFreeBarbers, loadMoreFreeBarbers]);
+
   // Sekme odağında tam liste + skeleton yenilemesi kaldırıldı; periyodik arka plan yenilemesi hook içinde.
 
   const panelMapFabItems = useMemo(
@@ -185,13 +198,10 @@ const Index = () => {
   usePanelMoreFab(panelMapFabItems);
 
   // Bottom sheet hooks
-  const mapDetailSheet = useBottomSheet({
-    snapPoints: ["92%", "100%"],
+  const mapDetailSheet = useFullHeightBottomSheet({
     enablePanDownToClose: true,
-    enableOverDrag: true,
   });
-  const ratingsSheet = useBottomSheet({
-    snapPoints: ["100%"],
+  const ratingsSheet = useFullHeightBottomSheet({
     enablePanDownToClose: true,
   });
 
@@ -346,7 +356,7 @@ const Index = () => {
         mode="barbershop"
         onPressRatings={handlePressRatings}
         onCallFreeBarber={handleManualFetch}
-        storeId={stores?.length === 1 ? stores[0].id : undefined}
+        mineStores={stores ?? []}
         showImageAnimation={settingData?.data?.showImageAnimation ?? true}
         panelCompare={
           isOtherUsersFreeBarber(item, currentUserId)
@@ -553,6 +563,12 @@ const Index = () => {
     ));
   }, [filteredFreeBarbers, handleMarkerPress]); // Sadece liste değişirse render et
 
+  const _renderItemRef = useRef<((args: { item: any }) => React.ReactElement | null) | null>(null);
+  const renderListItem = useCallback(
+    (args: { item: any }) => (_renderItemRef.current?.(args) ?? null) as React.ReactElement | null,
+    [],
+  );
+
   return (
     <View className="flex flex-1 px-3" style={{ backgroundColor: colors.screenBg, overflow: "hidden" }}>
       <View
@@ -579,27 +595,29 @@ const Index = () => {
               onFilterPress={() => setFilterDrawerVisible(true)}
             />
             </View>
-            <TouchableOpacity
-              activeOpacity={0.7}
-              onPress={handleViewMyBusinessesPress}
-              style={{
-                flexDirection: "row",
-                alignItems: "center",
-                minHeight: 40,
-                paddingHorizontal: 12,
-                paddingVertical: 8,
-                borderTopWidth: StyleSheet.hairlineWidth,
-                borderTopColor: colors.borderColor2,
-              }}
-            >
-              <Text
-                numberOfLines={2}
-                style={{ flex: 1, fontSize: 13, lineHeight: 18, color: colors.textSecondary, fontFamily: "CenturyGothic-Bold" }}
+            {isBarberStore && (
+              <TouchableOpacity
+                activeOpacity={0.7}
+                onPress={handleViewMyBusinessesPress}
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  minHeight: 44,
+                  paddingHorizontal: 12,
+                  paddingVertical: 9,
+                  borderTopWidth: StyleSheet.hairlineWidth,
+                  borderTopColor: colors.borderColor2,
+                }}
               >
-                {t("panel.viewMyBusinesses")}
-              </Text>
-              <Icon source="chevron-right" size={18} color={colors.textTertiary} />
-            </TouchableOpacity>
+                <Text
+                  numberOfLines={2}
+                  style={{ flex: 1, fontSize: 15, lineHeight: 22, color: colors.textSecondary, fontFamily: "CenturyGothic-Bold" }}
+                >
+                  {t("panel.viewMyBusinesses")}
+                </Text>
+                <Icon source="chevron-right" size={18} color={colors.textTertiary} />
+              </TouchableOpacity>
+            )}
             {savedFilters.length > 0 && (
               <View
                 style={{
@@ -639,9 +657,9 @@ const Index = () => {
           data={listData}
           keyExtractor={(item) => item.id}
           scrollEventThrottle={16}
-          contentContainerStyle={{ paddingBottom: 80 + insets.bottom }}
+          contentContainerStyle={{ paddingBottom: 80 + insets.bottom, flexGrow: 1 }}
           showsVerticalScrollIndicator={false}
-          removeClippedSubviews={false}
+          keyboardShouldPersistTaps="handled"
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
@@ -649,8 +667,7 @@ const Index = () => {
               tintColor="#f05e23"
             />
           }
-          initialNumToRender={10}
-          windowSize={21}
+          {...PANEL_FLAT_LIST_PERF}
           // Infinite-scroll: mağaza bazında keyset pagination — her store kendi
           // hasMore'unu takip eder, loadMore yalnızca hâlâ sayfa alabilen store'lar
           // için paralel fetch yapar. Duplicate barber'lar hook içinde Map dedupe.
@@ -663,7 +680,7 @@ const Index = () => {
               </View>
             ) : null
           }
-          renderItem={({ item }) => {
+          renderItem={(_renderItemRef.current = ({ item }) => {
             if (item.type === "freebarbers-header") {
               return (
                 <View className="flex flex-row justify-between items-center mt-4">
@@ -775,7 +792,7 @@ const Index = () => {
               );
             }
             return null;
-          }}
+          }, renderListItem)}
         />
       </View>
 
@@ -864,6 +881,8 @@ const Index = () => {
         ref={mapDetailSheet.ref}
         onChange={mapDetailSheet.handleChange}
         snapPoints={mapDetailSheet.snapPoints}
+        index={0}
+        enableDynamicSizing={false}
         enablePanDownToClose={mapDetailSheet.enablePanDownToClose}
         handleComponent={() => null}
         backgroundStyle={{ backgroundColor: colors.sheetBg }}
@@ -883,7 +902,10 @@ const Index = () => {
                 barberId={(selectedMapItem as any).id}
                 isBottomSheet={true}
                 isBarberMode={true}
-                storeId={stores?.[0]?.id}
+                onSuccessClose={() => {
+                  mapDetailSheet.dismiss();
+                  setSelectedMapItem(null);
+                }}
               />
             )}
           </DeferredRender>
@@ -894,6 +916,9 @@ const Index = () => {
       <BottomSheetModal
         ref={ratingsSheet.ref}
         snapPoints={ratingsSheet.snapPoints}
+        index={0}
+        enableDynamicSizing={false}
+        enableContentPanningGesture={true}
         enablePanDownToClose={ratingsSheet.enablePanDownToClose}
         handleIndicatorStyle={{ backgroundColor: colors.sheetHandle }}
         backgroundStyle={{ backgroundColor: colors.sheetBg }}

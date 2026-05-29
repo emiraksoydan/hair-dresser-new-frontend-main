@@ -8,12 +8,13 @@ import { SkeletonComponent } from '../../components/common/skeleton';
 import { EmptyState } from '../../components/common/emptystateresult';
 import { LottieViewComponent } from '../../components/common/lottieview';
 import { UnifiedStateManager } from '../../components/common/UnifiedStateManager';
-import { StoreCardInner } from '../../components/store/storecard';
-import { FreeBarberCardInner } from '../../components/freebarber/freebarbercard';
+import { StoreCardInner } from '../../components/store/StoreCard';
+import { FreeBarberCardInner } from '../../components/freebarber/FreeBarberCard';
 import { getErrorMessage } from '../../utils/errorHandler';
 import { shouldShowDiscoveryConnectivityError, type DiscoveryLocationMode } from '../../utils/panelDiscoveryErrors';
 import { useLanguage } from '../../hook/useLanguage';
 import { BarberStoreGetDto, FreeBarGetDto } from '../../types';
+import { PANEL_FLAT_LIST_PERF } from '../../constants/panelFlatListPerf';
 
 export const SectionHeader = ({ title, expanded, onToggle }: any) => (
     <View className="flex flex-row justify-between items-center mt-4">
@@ -129,13 +130,14 @@ export const StoresSection = React.memo(({ stores, loading, hasLocation, locatio
 
     return (
         <View>
-            <SectionHeader title="İşletmeler" expanded={expanded} onToggle={() => setExpanded(!expanded)} />
+            <SectionHeader title={t('navigation.businesses')} expanded={expanded} onToggle={() => setExpanded(!expanded)} />
             {expanded ? (
                 <FlatList
                     data={stores}
                     keyExtractor={(s: any) => s.id}
                     scrollEventThrottle={16}
                     showsVerticalScrollIndicator={false}
+                    {...PANEL_FLAT_LIST_PERF}
                     renderItem={({ item: s }: { item: any; index: number }) => (
                         <PerplexityListItem>
                             <StoreCardInner store={s} isList={isList} expanded={expanded} cardWidthStore={cardWidth} compactMeta onPressUpdate={onPressStore} onPressRatings={onPressRatings} showImageAnimation={showImageAnimation} />
@@ -242,13 +244,14 @@ export const FreeBarbersSection = React.memo(({ freeBarbers, loading, hasLocatio
 
     return (
         <View>
-            <SectionHeader title="Serbest Berberler" expanded={expanded} onToggle={() => setExpanded(!expanded)} />
+            <SectionHeader title={t('navigation.freeBarbers')} expanded={expanded} onToggle={() => setExpanded(!expanded)} />
             {expanded ? (
                 <FlatList
                     data={freeBarbers}
                     keyExtractor={(fb: any) => fb.id}
                     scrollEventThrottle={16}
                     showsVerticalScrollIndicator={false}
+                    {...PANEL_FLAT_LIST_PERF}
                     renderItem={({ item: fb }: { item: any; index: number }) => (
                         <PerplexityListItem>
                             <FreeBarberCardInner freeBarber={fb} isList={isList} expanded={expanded} cardWidthFreeBarber={cardWidth} compactMeta onPressUpdate={onPressFreeBarber} onPressRatings={onPressRatings} showImageAnimation={showImageAnimation} />

@@ -110,7 +110,7 @@ export const ChairEditModal: React.FC<Props> = ({
 
   const submit = (values: ChairFormInitial) => guard(async () => {
     if (!storeId || !storeId.trim()) {
-      dispatch(showSnack({ message: t("errors.storeNotFound") || "Dükkan bulunamadı", isError: true }));
+      dispatch(showSnack({ message: t("errors.storeNotFound"), isError: true }));
       return;
     }
     const payloadName = values.mode === "named" ? (values.name ?? null) : null;

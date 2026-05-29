@@ -42,6 +42,12 @@ interface NotificationItemProps {
   formatRating: (r?: number) => any;
   onAddStore?: (appointmentId: string) => void;
   onCloseSheet?: () => void;
+  /**
+   * KÖK SEBEP FIX: Aynı appointmentId için "sonuçlandı" türü notification (Approved/Rejected/Cancelled/...)
+   * mevcutsa, action card'ın butonları gizlenir. Bayat payload'a güvenmek yerine listenin kendisinden
+   * authoritative kanıt çıkarılır — SignalR event kaybedilse bile çalışır.
+   */
+  concludedAppointmentIds?: Set<string>;
 }
 
 // Status tipi için yardımcı tip
@@ -160,6 +166,16 @@ const areEqual = (prev: NotificationItemProps, next: NotificationItemProps) => {
   if (prevDecisions.customerDecision !== nextDecisions.customerDecision) return false;
   if (prevDecisions.status !== nextDecisions.status) return false;
 
+  // Concluded appointment IDs set referans karşılaştırması — parent'ta yeni Set oluşturursa re-render
+  if (prev.concludedAppointmentIds !== next.concludedAppointmentIds) {
+    const apptId = next.item.appointmentId;
+    if (apptId) {
+      const prevHas = prev.concludedAppointmentIds?.has(apptId) ?? false;
+      const nextHas = next.concludedAppointmentIds?.has(apptId) ?? false;
+      if (prevHas !== nextHas) return false;
+    }
+  }
+
   return true;
 };
 
@@ -178,6 +194,7 @@ export const NotificationItemOptimized = React.memo<NotificationItemProps>(
     formatRating,
     onAddStore,
     onCloseSheet,
+    concludedAppointmentIds,
   }) => {
     const { colors, isDark } = useTheme();
     const { isAuthenticated } = useAuth();
@@ -293,11 +310,11 @@ export const NotificationItemOptimized = React.memo<NotificationItemProps>(
 
     const isPending = finalAppointmentStatus === AppointmentStatus.Pending;
 
-    // Pending veya Approved randevuya ait bildirimlerde silme butonu gösterilmez
+    // Sadece "aksiyon bekleyen" (Pending) randevuya ait bildirimlerde silme gizlenir.
+    // Approved/Rejected/Cancelled/Completed/Unanswered hepsi silinebilir.
     const canDelete =
       !item.appointmentId ||
-      (finalAppointmentStatus !== AppointmentStatus.Pending &&
-        finalAppointmentStatus !== AppointmentStatus.Approved);
+      finalAppointmentStatus !== AppointmentStatus.Pending;
 
     // ========== SÜRE KONTROLÜ ==========
     const isExpired = isExpiredCheck;
@@ -360,6 +377,18 @@ export const NotificationItemOptimized = React.memo<NotificationItemProps>(
     const canShowButtons = React.useMemo(() => {
       // Temel kontroller
       if (!isActionableType) return false;
+
+      // ─── KÖK SEBEP FIX: Sonuçlanan notification varlık kontrolü ───────────
+      // Bayat payload'a güvenmek yerine listede AYNI appointmentId için
+      // "sonuçlandı" türü notification (Approved/Rejected/Cancelled/Completed/...)
+      // var mı? Varsa bu randevu tamamen kapanmıştır → buton GÖSTERME.
+      // SignalR notification.updated event kaybedilse bile bu kontrol authoritative
+      // çünkü status notification'ı backend her zaman yaratıyor.
+      // -----------------------------------------------------------------------
+      if (item.appointmentId && concludedAppointmentIds?.has(item.appointmentId)) {
+        return false;
+      }
+
       if (!isPending) return false;
       if (isExpired) return false;
       if (hasMyDecision) return false;
@@ -442,6 +471,9 @@ export const NotificationItemOptimized = React.memo<NotificationItemProps>(
       customerDecision,
       payload?.storeSelectionType,
       payload?.store,
+      // KÖK FIX: aynı appointment için sonuçlanmış notification var mı?
+      item.appointmentId,
+      concludedAppointmentIds,
     ]);
 
     // FreeBarber için özel durum: StoreSelection'da store seçilmemişse sadece RED butonu
@@ -541,7 +573,7 @@ export const NotificationItemOptimized = React.memo<NotificationItemProps>(
           return {
             type: "freebarber",
             id: payload.freeBarber.userId,
-            name: payload.freeBarber.displayName || "Serbest Berber",
+            name: payload.freeBarber.displayName || t("labels.freeBarberDefaultName"),
             ...(fbNums ? { lat: fbLat, lng: fbLng } : {}),
           };
         }
@@ -549,7 +581,7 @@ export const NotificationItemOptimized = React.memo<NotificationItemProps>(
           return {
             type: "customer",
             id: payload.customer.userId,
-            name: payload.customer.displayName || "Müşteri",
+            name: payload.customer.displayName || t("labels.customerDefaultName"),
             lat: customerLat,
             lng: customerLng,
           };
@@ -562,7 +594,7 @@ export const NotificationItemOptimized = React.memo<NotificationItemProps>(
           return {
             type: "store",
             id: payload.store.storeId,
-            name: payload.store.storeName || "Dükkan",
+            name: payload.store.storeName || t("labels.storeDefaultName"),
             lat: payload.store.latitude!,
             lng: payload.store.longitude!,
           };
@@ -571,7 +603,7 @@ export const NotificationItemOptimized = React.memo<NotificationItemProps>(
           return {
             type: "customer",
             id: payload.customer.userId,
-            name: payload.customer.displayName || "Müşteri",
+            name: payload.customer.displayName || t("labels.customerDefaultName"),
             lat: customerLat,
             lng: customerLng,
           };
@@ -592,7 +624,7 @@ export const NotificationItemOptimized = React.memo<NotificationItemProps>(
           return {
             type: "freebarber",
             id: payload.freeBarber.userId,
-            name: payload.freeBarber.displayName || "Serbest Berber",
+            name: payload.freeBarber.displayName || t("labels.freeBarberDefaultName"),
             ...(fbNums ? { lat: fbLat, lng: fbLng } : {}),
           };
         }
@@ -600,7 +632,7 @@ export const NotificationItemOptimized = React.memo<NotificationItemProps>(
           return {
             type: "store",
             id: payload.store.storeId,
-            name: payload.store.storeName || "Dükkan",
+            name: payload.store.storeName || t("labels.storeDefaultName"),
             lat: payload.store.latitude!,
             lng: payload.store.longitude!,
           };
@@ -609,7 +641,7 @@ export const NotificationItemOptimized = React.memo<NotificationItemProps>(
       }
 
       return null;
-    }, [payload, recipientRole]);
+    }, [payload, recipientRole, t]);
 
     const handleShowOnMap = React.useCallback(() => {
       if (!mapTarget) return;
@@ -961,9 +993,8 @@ export const NotificationItemOptimized = React.memo<NotificationItemProps>(
                   </View>
                 </View>
               )}
-            {/* Haritada Göster: onay/red bekleyen bildirimlerde yalnızca aksiyon hâlâ alınabilirken
-                (canShowButtons ile aynı mantık). Karar verildikten / süreç kapandıktan sonra gizlenir. */}
-            {mapTarget && (!isActionableType || canShowButtons) && (
+            {/* Haritada Göster: yalnızca onay/red bekleyen (canShowButtons) durumda — iptal/onaylandı/cevapsız vb. sonuç kartlarında yok. */}
+            {mapTarget && canShowButtons && (
               <TouchableOpacity
                 onPress={handleShowOnMap}
                 className="mt-2 rounded-xl py-3 items-center justify-center flex-row gap-2"
@@ -983,8 +1014,8 @@ export const NotificationItemOptimized = React.memo<NotificationItemProps>(
                   style={{ color: isDark ? "#bae6fd" : "#0369a1", fontFamily: "CenturyGothic-Bold" }}
                 >
                   {mapTarget.type === "freebarber"
-                    ? "Haritada Göster (Canlı)"
-                    : "Haritada Göster"}
+                    ? t("notification.showOnMapLive")
+                    : t("notification.showOnMap")}
                 </Text>
               </TouchableOpacity>
             )}

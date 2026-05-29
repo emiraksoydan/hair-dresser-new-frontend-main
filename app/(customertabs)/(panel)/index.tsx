@@ -11,9 +11,9 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Text } from "../../components/common/Text";
 import { OsmMapView as MapView } from "../../components/common/OsmMapView";
 import { useSafeNavigation } from "../../hook/useSafeNavigation";
-import SearchBar from "../../components/common/searchbar";
+import SearchBar from "../../components/common/SearchBar";
 import { BottomSheetModal } from "@gorhom/bottom-sheet";
-import { useBottomSheet } from "../../hook/useBottomSheet";
+import { useFullHeightBottomSheet } from "../../hook/useBottomSheet";
 import MotiViewExpand from "../../components/common/motiviewexpand";
 import { toggleExpand } from "../../utils/common/expand-toggle";
 import { BarberStoreGetDto, FreeBarGetDto } from "../../types";
@@ -26,22 +26,23 @@ import {
   isPanelConnectivityError,
   shouldShowDiscoveryConnectivityError,
 } from "../../utils/panelDiscoveryErrors";
-import { FilterDrawer } from "../../components/common/filterdrawer";
+import { FilterDrawer } from "../../components/common/FilterDrawer";
 import { SavedFilterChips } from "../../components/common/savedfilterchips";
-import { StoreCardInner } from "../../components/store/storecard";
-import StoreBookingContent from "../../components/store/storebooking";
-import { FreeBarberCardInner } from "../../components/freebarber/freebarbercard";
-import FreeBarberBookingContent from "../../components/freebarber/freebarberbooking";
+import { StoreCardInner } from "../../components/store/StoreCard";
+import StoreBookingContent from "../../components/store/StoreBooking";
+import { FreeBarberCardInner } from "../../components/freebarber/FreeBarberCard";
+import FreeBarberBookingContent from "../../components/freebarber/FreeBarberBooking";
 import { safeCoord } from "../../utils/location/geo";
-import { BarberMarker } from "../../components/freebarber/barbermarker";
-import { RatingsBottomSheet } from "../../components/rating/ratingsbottomsheet";
-import { StoreMarker } from "../../components/common/storemarker";
+import { BarberMarker } from "../../components/freebarber/BarberMarker";
+import { RatingsBottomSheet } from "../../components/rating/RatingsBottomSheet";
+import { StoreMarker } from "../../components/common/StoreMarker";
 import { DeferredRender } from "../../components/common/deferredrender";
 import { SkeletonComponent } from "../../components/common/skeleton";
 import { UnifiedStateWrapper } from "../../components/common/UnifiedStateManager";
 import { useNearbyDiscovery } from "../../hook/useNearbyDiscovery";
 import { useBackendFilters, wrapFilterCriteriaForSave } from "../../hook/useBackendFilters";
 import { DEFAULT_DISTANCE_PRESET_ID } from "../../constants/filterDefaults";
+import { PANEL_FLAT_LIST_PERF } from "../../constants/panelFlatListPerf";
 import { useLanguage } from "../../hook/useLanguage";
 import { useTheme } from "../../hook/useTheme";
 import { useActionGuard } from "../../hook/useActionGuard";
@@ -185,6 +186,16 @@ const Index = () => {
   >(null);
   const mapRef = useRef<any>(null);
 
+  useEffect(() => {
+    if (!isMapMode || !anyHasMore || anyLoadingMore) return;
+
+    const timeout = setTimeout(() => {
+      void loadMoreDiscovery();
+    }, 120);
+
+    return () => clearTimeout(timeout);
+  }, [isMapMode, anyHasMore, anyLoadingMore, loadMoreDiscovery]);
+
   const panelMapFabItems = useMemo(
     () => [
       {
@@ -212,14 +223,12 @@ const Index = () => {
   const [filterDrawerVisible, setFilterDrawerVisible] = useState(false);
 
   // Bottom sheet hooks
-  const mapDetailSheet = useBottomSheet({
-    snapPoints: ["92%", "100%"],
+  // Harita detayı: % snap varsayılan indeksle içerik kesiliyordu; pencere yüksekliği (px) = tam görünür alan
+  const mapDetailSheet = useFullHeightBottomSheet({
     enablePanDownToClose: true,
-    enableOverDrag: true,
   });
 
-  const ratingsSheet = useBottomSheet({
-    snapPoints: ["100%"],
+  const ratingsSheet = useFullHeightBottomSheet({
     enablePanDownToClose: true,
   });
 
@@ -288,7 +297,7 @@ const Index = () => {
       setSelectedMapItem(item);
       mapDetailSheet.present();
     },
-    [mapDetailSheet],
+    [mapDetailSheet.present],
   );
 
   // Filter handlers - filters are applied instantly, no apply button needed
@@ -763,6 +772,14 @@ const Index = () => {
     isList,
   ]);
 
+  // Stable renderItem: FlatList'e her render'da yeni referans gitmesin.
+  // ref her render'da güncellenir → closure her zaman güncel state okur.
+  const _renderItemRef = useRef<((args: { item: (typeof listData)[0] }) => React.ReactElement | null) | null>(null);
+  const renderListItem = useCallback(
+    (args: { item: (typeof listData)[0] }) => (_renderItemRef.current?.(args) ?? null) as React.ReactElement | null,
+    [],
+  );
+
   return (
     <View className="flex flex-1 px-3" style={{ backgroundColor: colors.screenBg, overflow: "hidden" }}>
       <View
@@ -818,9 +835,9 @@ const Index = () => {
           data={listData}
           keyExtractor={(item) => item.id}
           scrollEventThrottle={16}
-          contentContainerStyle={{ paddingBottom: 80 + insets.bottom }}
+          contentContainerStyle={{ paddingBottom: 80 + insets.bottom, flexGrow: 1 }}
           showsVerticalScrollIndicator={false}
-          removeClippedSubviews={false}
+          keyboardShouldPersistTaps="handled"
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
@@ -828,8 +845,7 @@ const Index = () => {
               tintColor="#c2a523"
             />
           }
-          initialNumToRender={10}
-          windowSize={21}
+          {...PANEL_FLAT_LIST_PERF}
           // Infinite-scroll: stores + freebarbers iki ayrı sayfalı liste. Liste
           // sonuna yaklaşıldığında ikisi için de bir sonraki sayfa istenir.
           onEndReached={anyHasMore ? handlePanelEndReached : undefined}
@@ -841,7 +857,7 @@ const Index = () => {
               </View>
             ) : null
           }
-          renderItem={({ item }) => {
+          renderItem={(_renderItemRef.current = ({ item }) => {
             if (item.type === "stores-header") {
               return (
                 <View className="flex flex-row justify-between items-center mt-4">
@@ -1031,7 +1047,7 @@ const Index = () => {
             }
 
             return null;
-          }}
+          }, renderListItem)}
         />
       </View>
 
@@ -1124,6 +1140,8 @@ const Index = () => {
         handleComponent={() => null}
         backgroundStyle={{ backgroundColor: colors.sheetBg }}
         snapPoints={mapDetailSheet.snapPoints}
+        index={0}
+        enableDynamicSizing={false}
         enablePanDownToClose={mapDetailSheet.enablePanDownToClose}
         onChange={mapDetailSheet.handleChange}
       >
@@ -1143,11 +1161,19 @@ const Index = () => {
                     storeId={selectedMapItem.id}
                     isBottomSheet={true}
                     isCustomer={true}
+                    onSuccessClose={() => {
+                      mapDetailSheet.dismiss();
+                      setSelectedMapItem(null);
+                    }}
                   />
                 ) : (
                   <FreeBarberBookingContent
                     barberId={(selectedMapItem as any).id}
                     isBottomSheet={true}
+                    onSuccessClose={() => {
+                      mapDetailSheet.dismiss();
+                      setSelectedMapItem(null);
+                    }}
                   />
                 )}
               </>
@@ -1163,6 +1189,9 @@ const Index = () => {
         handleIndicatorStyle={{ backgroundColor: colors.sheetHandle }}
         backgroundStyle={{ backgroundColor: colors.sheetBg }}
         snapPoints={ratingsSheet.snapPoints}
+        index={0}
+        enableDynamicSizing={false}
+        enableContentPanningGesture={true}
         enablePanDownToClose={ratingsSheet.enablePanDownToClose}
         onChange={(index) => {
           ratingsSheet.handleChange(index);

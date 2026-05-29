@@ -4,10 +4,10 @@ import { BottomSheetModal, BottomSheetView } from "@gorhom/bottom-sheet";
 import { BaseTabLayout } from "../components/layout/BaseTabLayout";
 import { UserType } from "../types";
 import { useLanguage } from "../hook/useLanguage";
-import { useBottomSheet } from "../hook/useBottomSheet";
+import { useFullHeightBottomSheet } from "../hook/useBottomSheet";
 import { DeferredRender } from "../components/common/deferredrender";
 import { CrudSkeletonComponent } from "../components/common/crudskeleton";
-import FormStoreAdd from "../components/store/formstoreadd";
+import FormStoreAdd from "../components/store/FormStoreAdd";
 import { getCommonTabs, panelTabConfigs, accentColors } from "../config/tabConfig";
 import { useTheme } from "../hook/useTheme";
 import { BarberStoreSheetContext } from "../context/BarberStoreSheetContext";
@@ -17,10 +17,8 @@ const BarberStoreLayout = () => {
   const { colors } = useTheme();
 
   // Bottom sheet hook for add store
-  const addStoreSheet = useBottomSheet({
-    snapPoints: ["100%"],
+  const addStoreSheet = useFullHeightBottomSheet({
     enablePanDownToClose: false,
-    enableOverDrag: false,
     enableHandlePanningGesture: false,
     pressBehavior: "none",
   });
@@ -60,6 +58,8 @@ const BarberStoreLayout = () => {
       onChange={addStoreSheet.handleChange}
       onDismiss={addStoreSheet.handleDismiss}
       snapPoints={addStoreSheet.snapPoints}
+      index={0}
+      enableDynamicSizing={false}
       enableOverDrag={addStoreSheet.enableOverDrag}
       enablePanDownToClose={addStoreSheet.enablePanDownToClose}
       enableHandlePanningGesture={addStoreSheet.enableHandlePanningGesture}

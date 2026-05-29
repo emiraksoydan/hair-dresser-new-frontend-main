@@ -26,6 +26,7 @@ import { MESSAGES } from '../../constants/messages';
 import { useAuth } from '../../hook/useAuth';
 import { useLanguage } from '../../hook/useLanguage';
 import { useTheme } from '../../hook/useTheme';
+import { badgeCountLabel } from '../../utils/badgeDisplay';
 
 const CHAT_AVATAR_PLACEHOLDER = require('../../../assets/images/profileempty.webp');
 
@@ -417,7 +418,7 @@ export const MessageThreadList: React.FC<MessageThreadListProps> = ({ routePrefi
                                     style={{ backgroundColor: unreadAccent + COLORS.OPACITY.LIGHT, borderWidth: 1, borderColor: unreadAccent + COLORS.OPACITY.MEDIUM }}
                                 >
                                     <Text className="text-[11px] font-century-gothic-sans-bold" style={{ color: unreadAccent }}>
-                                        {t('chat.newMessage')} ({item.unreadCount > 99 ? '99+' : item.unreadCount})
+                                        {t('chat.newMessage')} ({badgeCountLabel(item.unreadCount)})
                                     </Text>
                                 </View>
                             )}

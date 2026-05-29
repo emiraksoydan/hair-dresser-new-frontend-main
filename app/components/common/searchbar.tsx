@@ -4,6 +4,7 @@ import { Icon, IconButton } from "react-native-paper";
 import { SearchBarProps } from '../../types';
 import { useLanguage } from '../../hook/useLanguage';
 import { useTheme } from '../../hook/useTheme';
+import { getPanelHeaderAccentIconColor } from '../../constants/colors';
 
 // Tip tanımına buton fonksiyonlarını da eklediğini varsayıyorum
 interface ExtendedSearchBarProps extends SearchBarProps {
@@ -31,7 +32,8 @@ const SearchBar: React.FC<ExtendedSearchBarProps> = ({
     compact = false,
 }) => {
     const { t } = useLanguage();
-    const { colors } = useTheme();
+    const { colors, isDark } = useTheme();
+    const layoutToggleIconColor = getPanelHeaderAccentIconColor(isDark);
     const [isFocused, setIsFocused] = useState(false);
     const iconSz = compact ? 19 : 22;
     const inputFs = compact ? 14 : 15;
@@ -68,7 +70,7 @@ const SearchBar: React.FC<ExtendedSearchBarProps> = ({
                     {shouldShowLayoutToggle && setIsList && (
                         <IconButton
                             icon={isList ? "format-list-bulleted" : "view-grid-outline"}
-                            iconColor={'#9aa1ae'}
+                            iconColor={layoutToggleIconColor}
                             size={btnSz}
                             onPress={() => setIsList(!isList)}
                             style={{ margin: 0 }}

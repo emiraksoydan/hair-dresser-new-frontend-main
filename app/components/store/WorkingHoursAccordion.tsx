@@ -4,7 +4,7 @@ import { HelperText, Icon } from "react-native-paper";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { MotiView } from "moti";
 import { Text } from "../common/Text";
-import { DAYS_TR } from "../../constants";
+import { getWorkingDays } from "../../constants";
 import { fmtHHmm, fromHHmm } from "../../utils/time/time-helper";
 import type { FieldErrors, UseFormSetValue, UseFormTrigger } from "react-hook-form";
 import { useLanguage } from "../../hook/useLanguage";
@@ -45,7 +45,8 @@ export function WorkingHoursAccordion({
   setValue,
   trigger,
 }: Props) {
-  const { t } = useLanguage();
+  const { t, currentLanguage } = useLanguage();
+  const workingDays = useMemo(() => getWorkingDays(t), [t, currentLanguage]);
   const holidaySet = useMemo(() => new Set(holidayDays ?? []), [holidayDays]);
 
   // Android time picker state
@@ -81,12 +82,12 @@ export function WorkingHoursAccordion({
   );
 
   const closedDays = useMemo(
-    () => DAYS_TR.filter((d) => {
+    () => workingDays.filter((d) => {
       const idx = (working ?? []).findIndex((w) => w.dayOfWeek === d.day);
       if (idx < 0) return false;
       return !isDayOpen(d.day, idx);
     }),
-    [working, isDayOpen],
+    [working, isDayOpen, workingDays],
   );
 
   // Time picker press handler - Android opens dialog, iOS uses compact inline
@@ -101,7 +102,7 @@ export function WorkingHoursAccordion({
 
   return (
     <View style={{ gap: 8 }}>
-      {DAYS_TR.map((d) => {
+      {workingDays.map((d) => {
         const idx = (working ?? []).findIndex((w) => w.dayOfWeek === d.day);
         if (idx < 0) return null;
         const row = working![idx];

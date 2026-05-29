@@ -61,9 +61,17 @@ export interface EarningsDto {
   dailyBreakdown: DailyEarningDto[];
 }
 
+export interface AISuggestionDto {
+  name?: string | null;
+  distanceKm?: number | null;
+  services?: string | null;
+}
+
 export interface AIAssistantResponseDto {
   response: string;
   intent: string;
   actionTaken: boolean;
   affectedAppointmentId?: string | null;
+  affectedAppointmentIds?: string[];
+  suggestions?: AISuggestionDto[];
 }

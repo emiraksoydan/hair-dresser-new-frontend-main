@@ -3,7 +3,7 @@ import { View } from "react-native";
 import { PanelEmptyCta } from "../common/PanelEmptyCta";
 import { SkeletonComponent } from "../common/skeleton";
 import { UnifiedStateManager } from "../common/UnifiedStateManager";
-import { FreeBarberMineCardComp } from "./freebarberminecard";
+import { FreeBarberMineCardComp } from "./FreeBarberMineCard";
 import { getErrorMessage } from "../../utils/errorHandler";
 import { FreeBarberPanelDto } from "../../types";
 import { useLanguage } from "../../hook/useLanguage";

@@ -1,4 +1,5 @@
-import { useRef, useCallback, useState } from 'react';
+import { useRef, useCallback, useState, useMemo } from 'react';
+import { useWindowDimensions } from 'react-native';
 import { BottomSheetModal, BottomSheetBackdrop, type BottomSheetBackdropProps } from '@gorhom/bottom-sheet';
 
 export type UseBottomSheetOptions = {
@@ -82,5 +83,35 @@ export const useBottomSheet = (options: UseBottomSheetOptions = {}) => {
         enableOverDrag,
         enableHandlePanningGesture,
     };
+};
+
+/**
+ * Yorum listesi ve randevu puanlama sheet'leri için: tek snap noktası = pencere yüksekliği (px).
+ * Bazı cihazlarda yalnızca "100%" yeterince dolmuyor; tam ekran hissi için px kullanılır.
+ */
+export const useFullHeightBottomSheet = (
+    options: Omit<UseBottomSheetOptions, 'snapPoints'> = {},
+) => {
+    const { height } = useWindowDimensions();
+    const snapPoints = useMemo(
+        () => [Math.max(1, height)] as (string | number)[],
+        [height],
+    );
+    const {
+        enablePanDownToClose = true,
+        enableHandlePanningGesture,
+        appearsOnIndex,
+        disappearsOnIndex,
+        pressBehavior,
+    } = options;
+    return useBottomSheet({
+        snapPoints,
+        enablePanDownToClose,
+        enableOverDrag: false,
+        enableHandlePanningGesture,
+        appearsOnIndex,
+        disappearsOnIndex,
+        pressBehavior,
+    });
 };
 

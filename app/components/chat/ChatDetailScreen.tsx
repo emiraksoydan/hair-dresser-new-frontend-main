@@ -427,7 +427,7 @@ const ChatBubbleImageInner: React.FC<ChatBubbleImageProps> = ({
             ]}
           >
             <Icon source="image-off-outline" size={28} color={brandColor} />
-            <Text style={{ color: mutedTextColor, fontSize: 12, marginTop: 6 }}>{t("chat.retry")}</Text>
+            <Text style={{ color: mutedTextColor, fontSize: 12, marginTop: 6 }}>{t("common.retry")}</Text>
           </Pressable>
         ) : null}
       </View>
@@ -1194,7 +1194,7 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({
 
     try {
       const mic = await Audio.requestPermissionsAsync();
-      if (mic.status !== "granted") {
+      if (!mic.granted) {
         alertError(t("common.error"), t("chat.microphonePermission"));
         return;
       }

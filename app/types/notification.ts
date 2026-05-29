@@ -23,6 +23,10 @@ export enum NotificationType {
   CustomerFinalTimeout = 13,           // Müşteri 30dk içinde cevap vermedi (Herkes'e)
   AppointmentReminder = 14,            // Randevu hatırlatması (30 dk önce)
   AppointmentCompletionReminder = 15,  // Randevu bitti, tamamlayacak kişiye hatırlatma
+  // Reader pattern (RP4): Subscription bitiş hatırlatmaları
+  SubscriptionExpiringSoon = 16,       // 7 gün kala
+  SubscriptionExpiringTomorrow = 17,   // 1 gün kala
+  SubscriptionExpired = 18,            // Bittiğinde
 }
 
 export type NotificationDto = {

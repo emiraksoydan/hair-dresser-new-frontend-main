@@ -53,6 +53,13 @@ import { persistHelpGuideOnboardingFromAuthPayload } from "../lib/helpGuideOnboa
 import { useActionGuard } from "../hook/useActionGuard";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import {
+  getAuthAccentColor,
+  getAuthAccentMutedBg,
+  getAuthAccentSecondary,
+  getAuthOtpFocusBg,
+  getAuthResendButtonBg,
+} from "../constants/colors";
 
 /** NetGsm:OtpValiditySeconds ile aynı tutun (appsettings / API). */
 const OTP_COUNTDOWN_SECONDS = 60;
@@ -178,8 +185,19 @@ const Index = () => {
   const schema = useMemo(() => createSchemas(t), [t, currentLanguage]);
   const resolver = useMemo(() => zodResolver(schema), [schema]);
   const dispatch = useAppDispatch();
-  const { addAccount } = useLocalSearchParams<{ addAccount?: string }>();
+  const {
+    addAccount,
+    reauth,
+    phone: prefillPhoneParam,
+    userType: prefillUserTypeParam,
+  } = useLocalSearchParams<{
+    addAccount?: string;
+    reauth?: string;
+    phone?: string;
+    userType?: string;
+  }>();
   const isAddAccountMode = addAccount === 'true';
+  const isReauthMode = reauth === 'true';
   const nativeRouter = useRouter();
   const { switchAccount } = useMultiAccount();
   const insets = useSafeAreaInsets();
@@ -217,6 +235,33 @@ const Index = () => {
     }
   }, [isAddAccountMode, setValue]);
 
+  /** Re-auth: switcher'dan "Tekrar giriş yap" CTA ile gelindi → telefon + userType prefilled. */
+  useEffect(() => {
+    if (!isReauthMode && !prefillPhoneParam && !prefillUserTypeParam) return;
+    setValue("mode", "login");
+
+    if (prefillPhoneParam) {
+      // Saved telefon "+901234567890" formatında olabilir; form 10 haneli yerel bekliyor.
+      let local = String(prefillPhoneParam).replace(/\D/g, "");
+      if (local.startsWith("90") && local.length >= 12) local = local.slice(2);
+      else if (local.startsWith("0") && local.length >= 11) local = local.slice(1);
+      if (local.length === 10) {
+        setValue("phone", local);
+      }
+    }
+
+    if (prefillUserTypeParam) {
+      const ut = String(prefillUserTypeParam);
+      // UserType enum: 1=Customer, 2=FreeBarber, 3=BarberStore (types/index)
+      const utStr =
+        ut === String(UserType.Customer) ? "customer"
+          : ut === String(UserType.FreeBarber) ? "freeBarber"
+            : ut === String(UserType.BarberStore) ? "barberStore"
+              : null;
+      if (utStr) setValue("userType", utStr as any);
+    }
+  }, [isReauthMode, prefillPhoneParam, prefillUserTypeParam, setValue]);
+
   const route = useSafeNavigation();
   const [modalVisible, setModalVisible] = useState(false);
   const [otpResetSignal, setOtpResetSignal] = useState(0);
@@ -250,7 +295,8 @@ const Index = () => {
       }
 
       // Hesap ekle + giriş: Bu telefon ve kullanıcı türü cihazda kayıtlıysa OTP göstermeden geçiş
-      if (isAddAccountMode && !isRegister && data.userType) {
+      // Reauth modunda ise her zaman OTP akışını kullan (token süresi dolmuş)
+      if (isAddAccountMode && !isReauthMode && !isRegister && data.userType) {
         const ut = mapUserTypeToNumber(data.userType);
         const saved = await loadAllAccounts();
         const matched = findSavedAccountByPhoneAndUserType(
@@ -306,14 +352,13 @@ const Index = () => {
         ...(isRegister ? { userType: mapUserTypeToNumber(data.userType) } : {}),
       };
 
-      setPhone(normalizedPhone);
       const result = await sendOtp(payloadForSendOtp);
 
       if ("error" in result) {
         let errorMessage = t("common.error");
         const err = result.error as any;
         if (err?.status === 429) {
-          errorMessage = err?.data?.message || t("auth.rateLimitExceeded") || "Çok fazla istek gönderildiniz. Lütfen birkaç dakika bekleyin.";
+          errorMessage = err?.data?.message || t("auth.rateLimitExceeded");
         } else if (err?.data?.message) {
           errorMessage = err.data.message;
         } else if (err?.message) {
@@ -321,6 +366,9 @@ const Index = () => {
         } else if (err?.error) {
           errorMessage = err.error;
         }
+        setModalVisible(false);
+        setLeft(0);
+        setPhone("");
         dispatch(
           showSnack({
             message: errorMessage,
@@ -331,15 +379,19 @@ const Index = () => {
       }
 
       if (result.data?.success) {
+        setPhone(normalizedPhone);
         setModalVisible(true);
         setLeft(OTP_COUNTDOWN_SECONDS);
         dispatch(
           showSnack({
-            message: result.data.message || t("auth.codeSent") || "Doğrulama kodu gönderildi",
+            message: result.data.message || t("auth.codeSent"),
             isError: false,
           }),
         );
       } else {
+        setModalVisible(false);
+        setLeft(0);
+        setPhone("");
         dispatch(
           showSnack({
             message: result.data?.message || t("common.error"),
@@ -348,6 +400,9 @@ const Index = () => {
         );
       }
     } catch (err: any) {
+      setModalVisible(false);
+      setLeft(0);
+      setPhone("");
       dispatch(
         showSnack({
           message: err?.data?.message || t("common.error"),
@@ -371,8 +426,9 @@ const Index = () => {
     return `+90 ··· ${last4.slice(0, 2)} ${last4.slice(2)}`;
   }, [phone]);
 
-  const otpAccentPrimary = isDark ? "#FACC15" : "#d97706";
-  const otpAccentSecondary = isDark ? "#c2a523" : "#f59e0b";
+  const otpAccentPrimary = getAuthAccentColor(isDark);
+  const otpAccentSecondary = getAuthAccentSecondary(isDark);
+  const inputFocusColor = getAuthAccentColor(isDark);
 
   const { width: screenWidth } = useWindowDimensions();
   // Modal inner width: screen - 40 (modal outer padding) - 44 (card inner padding)
@@ -428,7 +484,7 @@ const Index = () => {
         let msg = "";
         if ((errPayload?.status as any) === 429) {
           const d = errPayload?.data as any;
-          msg = d?.message || t("auth.rateLimitExceeded") || "Çok fazla deneme yapıldı. Lütfen birkaç dakika bekleyin.";
+          msg = d?.message || t("auth.rateLimitExceeded");
         } else {
           const raw = errPayload?.data;
           msg =
@@ -563,7 +619,7 @@ const Index = () => {
         let errorMessage = t("common.error");
         const err = result.error as any;
         if (err?.status === 429) {
-          errorMessage = err?.data?.message || t("auth.rateLimitExceeded") || "Çok fazla istek gönderildiniz. Lütfen birkaç dakika bekleyin.";
+          errorMessage = err?.data?.message || t("auth.rateLimitExceeded");
         } else if (err?.data?.message) {
           errorMessage = err.data.message;
         } else if (err?.message) {
@@ -584,7 +640,7 @@ const Index = () => {
         setLeft(OTP_COUNTDOWN_SECONDS);
         dispatch(
           showSnack({
-            message: result.data.message || t("auth.codeSent") || "Yeni doğrulama kodu gönderildi",
+            message: result.data.message || t("auth.codeSent"),
             isError: false,
           }),
         );
@@ -696,7 +752,7 @@ const Index = () => {
                               colors: {
                                 background: colors.inputBackground,
                                 onSurface: colors.text,
-                                primary: colors.primary,
+                                primary: inputFocusColor,
                               },
                             }}
                           />
@@ -762,7 +818,7 @@ const Index = () => {
                               colors: {
                                 background: colors.inputBackground,
                                 onSurface: colors.text,
-                                primary: colors.primary,
+                                primary: inputFocusColor,
                               },
                             }}
                           />
@@ -837,7 +893,7 @@ const Index = () => {
                           colors: {
                             background: colors.inputBackground,
                             onSurface: colors.text,
-                            primary: colors.primary,
+                            primary: inputFocusColor,
                           },
                         }}
                       />
@@ -959,7 +1015,7 @@ const Index = () => {
               style={{
                 backgroundColor: colors.primary,
                 opacity: isLoading ? 0.6 : 1,
-                shadowColor: '#FACC15',
+                shadowColor: "#FACC15",
                 shadowOffset: { width: 0, height: 3 },
                 shadowOpacity: 0.35,
                 shadowRadius: 6,
@@ -981,7 +1037,8 @@ const Index = () => {
               )}
             </TouchableOpacity>
 
-            {phone.length > 0 && !modalVisible ? (
+            {/* Sadece geçerli OTP oturumu (kod gönderildi + süre işliyor) varken: yoksa boş modal + süresi dolmuş doğrulama hatası */}
+            {phone.length > 0 && !modalVisible && left > 0 ? (
               <TouchableOpacity
                 onPress={() => setModalVisible(true)}
                 activeOpacity={0.8}
@@ -1083,7 +1140,7 @@ const Index = () => {
                           borderRadius: 10,
                           alignItems: "center",
                           justifyContent: "center",
-                          backgroundColor: isDark ? "rgba(250, 204, 21,0.12)" : "rgba(217,119,6,0.1)",
+                          backgroundColor: getAuthAccentMutedBg(isDark),
                         }}
                       >
                         <Icon source="shield-key" size={20} color={otpAccentPrimary} />
@@ -1143,7 +1200,7 @@ const Index = () => {
                       focusedPinCodeContainerStyle: {
                         borderColor: otpAccentPrimary,
                         borderWidth: 2,
-                        backgroundColor: isDark ? "rgba(250, 204, 21,0.08)" : "rgba(217,119,6,0.06)",
+                        backgroundColor: getAuthOtpFocusBg(isDark),
                       },
                       pinCodeTextStyle: {
                         fontSize: Math.min(otpBoxSize * 0.44, 22),
@@ -1186,9 +1243,7 @@ const Index = () => {
                         borderRadius: 10,
                         borderWidth: 1.5,
                         borderColor: canResend && !isLoading ? otpAccentPrimary : colors.inputBorder,
-                        backgroundColor: canResend && !isLoading
-                          ? isDark ? "rgba(250, 204, 21,0.1)" : "rgba(217,119,6,0.08)"
-                          : "transparent",
+                        backgroundColor: getAuthResendButtonBg(isDark, canResend && !isLoading),
                         opacity: canResend && !isLoading ? 1 : 0.45,
                         flexDirection: "row",
                         alignItems: "center",

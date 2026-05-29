@@ -29,16 +29,19 @@ import { useThemeContext } from '../../context/ThemeContext';
 import { usePermissionSwitches } from '../../hook/usePermissionSwitches';
 import { useSerialAsyncQueue } from '../../hook/useSerialAsyncQueue';
 import { useTheme } from '../../hook/useTheme';
-import { DEFAULT_AVATAR } from '../../constants/images';
 import { useSafeNavigation } from '../../hook/useSafeNavigation';
 import { useActionGuard } from '../../hook/useActionGuard';
 import { useAlert } from '../../hook/useAlert';
 import { getTabFabScrollPadding } from '../../components/layout/panelBottomOverlays';
-import { getProfilePaperSwitchProps } from '../../constants/colors';
+import {
+  COLORS,
+  getProfileNameFieldOutlineColor,
+  getProfilePaperSwitchProps,
+  getTextOnGold,
+} from '../../constants/colors';
 import { jwtDecode } from 'jwt-decode';
-import { loadAllAccounts, removeAccount } from '../../lib/multiAccountStorage';
+import { loadAllAccounts, removeAccount, updateAccountsPhoneByPreviousPhone, formatPhoneForDisplay } from '../../lib/multiAccountStorage';
 import { JwtPayload } from '../../types';
-import { updateAccountsPhoneByPreviousPhone } from '../../lib/multiAccountStorage';
 import { useMultiAccount } from '../../context/MultiAccountContext';
 
 const createProfileSchema = (t: (key: string) => string) => z.object({
@@ -65,7 +68,7 @@ const Index = () => {
     const { t, currentLanguage } = useLanguage();
     const { themeMode, toggleTheme } = useThemeContext();
     const { locationGranted, notificationGranted, handleLocationToggle, handleNotificationToggle } = usePermissionSwitches();
-    const { runFcmDiagnostic } = useFcmToken();
+    const { runFcmDiagnostic } = useFcmToken({ autoRegisterOnMount: false });
     const { colors, isDark } = useTheme();
     const profileSchema = useMemo(() => createProfileSchema(t), [t, currentLanguage]);
     const resolver = useMemo(() => zodResolver(profileSchema), [profileSchema]);
@@ -155,13 +158,8 @@ const Index = () => {
 
     // Memoize theme objects
 
-    // Memoize avatar source
-    const avatarSource = useMemo(() => {
-        if (userData?.data?.image?.imageUrl) {
-            return { uri: userData.data.image.imageUrl };
-        }
-        return DEFAULT_AVATAR;
-    }, [userData?.data?.image?.imageUrl]);
+    const profileImageUrl = userData?.data?.image?.imageUrl;
+    const hasProfileImage = Boolean(profileImageUrl);
 
     // Memoize full name
     const fullName = useMemo(() => {
@@ -563,23 +561,32 @@ const Index = () => {
                         height: 120,
                         borderRadius: 60,
                         borderWidth: 1.5,
-                        borderColor: '#fea60e',
+                        borderColor: COLORS.PROFILE.AVATAR_RING,
                         overflow: 'hidden',
                         justifyContent: 'center',
                         alignItems: 'center',
-                        backgroundColor: '#ffffff',
+                        backgroundColor: isDark ? colors.cardBg : COLORS.PROFILE.NAVY_AVATAR,
                     }}>
-                        <Avatar.Image
-                            size={120}
-                            source={avatarSource}
-                            theme={{ colors: { primaryContainer: '#ffffff' } }}
-                        />
+                        {hasProfileImage ? (
+                            <Avatar.Image
+                                size={120}
+                                source={{ uri: profileImageUrl! }}
+                                theme={{ colors: { primaryContainer: '#ffffff' } }}
+                            />
+                        ) : (
+                            <Avatar.Icon
+                                size={120}
+                                icon="account"
+                                color="#ffffff"
+                                style={{ backgroundColor: 'transparent' }}
+                            />
+                        )}
                     </View>
                     <IconButton
                         icon="pencil"
                         size={20}
-                        iconColor={colors.sectionHeaderText}
-                        style={{ position: 'absolute', bottom: -5, right: -0, backgroundColor: isDark ? '#38393b' : '#d1d5db', }}
+                        iconColor={isDark ? colors.sectionHeaderText : '#000000'}
+                        style={{ position: 'absolute', bottom: -5, right: -0, backgroundColor: isDark ? '#38393b' : '#ffffff' }}
                         loading={isProfileImageFlowBusy}
                         disabled={avatarImageActionsLocked}
                         onPress={handleImagePick}
@@ -630,11 +637,14 @@ const Index = () => {
                                         onBlur={onBlur}
                                         textColor={colors.sectionHeaderText}
                                         error={!!errors.firstName}
-                                        outlineColor={errors.firstName ? "#b00020" : "#fea60e"}
-                                        activeOutlineColor={errors.firstName ? "#b00020" : "#fea60e"}
+                                        outlineColor={getProfileNameFieldOutlineColor(isDark, !!errors.firstName)}
+                                        activeOutlineColor={getProfileNameFieldOutlineColor(isDark, !!errors.firstName)}
                                         theme={{
                                             roundness: 10,
-                                            colors: { onSurfaceVariant: "#fea60e", primary: "#fea60e" }
+                                            colors: {
+                                                onSurfaceVariant: getProfileNameFieldOutlineColor(isDark, false),
+                                                primary: getProfileNameFieldOutlineColor(isDark, false),
+                                            },
                                         }}
                                         style={{ backgroundColor: colors.cardBg, marginBottom: 0, fontFamily: 'CenturyGothic' }}
                                     />
@@ -656,11 +666,14 @@ const Index = () => {
                                         onBlur={onBlur}
                                         textColor={colors.sectionHeaderText}
                                         error={!!errors.lastName}
-                                        outlineColor={errors.lastName ? "#b00020" : "#fea60e"}
-                                        activeOutlineColor={errors.lastName ? "#b00020" : "#fea60e"}
+                                        outlineColor={getProfileNameFieldOutlineColor(isDark, !!errors.lastName)}
+                                        activeOutlineColor={getProfileNameFieldOutlineColor(isDark, !!errors.lastName)}
                                         theme={{
                                             roundness: 10,
-                                            colors: { onSurfaceVariant: "#fea60e", primary: "#fea60e" }
+                                            colors: {
+                                                onSurfaceVariant: getProfileNameFieldOutlineColor(isDark, false),
+                                                primary: getProfileNameFieldOutlineColor(isDark, false),
+                                            },
                                         }}
                                         style={{ backgroundColor: colors.cardBg, marginBottom: 0, fontFamily: 'CenturyGothic' }}
                                     />
@@ -687,27 +700,55 @@ const Index = () => {
                         control={control}
                         name="phoneNumber"
                         render={({ field: { value } }) => (
-                            <View className='flex-row items-center gap-2 mt-2'>
+                            <View style={{ flexDirection: 'row', gap: 8, marginTop: 8, alignItems: 'stretch' }}>
                                 <TextInput
                                     dense
                                     label={t('profile.phonePlaceholder')}
                                     mode="flat"
                                     value={value}
                                     editable={false}
-                                    textColor="#9ca3af"
+                                    textColor={isDark ? '#9ca3af' : COLORS.PROFILE.NAVY_BUTTON}
                                     underlineColor="transparent"
                                     activeUnderlineColor="transparent"
+                                    left={<TextInput.Icon icon="phone" size={18} color={isDark ? colors.sectionHeaderText : COLORS.PROFILE.NAVY_BUTTON} />}
                                     theme={{
                                         roundness: 10,
-                                        colors: { onSurfaceVariant: "#6b7280", primary: "#6b7280" }
+                                        colors: {
+                                            onSurfaceVariant: isDark ? '#6b7280' : COLORS.PROFILE.NAVY_BUTTON,
+                                            primary: isDark ? '#6b7280' : COLORS.PROFILE.NAVY_BUTTON,
+                                        },
                                     }}
-                                    style={{ backgroundColor: isDark ? '#1f2937' : '#f3f4f6', flex: 1, fontFamily: 'CenturyGothic', borderRadius: 8 }}
+                                    style={{
+                                        backgroundColor: isDark ? '#1f2937' : COLORS.PROFILE.PHONE_FIELD_BG_LIGHT,
+                                        flex: 1,
+                                        fontFamily: 'CenturyGothic',
+                                        fontSize: COLORS.PROFILE.PHONE_FIELD_FONT_SIZE,
+                                        borderRadius: 8,
+                                        minHeight: COLORS.PROFILE.PHONE_ROW_HEIGHT,
+                                    }}
+                                    contentStyle={{
+                                        minHeight: COLORS.PROFILE.PHONE_ROW_HEIGHT,
+                                        fontSize: COLORS.PROFILE.PHONE_FIELD_FONT_SIZE,
+                                        paddingVertical: 2,
+                                    }}
                                 />
                                 <TouchableOpacity
                                     onPress={() => setPhoneModalVisible(true)}
-                                    style={{ backgroundColor: '#3B83BD', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10 }}
+                                    style={{
+                                        backgroundColor: COLORS.PROFILE.NAVY_BUTTON,
+                                        borderRadius: 8,
+                                        paddingHorizontal: 14,
+                                        alignSelf: 'stretch',
+                                        justifyContent: 'center',
+                                        flexDirection: 'row',
+                                        alignItems: 'center',
+                                        gap: 6,
+                                    }}
                                 >
-                                    <Text style={{ color: 'white', fontFamily: 'CenturyGothic', fontSize: 12 }}>{t('profile.phoneChange')}</Text>
+                                    <Icon source="phone" size={18} color="#ffffff" />
+                                    <Text style={{ color: '#ffffff', fontFamily: 'CenturyGothic-Bold', fontSize: 13 }}>
+                                        {t('profile.phoneChange')}
+                                    </Text>
                                 </TouchableOpacity>
                             </View>
                         )}
@@ -719,8 +760,8 @@ const Index = () => {
                         loading={isUpdating}
                         disabled={!isDirty || isUpdating}
                         className="mt-4 mb-2"
-                        buttonColor="#fea60e"
-                        textColor="white"
+                        buttonColor={COLORS.UI.ACCENT_GOLD}
+                        textColor={getTextOnGold(isDark)}
                     >
                         {t('profile.save')}
                     </Button>
@@ -750,7 +791,7 @@ const Index = () => {
                     >
                         <View className='flex-row items-center'>
                             <Icon source="alert-circle-outline" size={24} color="#f59e0b" />
-                            <Text className='text-base ml-3' style={{ color: colors.sectionHeaderText }}>{t('profile.myComplaints') || 'Şikayetlerim'}</Text>
+                            <Text className='text-base ml-3' style={{ color: colors.sectionHeaderText }}>{t('profile.myComplaints')}</Text>
                         </View>
                         <Icon source="chevron-right" size={24} color="#6b7280" />
                     </TouchableOpacity>
@@ -763,7 +804,7 @@ const Index = () => {
                     >
                         <View className='flex-row items-center'>
                             <Icon source="message-text-outline" size={24} color="#10B981" />
-                            <Text className='text-base ml-3' style={{ color: colors.sectionHeaderText }}>{t('profile.myRequests') || 'İsteklerim'}</Text>
+                            <Text className='text-base ml-3' style={{ color: colors.sectionHeaderText }}>{t('profile.myRequests')}</Text>
                         </View>
                         <Icon source="chevron-right" size={24} color="#6b7280" />
                     </TouchableOpacity>
@@ -869,28 +910,32 @@ const Index = () => {
                             {...getProfilePaperSwitchProps(isDark)}
                         />
                     </View>
-                    <View style={{ height: 1, backgroundColor: colors.borderColor, marginVertical: 8 }} />
-                    <TouchableOpacity
-                        onPress={async () => {
-                            const result = await runFcmDiagnostic();
-                            Alert.alert(
-                                result.ok ? '✅ ' + result.message : '⚠️ ' + result.message,
-                                result.detail ?? '',
-                                [{ text: 'Tamam' }]
-                            );
-                        }}
-                        className='flex-row items-center justify-between py-2'
-                    >
-                        <View className='flex-1 mr-4'>
-                            <Text className='text-base font-century-gothic-bold' style={{ color: colors.sectionHeaderText }}>
-                                Bildirimleri Test Et
-                            </Text>
-                            <Text className='text-sm' style={{ color: colors.textSecondary }}>
-                                Push bildirimi gelmiyorsa bu butona basıp sonucu görün.
-                            </Text>
-                        </View>
-                        <Icon source="bell-check-outline" size={24} color={colors.textSecondary} />
-                    </TouchableOpacity>
+                    {__DEV__ && (
+                        <>
+                            <View style={{ height: 1, backgroundColor: colors.borderColor, marginVertical: 8 }} />
+                            <TouchableOpacity
+                                onPress={async () => {
+                                    const result = await runFcmDiagnostic();
+                                    Alert.alert(
+                                        result.ok ? '✅ ' + result.message : '⚠️ ' + result.message,
+                                        result.detail ?? '',
+                                        [{ text: t('common.ok') }]
+                                    );
+                                }}
+                                className='flex-row items-center justify-between py-2'
+                            >
+                                <View className='flex-1 mr-4'>
+                                    <Text className='text-base font-century-gothic-bold' style={{ color: colors.sectionHeaderText }}>
+                                        Bildirimleri Test Et
+                                    </Text>
+                                    <Text className='text-sm' style={{ color: colors.textSecondary }}>
+                                        Push bildirimi gelmiyorsa bu butona basıp sonucu görün.
+                                    </Text>
+                                </View>
+                                <Icon source="bell-check-outline" size={24} color={colors.textSecondary} />
+                            </TouchableOpacity>
+                        </>
+                    )}
                 </View>
 
                 <Button
@@ -898,8 +943,8 @@ const Index = () => {
                     icon="account-plus-outline"
                     onPress={() => router.push({ pathname: '/(auth)', params: { addAccount: 'true' } } as any)}
                     contentStyle={{ alignItems: 'center', justifyContent: 'center', paddingLeft: 0 }}
-                    textColor="#fea60e"
-                    style={{ borderColor: '#fea60e', marginBottom: 8 }}
+                    textColor={getTextOnGold(isDark)}
+                    style={{ borderColor: COLORS.PROFILE.ACCENT, marginBottom: 8 }}
                 >
                     {t('accounts.addAccount')}
                 </Button>
@@ -1011,7 +1056,7 @@ const Index = () => {
                   onPress={handleSendDeleteAccountOtp}
                   loading={isSendingDeleteOtp}
                   disabled={isSendingDeleteOtp}
-                  textColor="#fea60e"
+                  textColor={COLORS.PROFILE.ACCENT}
                 >
                   {t('profile.deleteAccountOtpResend')}
                 </Button>
@@ -1033,7 +1078,9 @@ const Index = () => {
               {t('profile.phoneChangeOtpTitle')}
             </Text>
             <Text style={{ color: '#9ca3af', fontSize: 13, marginBottom: 16, fontFamily: 'CenturyGothic' }}>
-              {phoneChangeStep === 'input' ? t('profile.phoneChangeOtpDesc') : t('profile.phoneOtpSent')}
+              {phoneChangeStep === 'input'
+                ? t('profile.phoneChangeInputDesc')
+                : t('profile.phoneChangeOtpDesc', { phone: formatPhoneForDisplay(newPhoneInput) })}
             </Text>
 
             {phoneChangeStep === 'input' ? (
@@ -1046,10 +1093,20 @@ const Index = () => {
                   onChangeText={setNewPhoneInput}
                   keyboardType="phone-pad"
                   maxLength={10}
-                  textColor={colors.sectionHeaderText}
-                  outlineColor="#fea60e"
-                  theme={{ roundness: 10, colors: { onSurfaceVariant: "#fea60e", primary: "#fea60e" } }}
-                  style={{ backgroundColor: colors.cardBg, fontFamily: 'CenturyGothic' }}
+                  textColor={isDark ? colors.sectionHeaderText : '#171717'}
+                  outlineColor={isDark ? '#4b5563' : '#d1d5db'}
+                  activeOutlineColor={isDark ? '#9ca3af' : '#171717'}
+                  theme={{
+                    roundness: 10,
+                    colors: {
+                      onSurfaceVariant: isDark ? '#9ca3af' : '#525252',
+                      primary: isDark ? '#9ca3af' : '#171717',
+                    },
+                  }}
+                  style={{
+                    backgroundColor: isDark ? '#1f2937' : COLORS.PROFILE.PHONE_FIELD_BG_LIGHT,
+                    fontFamily: 'CenturyGothic',
+                  }}
                 />
                 <HelperText type="info" visible style={{ color: '#9ca3af', fontFamily: 'CenturyGothic' }}>
                   {t('profile.phoneFormat')}
@@ -1071,7 +1128,7 @@ const Index = () => {
                 <OtpInput
                   numberOfDigits={6}
                   onFilled={(code) => { setOtpCode(code); }}
-                  focusColor="#fea60e"
+                  focusColor={COLORS.PROFILE.ACCENT}
                   theme={{
                     containerStyle: { marginBottom: 12 },
                     pinCodeContainerStyle: {
@@ -1104,7 +1161,7 @@ const Index = () => {
                   mode="text"
                   onPress={() => setPhoneChangeStep('input')}
                   className="mt-1"
-                  textColor="#fea60e"
+                  textColor={COLORS.PROFILE.ACCENT}
                 >
                   {t('profile.phoneOtpResend')}
                 </Button>

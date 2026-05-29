@@ -30,8 +30,8 @@ import { CategoryListSelect } from "../common/CategoryListSelect";
 import {
   BUSINESS_TYPES,
   trMoneyRegex,
-  PRICING_OPTIONS,
-  DAYS_TR,
+  getWorkingDays,
+  getPricingOptions,
   IST,
 } from "../../constants";
 import {
@@ -47,7 +47,6 @@ import { v4 as uuid } from "uuid";
 import {
   fmtHHmm,
   fromHHmm,
-  HOLIDAY_OPTIONS,
   timeHHmmRegex,
   toMinutes,
 } from "../../utils/time/time-helper";
@@ -66,11 +65,21 @@ import { ChairItem } from "./ChairItem";
 import { WorkingHoursAccordion } from "./WorkingHoursAccordion";
 import { ManuelBarberItem } from "./ManuelBarberItem";
 import { ServicePackageStep, type PackageFormItem } from "./ServicePackageStep";
-import { useAddServicePackageMutation } from "../../store/api";
+import { FormPackagesPreview } from "../common/FormPackagesPreview";
+import {
+  buildServicePackageSyncItems,
+  buildStorePackageServiceOptions,
+} from "../../utils/service-package-sync";
+import { useSyncPackagesWithServiceOptions } from "../../hook/useSyncPackagesWithServiceOptions";
 import { useOptimizedChairOptions } from "../../hooks/useOptimizedFieldArray";
 import { useAuth } from "../../hook/useAuth";
 import { useLanguage } from "../../hook/useLanguage";
 import { useTheme } from "../../hook/useTheme";
+import {
+  getFormAccentBoxBorderColor,
+  getFormNavButtonColors,
+  getFormPreviewPriceColor,
+} from "../../constants/colors";
 import { useActionGuard } from "../../hook/useActionGuard";
 import { MESSAGES } from "../../constants/messages";
 import { ensureLocationGateWithUI } from "../location/location-gate";
@@ -79,8 +88,9 @@ import { StepFormIndicator } from "../common/StepFormIndicator";
 import { extractCreatedStoreIdFromResponse } from "../../utils/form/store-create-response";
 import { SheetCloseButton } from "../common/SheetCloseButton";
 import { getCurrentLocationSafe } from "../../utils/location/location-helper";
+import { isMonetaryWithinLimit, MAX_MONETARY_TRY_DISPLAY } from "../../constants/priceLimits";
 
-const createChairPricingSchema = (t: (key: string) => string) =>
+const createChairPricingSchema = (t: (key: string, options?: Record<string, unknown>) => string) =>
   z
     .object({
       mode: z.enum(["rent", "percent"]),
@@ -111,6 +121,12 @@ const createChairPricingSchema = (t: (key: string) => string) =>
             code: z.ZodIssueCode.custom,
             path: ["rent"],
             message: t("form.rentPricePositive"),
+          });
+        } else if (!isMonetaryWithinLimit(n)) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["rent"],
+            message: t("form.priceExceedsPlatformMax", { max: MAX_MONETARY_TRY_DISPLAY }),
           });
         }
       } else if (val.mode === "percent") {
@@ -156,7 +172,7 @@ const createChairPricingSchema = (t: (key: string) => string) =>
       }
     });
 
-const createLocationSchema = (t: (key: string) => string) =>
+const createLocationSchema = (t: (key: string, options?: Record<string, unknown>) => string) =>
   z
     .object({
       latitude: z.number(),
@@ -174,7 +190,7 @@ const createLocationSchema = (t: (key: string) => string) =>
       }
     });
 
-const createWorkingDaySchema = (t: (key: string) => string) =>
+const createWorkingDaySchema = (t: (key: string, options?: Record<string, unknown>) => string) =>
   z
     .object({
       dayOfWeek: z.number().int().min(0).max(6),
@@ -220,7 +236,7 @@ const ImageAssetSchema = z.object({
   type: z.string().optional(),
 });
 
-const createTaxDocumentImageField = (t: (key: string) => string) =>
+const createTaxDocumentImageField = (t: (key: string, options?: Record<string, unknown>) => string) =>
   z
     .custom<{
       uri: string;
@@ -233,7 +249,7 @@ const createTaxDocumentImageField = (t: (key: string) => string) =>
     )
     .pipe(ImageAssetSchema);
 
-const createBarberSchema = (t: (key: string) => string) =>
+const createBarberSchema = (t: (key: string, options?: Record<string, unknown>) => string) =>
   z.object({
     id: z.string(),
     name: z.string().trim().min(1, t("form.personnelNameRequired")),
@@ -247,7 +263,7 @@ const createBarberSchema = (t: (key: string) => string) =>
       .optional(),
   });
 
-const createChairSchema = (t: (key: string) => string) =>
+const createChairSchema = (t: (key: string, options?: Record<string, unknown>) => string) =>
   z
     .object({
       id: z.string(),
@@ -275,7 +291,7 @@ const createChairSchema = (t: (key: string) => string) =>
       }
     });
 
-const createSchema = (t: (key: string) => string) =>
+const createSchema = (t: (key: string, options?: Record<string, unknown>) => string) =>
   z.object({
     storeImages: z
       .array(
@@ -306,6 +322,15 @@ const createSchema = (t: (key: string) => string) =>
             return !isNaN(num) && num >= 0; // 0 veya daha büyük olmalı
           },
           { message: t("form.priceCannotBeNegative") },
+        )
+        .refine(
+          (val) => {
+            if (!val || val.trim() === "") return true;
+            const num = parseFloat(val.replace(/\./g, "").replace(",", "."));
+            if (isNaN(num) || num < 0) return true;
+            return isMonetaryWithinLimit(num);
+          },
+          { message: t("form.priceExceedsPlatformMax", { max: MAX_MONETARY_TRY_DISPLAY }) },
         ),
     ),
     pricingType: createChairPricingSchema(t),
@@ -317,7 +342,7 @@ const createSchema = (t: (key: string) => string) =>
     taxDocumentImage: createTaxDocumentImageField(t),
   });
 
-const createFullSchema = (t: (key: string) => string) =>
+const createFullSchema = (t: (key: string, options?: Record<string, unknown>) => string) =>
   createSchema(t)
     .extend({
       barbers: z.array(createBarberSchema(t)).default([]),
@@ -390,10 +415,7 @@ const createFullSchema = (t: (key: string) => string) =>
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ["barbers"],
-          message: t("form.maxBarbers").replace(
-            "{{count}}",
-            validBarbersCount.toString(),
-          ),
+          message: t("form.maxBarbers", { max: 30 }),
         });
       }
       const validChairsCount = chairs.length;
@@ -401,10 +423,7 @@ const createFullSchema = (t: (key: string) => string) =>
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ["chairs"],
-          message: t("form.maxChairs").replace(
-            "{{count}}",
-            validChairsCount.toString(),
-          ),
+          message: t("form.maxChairs", { max: 30 }),
         });
       }
     });
@@ -446,15 +465,18 @@ const FormStoreAdd = ({
   const stepSlideAnim = useRef(new Animated.Value(0)).current;
   const prevStepRef = useRef(0);
   const [formPackages, setFormPackages] = useState<PackageFormItem[]>([]);
-  const [addServicePackage] = useAddServicePackageMutation();
 
   const insets = useSafeAreaInsets();
   const { userId } = useAuth();
   const { t, currentLanguage } = useLanguage();
   const { colors, isDark } = useTheme();
+  const formNav = useMemo(() => getFormNavButtonColors(isDark), [isDark]);
   const dropdownItemActiveBg = isDark
     ? "rgba(194, 165, 35, 0.22)"
     : "rgba(139, 115, 85, 0.16)";
+
+  const workingDays = useMemo(() => getWorkingDays(t), [t, currentLanguage]);
+  const pricingOptions = useMemo(() => getPricingOptions(t), [t, currentLanguage]);
 
   const stepLabels = useMemo(() => [
     t("form.stepStoreInfo"),
@@ -462,7 +484,7 @@ const FormStoreAdd = ({
     t("form.stepSubHeadings"),
     t("form.stepStoreServices"),
     t("form.stepStorePrices"),
-    "Hizmet Paketleri",
+    t("form.stepServicePackages"),
     t("form.stepStorePersonnel"),
     t("form.stepStoreChairs"),
     t("form.stepStorePricing"),
@@ -515,16 +537,14 @@ const FormStoreAdd = ({
     }
   }, [propLocationStatus]);
 
-  // Error kontrolü: mutation error'ları da kontrol et
   const [addStore, { isLoading, isSuccess, error: mutationError }] =
     useAddBarberStoreMutation();
   const error = propError || mutationError;
 
-  // Action kontrolü: Error veya location denied durumunda işlem yapılamaz
   const { checkAndAlert: checkCanPerformAction } = useCanPerformAction(
-    error,
+    propError,
     locationStatus,
-    "Bu işlemi gerçekleştirmek için konum izni gereklidir. Lütfen ayarlardan konum iznini açın.",
+    t("location.permissionDeniedSettings"),
   );
   const {
     control,
@@ -542,7 +562,7 @@ const FormStoreAdd = ({
       holidayDays: [],
       selectedCategories: [],
       prices: {},
-      workingHours: DAYS_TR.map((d) => ({
+      workingHours: workingDays.map((d) => ({
         dayOfWeek: d.day,
         isClosed: false,
         startTime: "09:00",
@@ -638,6 +658,17 @@ const FormStoreAdd = ({
     selectedMainHeadings,
     selectedSubHeadings,
   });
+
+  const packageServiceOptions = useMemo(
+    () => buildStorePackageServiceOptions(selectedCategories, services),
+    [selectedCategories, services],
+  );
+  useSyncPackagesWithServiceOptions(
+    formPackages,
+    packageServiceOptions,
+    setFormPackages,
+  );
+
   const pricingMode = useWatch({ control, name: "pricingType.mode" });
   const holidayDays = watch("holidayDays");
   const working = watch("workingHours");
@@ -757,6 +788,11 @@ const FormStoreAdd = ({
         };
       }),
       workingHours: data.workingHours,
+      servicePackages: buildServicePackageSyncItems(
+        formPackages,
+        (catId) => services.find((cat) => cat.id === catId)?.name ?? catId,
+        { preferServiceNames: true },
+      ),
     };
     const storeResult = await addStore(payload);
     if ("error" in storeResult) {
@@ -873,38 +909,6 @@ const FormStoreAdd = ({
           isError: false,
         }),
       );
-    }
-
-    // Hizmet paketlerini oluştur (isteğe bağlı, hata yok sayılır)
-    if (formPackages.length > 0 && !uploadError) {
-      const createdStoreId = extractCreatedStoreIdFromResponse(storeResult.data);
-      if (createdStoreId) {
-        try {
-          // Yeni oluşturulan dükkanın service offering ID'lerini al
-          const storeDetailRes = await triggerGetStoreById(createdStoreId);
-          const storeOfferings = storeDetailRes.data?.serviceOfferings ?? [];
-          // serviceName -> id haritası
-          const offeringNameToId = new Map(
-            storeOfferings.map((o: any) => [o.serviceName?.toLowerCase(), o.id])
-          );
-          for (const pkg of formPackages) {
-            const serviceIds = pkg.serviceOfferingIds
-              .map((name) => offeringNameToId.get(name.toLowerCase()))
-              .filter((id): id is string => !!id);
-            if (serviceIds.length === 0) continue;
-            const totalPriceNum = parseTR(pkg.totalPrice);
-            if (!totalPriceNum || totalPriceNum <= 0) continue;
-            await addServicePackage({
-              ownerId: createdStoreId,
-              packageName: pkg.packageName,
-              totalPrice: totalPriceNum,
-              serviceOfferingIds: serviceIds,
-            }).catch(() => {/* package hataları store'u engellemez */});
-          }
-        } catch {
-          // Package oluşturma hatası store oluşturmayı engellemez
-        }
-      }
     }
 
     // Refresh stores list to show new store with images
@@ -1241,7 +1245,7 @@ const FormStoreAdd = ({
           style={{ zIndex: 2, elevation: 4 }}
         >
           <Text className="text-white flex-1 font-century-gothic text-2xl" style={{ color: colors.sectionHeaderText }}>
-            İşletme Ekle
+            {t("form.addBusinessTitle")}
           </Text>
           <SheetCloseButton onPress={() => onClose?.()} color={colors.sectionHeaderText} />
         </View>
@@ -1324,7 +1328,7 @@ const FormStoreAdd = ({
                   )}
                 />
                 <Text className="text-white text-xl mt-6 px-2" style={{ color: colors.sectionHeaderText }}>
-                  İşletme Bilgileri
+                  {t("form.businessInfoSection")}
                 </Text>
                 <View className="mt-2 px-2">
                   <Controller
@@ -1724,10 +1728,7 @@ const FormStoreAdd = ({
                 <View className="px-2 mt-4">
                   <ServicePackageStep
                     packages={formPackages}
-                    serviceOptions={(selectedCategories ?? []).map((catId) => ({
-                      id: catId,
-                      label: services.find((s: any) => s.id === catId)?.name ?? catId,
-                    }))}
+                    serviceOptions={packageServiceOptions}
                     onPackagesChange={setFormPackages}
                   />
                 </View>
@@ -1740,7 +1741,7 @@ const FormStoreAdd = ({
                   style={{
                     backgroundColor: isDark ? "rgba(194,165,35,0.10)" : "rgba(194,165,35,0.07)",
                     borderWidth: 1,
-                    borderColor: isDark ? "rgba(194,165,35,0.28)" : "rgba(194,165,35,0.35)",
+                    borderColor: getFormAccentBoxBorderColor(isDark),
                   }}
                 >
                   <Text style={{ fontFamily: "CenturyGothic", fontSize: 13, lineHeight: 20, color: colors.sectionHeaderText }}>
@@ -1874,7 +1875,7 @@ const FormStoreAdd = ({
                   style={{
                     backgroundColor: isDark ? "rgba(194,165,35,0.10)" : "rgba(194,165,35,0.07)",
                     borderWidth: 1,
-                    borderColor: isDark ? "rgba(194,165,35,0.28)" : "rgba(194,165,35,0.35)",
+                    borderColor: getFormAccentBoxBorderColor(isDark),
                   }}
                 >
                   <Text style={{ fontFamily: "CenturyGothic", fontSize: 13, lineHeight: 20, color: colors.sectionHeaderText }}>
@@ -2002,7 +2003,7 @@ const FormStoreAdd = ({
                       name="pricingType.mode"
                       render={({ field: { value, onChange } }) => (
                         <View className="flex-row justify-center gap-16 ">
-                          {PRICING_OPTIONS.map((opt) => (
+                          {pricingOptions.map((opt) => (
                             <TouchableOpacity
                               key={opt.value}
                               onPress={() => onChange(opt.value)}
@@ -2198,7 +2199,7 @@ const FormStoreAdd = ({
                       buttonColor="#10B981"
                       textColor="white"
                     >
-                      İşletmenin konumunu al
+                      {t("form.getBusinessLocation")}
                     </Button>
                     <MapPicker
                       lat={latitude ?? undefined}
@@ -2290,7 +2291,22 @@ const FormStoreAdd = ({
                     <PreviewRow label={t("form.stepStoreInfo")} value={String(getValues("type") ?? "")} colors={colors} />
                     <PreviewRowList label={t("form.stepMainHeadings")} items={(getValues("selectedMainHeadings") ?? []).map((id: string) => mainHeadings.find((h: any) => h.id === id)?.name ?? id)} colors={colors} />
                     <PreviewRowList label={t("form.stepSubHeadings")} items={(getValues("selectedSubHeadings") ?? []).map((id: string) => subHeadings.find((h: any) => h.id === id)?.name ?? id)} colors={colors} />
-                    <PreviewRowList label={t("form.servicesTitle")} items={(getValues("selectedCategories") ?? []).map((id: string) => services.find((s: any) => s.id === id)?.name ?? id)} colors={colors} />
+                    <PreviewRowList
+                      label={t("form.servicesTitle")}
+                      items={(getValues("selectedCategories") ?? []).map(
+                        (id: string) => services.find((s: any) => s.id === id)?.name ?? id,
+                      )}
+                      colors={colors}
+                    />
+                    {formPackages.length > 0 && (
+                      <FormPackagesPreview
+                        packages={formPackages}
+                        serviceOptions={packageServiceOptions}
+                        colors={colors}
+                        title={t("servicePackage.title")}
+                        currencySymbol={t("card.currencySymbol")}
+                      />
+                    )}
                     {/* Fiyatlar */}
                     {Object.keys(getValues("prices") ?? {}).length > 0 && (
                       <View className="mt-2">
@@ -2300,7 +2316,7 @@ const FormStoreAdd = ({
                             <Text className="flex-1 text-lg" style={{ color: colors.sectionHeaderText }}>
                               {services.find((s: any) => s.id === catId)?.name ?? catId}
                             </Text>
-                            <Text className="text-lg" style={{ color: '#fea60e' }}>{typeof price === "string" ? price : ""}</Text>
+                            <Text className="text-lg" style={{ color: getFormPreviewPriceColor() }}>{typeof price === "string" ? price : ""}</Text>
                           </View>
                         ))}
                       </View>
@@ -2314,8 +2330,8 @@ const FormStoreAdd = ({
                       const ptLabel = isRent ? "Kira (Koltuk kirası)" : "Yüzde (Komisyon)";
                       return (
                         <View className="py-1.5" style={{ borderBottomWidth: 1, borderBottomColor: colors.borderColor }}>
-                          <Text className="text-gray-400 text-lg mb-0.5">{t("form.pricingTitle") || "Fiyatlandırma Tipi"}</Text>
-                          <Text className="text-lg" style={{ color: colors.sectionHeaderText }}>{ptLabel}: <Text style={{ color: '#fea60e' }}>{ptValue}</Text></Text>
+                          <Text className="text-gray-400 text-lg mb-0.5">{t("form.pricingTitle")}</Text>
+                          <Text className="text-lg" style={{ color: colors.sectionHeaderText }}>{ptLabel}: <Text style={{ color: getFormPreviewPriceColor() }}>{ptValue}</Text></Text>
                         </View>
                       );
                     })()}
@@ -2343,7 +2359,7 @@ const FormStoreAdd = ({
                     {(() => {
                       const wh = getValues("workingHours") ?? [];
                       const hd = new Set(getValues("holidayDays") ?? []);
-                      const rows = DAYS_TR.map((d) => {
+                      const rows = workingDays.map((d) => {
                         const row = wh.find((w: any) => w.dayOfWeek === d.day);
                         const isHoliday = hd.has(d.day);
                         if (!row) return null;
@@ -2356,7 +2372,7 @@ const FormStoreAdd = ({
                           {rows.map((r: any, i: number) => (
                             <View key={i} className="flex-row justify-between py-0.5">
                               <Text className="text-lg" style={{ color: colors.sectionHeaderText }}>{r.label}</Text>
-                              <Text className="text-lg" style={{ color: r.isClosed ? '#ef4444' : '#fea60e' }}>
+                              <Text className="text-lg" style={{ color: r.isClosed ? '#ef4444' : getFormPreviewPriceColor() }}>
                                 {r.isClosed ? "Kapalı" : `${r.start} - ${r.end}`}
                               </Text>
                             </View>
@@ -2383,8 +2399,8 @@ const FormStoreAdd = ({
               className="flex-1"
               mode="outlined"
               onPress={handlePrevStep}
-              buttonColor="#FACC15"
-              textColor="#FACC15"
+              textColor={formNav.prevText}
+              style={{ borderColor: formNav.prevBorder }}
             >
               {t("form.stepPrev")}
             </Button>
@@ -2394,8 +2410,8 @@ const FormStoreAdd = ({
               className="flex-1"
               mode="contained"
               onPress={handleNextStep}
-              buttonColor="#FACC15"
-              textColor="#1F2937"
+              buttonColor={formNav.nextBg}
+              textColor={formNav.nextText}
             >
               {t("form.stepNext")}
             </Button>

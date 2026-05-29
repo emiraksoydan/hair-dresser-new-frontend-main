@@ -28,21 +28,24 @@ import {
   useGetAllAppointmentByFilterQuery, useCancelAppointmentMutation, useCompleteAppointmentMutation, useToggleFavoriteMutation,
   useDeleteAppointmentMutation, useDeleteAllAppointmentsMutation, useBlockUserMutation,
   useGetAllBlockedUserIdsQuery,
+  requestAppointmentsFullCacheReplace,
+  requestAllAppointmentsFiltersFullCacheReplace,
 } from "../../store/api";
-import { useAppDispatch } from "../../store/hook";
+import { useAppDispatch, useAppSelector } from "../../store/hook";
+import { showSnack } from "../../store/snackbarSlice";
 import { AppointmentStatus, AppointmentFilter, AppointmentGetDto, AppointmentRequester, } from "../../types/appointment";
 import { useAuth } from "../../hook/useAuth";
 import { BarberType, UserType, PricingType, ImageOwnerType } from "../../types";
-import FilterChip from "../common/filter-chip";
+import FilterChip from "../common/FilterChip";
 import { getBarberTypeName } from "../../utils/store/barber-type";
-import { RatingBottomSheet } from "./ratingbottomsheet";
+import { RatingBottomSheet } from "./RatingBottomSheet";
 import { ComplaintBottomSheet } from "./ComplaintBottomSheet";
 import { getAppointmentStatusColor, getAppointmentStatusText, } from "../../utils/appointment/appointment-helpers";
 import { FavoriteHeartButton } from "../common/FavoriteHeartButton";
 import { OwnerAvatar } from "../common/owneravatar";
 import { SkeletonComponent } from "../common/skeleton";
 import { UnifiedStateWrapper } from "../common/UnifiedStateManager";
-import { useBottomSheet } from "../../hook/useBottomSheet";
+import { useBottomSheet, useFullHeightBottomSheet } from "../../hook/useBottomSheet";
 import { useLanguage } from "../../hook/useLanguage";
 import { useAlert } from "../../hook/useAlert";
 import { useTheme } from "../../hook/useTheme";
@@ -50,6 +53,17 @@ import { useActionGuard } from "../../hook/useActionGuard";
 import { useFabOverlayWhenSheetOpen } from "../../hook/usePanelMoreFab";
 import { useDeferredSheetPresent } from "../../hook/useDeferredSheetPresent";
 import { MoreFabPanelContext } from "../layout/MoreFabContext";
+import { getErrorMessage } from "../../utils/errorHandler";
+import {
+  COLORS,
+  getTextOnGold,
+  getAppointmentIconWellBg,
+  getAppointmentIconWellFg,
+  getAppointmentAccentLabelFg,
+  getStarRatingScoreColor,
+  getStarRatingWidgetProps,
+} from "../../constants/colors";
+import { ThemedStarIcon } from "../common/ThemedStarIcon";
 
 export default function SharedAppointmentScreen() {
   const { t, currentLanguage } = useLanguage();
@@ -62,8 +76,17 @@ export default function SharedAppointmentScreen() {
     AppointmentFilter.Active,
   );
 
-  const ratingSheet = useBottomSheet({
-    snapPoints: ["100%"],
+  const listTabRequest = useAppSelector((s) => s.appointmentUi.listTabRequest);
+  const appliedAppointmentTabNonceRef = useRef(0);
+  useEffect(() => {
+    const req = listTabRequest;
+    if (!req) return;
+    if (req.nonce <= appliedAppointmentTabNonceRef.current) return;
+    appliedAppointmentTabNonceRef.current = req.nonce;
+    setActiveFilter(req.filter);
+  }, [listTabRequest]);
+
+  const ratingSheet = useFullHeightBottomSheet({
     enablePanDownToClose: true,
   });
   const [selectedRatingTarget, setSelectedRatingTarget] = useState<{
@@ -210,18 +233,22 @@ export default function SharedAppointmentScreen() {
     }
   }, [activeFilter, appointments, dispatch]);
 
+  const resetAppointmentsPagination = useCallback((filter: AppointmentFilter) => {
+    hasMoreRef.current[filter] = true;
+    lastLoadedBeforeRef.current[filter] = null;
+  }, []);
+
   const handleRefresh = useCallback(async () => {
     setIsPullRefreshing(true);
     bumpAppointmentEndReachedGrace();
     try {
-      // Refresh → aktif filtrenin pagination state'ini sıfırla.
-      hasMoreRef.current[activeFilter] = true;
-      lastLoadedBeforeRef.current[activeFilter] = null;
+      requestAppointmentsFullCacheReplace(activeFilter);
+      resetAppointmentsPagination(activeFilter);
       await refetch();
     } finally {
       setIsPullRefreshing(false);
     }
-  }, [refetch, activeFilter, bumpAppointmentEndReachedGrace]);
+  }, [refetch, activeFilter, bumpAppointmentEndReachedGrace, resetAppointmentsPagination]);
   const handleAppointmentsRetry = useCallback(async () => {
     setAppointmentsRetryBusy(true);
     try {
@@ -260,9 +287,9 @@ export default function SharedAppointmentScreen() {
     return items;
   }, [appointments, activeFilter]);
 
-  const [cancelAppointment, { isLoading: isCancelling }] =
+  const [cancelAppointment, { isLoading: isCancelling, reset: resetCancelAppointment }] =
     useCancelAppointmentMutation();
-  const [completeAppointment, { isLoading: isCompleting }] =
+  const [completeAppointment, { isLoading: isCompleting, reset: resetCompleteAppointment }] =
     useCompleteAppointmentMutation();
   const [toggleFavorite, { isLoading: isTogglingFavorite }] =
     useToggleFavoriteMutation();
@@ -272,18 +299,17 @@ export default function SharedAppointmentScreen() {
    * satırları güvenilir şekilde yeniden boyar. Favori bayrakları RTK'da güncellenirken
    * `openCardMenuId` sabit kalabildiği için kalp tek tıkta "kilitlenmiş" gibi görünüyordu.
    */
-  const appointmentListExtraData = useMemo(
-    () =>
-      `${openCardMenuId ?? ""}|${isTogglingFavorite ? 1 : 0}|${(appointments ?? [])
-        .map(
-          (a) =>
-            `${a.id}:${a.isCustomerFavorite ? 1 : 0}${a.isStoreFavorite ? 1 : 0}${a.isFreeBarberFavorite ? 1 : 0}`,
-        )
-        .join(",")}`,
-    [openCardMenuId, isTogglingFavorite, appointments],
-  );
+  const appointmentListExtraData = useMemo(() => {
+    // UUID'nin son 8 karakteri yeterince benzersiz — tam 36 karakter yerine kullanarak
+    // 100 randevuluk listede string boyutunu ~4000 → ~1200 byte'a düşürür.
+    let s = `${openCardMenuId ?? ""}|${isTogglingFavorite ? 1 : 0}`;
+    for (const a of appointments ?? []) {
+      s += `|${a.id.slice(-8)}:${a.isCustomerFavorite ? 1 : 0}${a.isStoreFavorite ? 1 : 0}${a.isFreeBarberFavorite ? 1 : 0}`;
+    }
+    return s;
+  }, [openCardMenuId, isTogglingFavorite, appointments]);
 
-  const [deleteAppointment, { isLoading: isDeletingAppointment }] =
+  const [deleteAppointment, { isLoading: isDeletingAppointment, reset: resetDeleteAppointment }] =
     useDeleteAppointmentMutation();
   const [deleteAllAppointments, { isLoading: isDeletingAllAppointments }] =
     useDeleteAllAppointmentsMutation();
@@ -609,9 +635,10 @@ export default function SharedAppointmentScreen() {
   // kaçabilir; istek arka planda kendi sonlanır (mutation cache'i sonucu yine işler).
   const closeCancelModal = useCallback(() => {
     Keyboard.dismiss();
+    resetCancelAppointment();
     setCancelModalAppointmentId(null);
     setCancelReasonDraft("");
-  }, []);
+  }, [resetCancelAppointment]);
 
   const submitCancel = useCallback(() => {
     const id = cancelModalAppointmentId;
@@ -637,36 +664,32 @@ export default function SharedAppointmentScreen() {
         );
 
         await Promise.race([mutationPromise, timeoutPromise]);
-
-        // Başarılı — modal'ı kapat ve success göster
-        Keyboard.dismiss();
-        setCancelModalAppointmentId(null);
-        setCancelReasonDraft("");
-        alertSuccess(t("common.success"), t("appointment.alerts.cancelled"));
+        closeCancelModal();
+        dispatch(showSnack({ message: t("appointment.alerts.cancelled"), isError: false }));
       } catch (err: any) {
         const errorMessage =
           err?.message === "CANCEL_TIMEOUT"
-            ? t("common.requestTimeout") ||
-              "İşlem çok uzun sürdü. Lütfen daha sonra tekrar deneyin."
+            ? t("common.requestTimeout")
             : err?.data?.message || t("appointment.alerts.cancelFailed");
 
-        // KRİTİK: Hata durumunda da modal'ı kapat — user'ı modalda kilitli bırakma.
-        // (Önceki kod sadece alert gösterip modal'ı açık bırakıyordu → kullanıcı tekrar
-        // submit edemezken Vazgeç de loading guard yüzünden çalışmıyordu = freeze.)
-        Keyboard.dismiss();
-        setCancelModalAppointmentId(null);
-        setCancelReasonDraft("");
+        if (err?.message === "CANCEL_TIMEOUT") {
+          resetCancelAppointment();
+        }
         alertError(t("common.error"), errorMessage);
+      } finally {
+        resetCancelAppointment();
       }
     });
   }, [
     cancelModalAppointmentId,
     cancelReasonDraft,
     cancelAppointment,
+    closeCancelModal,
+    resetCancelAppointment,
     guard,
     t,
     alertError,
-    alertSuccess,
+    dispatch,
   ]);
 
   // Tüm aksiyon mutation'larında ortak timeout: 30 sn içinde backend dönmezse
@@ -700,13 +723,15 @@ export default function SharedAppointmentScreen() {
       () => guard(async () => {
         try {
           await runWithTimeout(completeAppointment(id).unwrap(), "COMPLETE");
-          alertSuccess(t("common.success"), t("appointment.alerts.completed"));
+          dispatch(showSnack({ message: t("appointment.alerts.completed"), isError: false }));
         } catch (err: any) {
           const errorMessage =
             err?.message === "COMPLETE_TIMEOUT"
-              ? t("common.requestTimeout") ||
-                "İşlem çok uzun sürdü. Lütfen tekrar deneyin."
+              ? t("common.requestTimeout")
               : err?.data?.message || t("appointment.alerts.completeFailed");
+          if (err?.message === "COMPLETE_TIMEOUT") {
+            resetCompleteAppointment();
+          }
           alertError(t("common.error"), errorMessage);
         }
       }),
@@ -727,13 +752,15 @@ export default function SharedAppointmentScreen() {
               deleteAppointment(appointmentId).unwrap(),
               "DELETE",
             );
-            alertSuccess(t("common.success"), t("appointment.alerts.deleted"));
+            dispatch(showSnack({ message: t("appointment.alerts.deleted"), isError: false }));
           } catch (err: any) {
             const errorMessage =
               err?.message === "DELETE_TIMEOUT"
-                ? t("common.requestTimeout") ||
-                  "İşlem çok uzun sürdü. Lütfen tekrar deneyin."
-                : err?.data?.message || t("appointment.alerts.deleteFailed");
+                ? t("common.requestTimeout")
+                : getErrorMessage(err) || t("appointment.alerts.deleteFailed");
+            if (err?.message === "DELETE_TIMEOUT") {
+              resetDeleteAppointment();
+            }
             alertError(t("common.error"), errorMessage);
           }
         }),
@@ -742,7 +769,7 @@ export default function SharedAppointmentScreen() {
         t("common.cancel"),
       );
     },
-    [deleteAppointment, t, confirm, alertError, alertSuccess, guard, runWithTimeout],
+    [deleteAppointment, t, confirm, alertError, guard, runWithTimeout, resetDeleteAppointment, dispatch],
   );
 
   const handleDeleteAll = useCallback(async () => {
@@ -750,24 +777,24 @@ export default function SharedAppointmentScreen() {
       t("appointment.alerts.deleteAllTitle"),
       t("appointment.alerts.confirmDeleteAll"),
       () => guard(async () => {
-        const deleteAllResult = await deleteAllAppointments();
-        if ("error" in deleteAllResult) {
+        try {
+          requestAllAppointmentsFiltersFullCacheReplace();
+          resetAppointmentsPagination(activeFilter);
+          await runWithTimeout(deleteAllAppointments().unwrap(), "DELETE_ALL");
+          dispatch(showSnack({ message: t("appointment.alerts.deletedAll"), isError: false }));
+        } catch (err: any) {
           const errorMessage =
-            (deleteAllResult.error as any)?.data?.message ||
-            t("appointment.alerts.deleteAllFailed");
+            err?.message === "DELETE_ALL_TIMEOUT"
+              ? t("common.requestTimeout")
+              : getErrorMessage(err) || t("appointment.alerts.deleteAllFailed");
           alertError(t("common.error"), errorMessage);
-          return;
         }
-        alertSuccess(
-          t("common.success"),
-          t("appointment.alerts.deletedAll"),
-        );
       }),
       undefined,
       t("appointment.actions.delete"),
       t("common.cancel"),
     );
-  }, [deleteAllAppointments, t, confirm, alertError, alertSuccess, guard]);
+  }, [deleteAllAppointments, t, confirm, alertError, guard, dispatch, runWithTimeout, activeFilter, resetAppointmentsPagination]);
 
   const openCardMenuAppointment = useMemo(
     () =>
@@ -875,13 +902,16 @@ export default function SharedAppointmentScreen() {
     canRateNow: boolean;
     onRatePress: () => void;
   }) => {
+    const starProps = getStarRatingWidgetProps(isDark);
+    const scoreColor = getStarRatingScoreColor(isDark);
+
     return (
       <View className="mt-3">
         {/* Ortalama Rating - Her zaman göster (eğer varsa) */}
         {averageRating !== undefined && averageRating !== null && (
           <View className="flex-row items-center mb-2">
-            <Icon source="star" size={17} color="#fbbf24" />
-            <Text className="text-[#fbbf24] text-sm font-semibold ml-1">
+            <Icon source="star" size={17} color={starProps.color} />
+            <Text className="text-sm font-semibold ml-1" style={{ color: scoreColor }}>
               {formatRating(averageRating)}
             </Text>
             <Text className="text-[#6b7280] text-sm ml-1">
@@ -897,9 +927,12 @@ export default function SharedAppointmentScreen() {
               <StarRatingDisplay
                 rating={myRating}
                 starSize={17}
+                color={starProps.color}
+                emptyColor={starProps.emptyColor}
+                StarIconComponent={ThemedStarIcon}
                 starStyle={{ marginHorizontal: 1 }}
               />
-              <Text className="text-[#fbbf24] text-sm font-semibold ml-2">
+              <Text className="text-sm font-semibold ml-2" style={{ color: scoreColor }}>
                 {formatRating(myRating)}
               </Text>
               <Text className="text-[#6b7280] text-sm ml-1">
@@ -935,13 +968,13 @@ export default function SharedAppointmentScreen() {
               onPress={onRatePress}
               className="flex-row items-center justify-center rounded-lg px-3 py-2.5 mt-1"
               style={{
-                backgroundColor: colors.cardBg3,
-                borderColor: "rgba(250, 204, 21,0.3)",
-                borderWidth: 1,
+                backgroundColor: isDark ? colors.cardBg3 : COLORS.UI.ACCENT_GOLD,
+                borderColor: isDark ? "rgba(250, 204, 21,0.3)" : "transparent",
+                borderWidth: isDark ? 1 : 0,
               }}
             >
-              <Icon source="star-outline" size={18} color="#FACC15" />
-              <Text className="text-[#FACC15] text-sm font-semibold ml-2">
+              <Icon source="star-outline" size={18} color={getTextOnGold(isDark)} />
+              <Text className="text-sm font-semibold ml-2" style={{ color: getTextOnGold(isDark) }}>
                 {t("appointment.labels.makeComment")}
               </Text>
             </TouchableOpacity>
@@ -1051,7 +1084,7 @@ export default function SharedAppointmentScreen() {
       elevation: 1,
     };
     const sectionLabelStyle = {
-      color: isDark ? "#fb923c" : "#c2410c",
+      color: getAppointmentAccentLabelFg(isDark),
       fontFamily: "CenturyGothic-Bold",
       fontSize: 11,
       marginBottom: 2,
@@ -1072,8 +1105,8 @@ export default function SharedAppointmentScreen() {
     const avatarRingWrap = {
       padding: 1.5,
       borderRadius: 12,
-      borderWidth: 1,
-      borderColor: isDark ? "rgba(240, 94, 35, 0.4)" : "rgba(251, 146, 60, 0.45)",
+      borderWidth: 1.5,
+      borderColor: isDark ? "rgba(250, 204, 21, 0.45)" : COLORS.PROFILE.AVATAR_RING,
       marginRight: 10,
     };
     const scheduleStripOuter = {
@@ -1157,8 +1190,8 @@ export default function SharedAppointmentScreen() {
                           </Text>
                           {passed && isApproved && (
                             <View className="flex-row items-center">
-                              <Icon source="alert-circle" size={14} color="#FACC15" />
-                              <Text className="text-[#FACC15] text-xs ml-1">
+                              <Icon source="alert-circle" size={14} color={isDark ? "#FACC15" : getTextOnGold(false)} />
+                              <Text className="text-xs ml-1" style={{ color: isDark ? "#FACC15" : getTextOnGold(false) }}>
                                 {t("appointment.labels.timePassed")}
                               </Text>
                             </View>
@@ -1208,16 +1241,16 @@ export default function SharedAppointmentScreen() {
                         style={{
                           padding: 5,
                           borderRadius: 8,
-                          backgroundColor: isDark ? "#f05e2318" : "#fff7ed",
+                          backgroundColor: getAppointmentIconWellBg(isDark),
                           marginRight: 7,
                         }}
                       >
-                        <Icon source="calendar-month" size={16} color="#f05e23" />
+                        <Icon source="calendar-month" size={16} color={getAppointmentIconWellFg(isDark)} />
                       </View>
                       <View className="flex-1" style={{ minWidth: 0 }}>
                         <Text
                           style={{
-                            color: isDark ? "#fb923c" : "#c2410c",
+                            color: getAppointmentAccentLabelFg(isDark),
                             fontFamily: "CenturyGothic-Bold",
                             fontSize: 10,
                             marginBottom: 1,
@@ -1247,16 +1280,16 @@ export default function SharedAppointmentScreen() {
                         style={{
                           padding: 5,
                           borderRadius: 8,
-                          backgroundColor: isDark ? "#f05e2318" : "#fff7ed",
+                          backgroundColor: getAppointmentIconWellBg(isDark),
                           marginRight: 7,
                         }}
                       >
-                        <Icon source="clock-outline" size={16} color="#f05e23" />
+                        <Icon source="clock-outline" size={16} color={getAppointmentIconWellFg(isDark)} />
                       </View>
                       <View className="flex-1" style={{ minWidth: 0 }}>
                         <Text
                           style={{
-                            color: isDark ? "#fb923c" : "#c2410c",
+                            color: getAppointmentAccentLabelFg(isDark),
                             fontFamily: "CenturyGothic-Bold",
                             fontSize: 10,
                             marginBottom: 1,
@@ -1426,7 +1459,10 @@ export default function SharedAppointmentScreen() {
                             />
                             <View className="flex-1">
                               <Text style={sectionLabelStyle}>
-                                {t("appointment.labels.rentingBarber")}
+                                {userType === UserType.BarberStore &&
+                                item.appointmentRequester === AppointmentRequester.Store
+                                  ? t("appointment.labels.calledBarber")
+                                  : t("appointment.labels.rentingBarber")}
                               </Text>
                               <Text
                                 className="mb-1"
@@ -1534,7 +1570,7 @@ export default function SharedAppointmentScreen() {
                             style={{
                               backgroundColor: colors.cardBg3,
                               borderWidth: 1,
-                              borderColor: isDark ? "rgba(240, 94, 35, 0.4)" : "rgba(251, 146, 60, 0.45)",
+                              borderColor: isDark ? "rgba(250, 204, 21, 0.45)" : COLORS.PROFILE.AVATAR_RING,
                               marginRight: 10,
                             }}
                           >
@@ -1918,7 +1954,7 @@ export default function SharedAppointmentScreen() {
                             style={{
                               backgroundColor: colors.cardBg3,
                               borderWidth: 1,
-                              borderColor: isDark ? "rgba(240, 94, 35, 0.4)" : "rgba(251, 146, 60, 0.45)",
+                              borderColor: isDark ? "rgba(250, 204, 21, 0.45)" : COLORS.PROFILE.AVATAR_RING,
                               marginRight: 10,
                             }}
                           >
@@ -1962,13 +1998,21 @@ export default function SharedAppointmentScreen() {
                     }}
                   >
                     <View className="flex-row items-center mb-1">
-                      <Icon source="cash" size={15} color="#f05e23" />
+                      <View
+                        style={{
+                          padding: 4,
+                          borderRadius: 6,
+                          backgroundColor: getAppointmentIconWellBg(isDark),
+                          marginRight: 6,
+                        }}
+                      >
+                        <Icon source="cash" size={15} color={getAppointmentIconWellFg(isDark)} />
+                      </View>
                       <Text
                         style={{
-                          color: isDark ? "#fb923c" : "#c2410c",
+                          color: getAppointmentAccentLabelFg(isDark),
                           fontFamily: "CenturyGothic-Bold",
                           fontSize: 11,
-                          marginLeft: 6,
                           letterSpacing: 0.2,
                         }}
                       >
@@ -2005,19 +2049,19 @@ export default function SharedAppointmentScreen() {
                   <View
                     style={{
                       width: 40,
-                      backgroundColor: isDark ? "rgba(240, 94, 35, 0.1)" : "#fff7ed",
+                      backgroundColor: getAppointmentIconWellBg(isDark),
                       alignItems: "center",
                       justifyContent: "center",
                       borderRightWidth: 1,
                       borderRightColor: colors.borderColor,
                     }}
                   >
-                    <Icon source="map-marker-radius" size={22} color="#f05e23" />
+                    <Icon source="map-marker-radius" size={22} color={getAppointmentIconWellFg(isDark)} />
                   </View>
                   <View className="flex-1 py-2 pr-2.5 pl-2.5">
                     <Text
                       style={{
-                        color: isDark ? "#fb923c" : "#c2410c",
+                        color: getAppointmentAccentLabelFg(isDark),
                         fontFamily: "CenturyGothic-Bold",
                         fontSize: 10,
                         marginBottom: 3,
@@ -2044,13 +2088,21 @@ export default function SharedAppointmentScreen() {
               {item.services.length > 0 && (
                 <View className="mt-2 mb-1.5">
                   <View className="flex-row items-center mb-2">
-                    <Icon source="scissors-cutting" size={14} color="#f05e23" />
+                    <View
+                      style={{
+                        padding: 4,
+                        borderRadius: 6,
+                        backgroundColor: getAppointmentIconWellBg(isDark),
+                        marginRight: 6,
+                      }}
+                    >
+                      <Icon source="scissors-cutting" size={14} color={getAppointmentIconWellFg(isDark)} />
+                    </View>
                     <Text
                       style={{
-                        color: isDark ? "#fb923c" : "#c2410c",
+                        color: getAppointmentAccentLabelFg(isDark),
                         fontFamily: "CenturyGothic-Bold",
                         fontSize: 11,
-                        marginLeft: 6,
                         letterSpacing: 0.15,
                       }}
                     >
@@ -2442,14 +2494,14 @@ export default function SharedAppointmentScreen() {
                 disabled={isCancelling}
                 className="flex-1 rounded-xl py-3 items-center"
                 style={{
-                  backgroundColor: "#f05e23",
+                  backgroundColor: isDark ? "#f05e23" : COLORS.UI.ACCENT_GOLD,
                   opacity: isCancelling ? 0.7 : 1,
                 }}
               >
                 {isCancelling ? (
-                  <ActivityIndicator color="#fff" size="small" />
+                  <ActivityIndicator color={getTextOnGold(isDark)} size="small" />
                 ) : (
-                  <Text style={{ color: "#fff", fontFamily: "CenturyGothic-Bold" }}>
+                  <Text style={{ color: getTextOnGold(isDark), fontFamily: "CenturyGothic-Bold" }}>
                     {t("appointment.actions.cancel")}
                   </Text>
                 )}
@@ -2464,7 +2516,9 @@ export default function SharedAppointmentScreen() {
       <BottomSheetModal
         ref={ratingSheet.ref}
         snapPoints={ratingSheet.snapPoints}
-        enableContentPanningGesture={false}
+        index={0}
+        enableDynamicSizing={false}
+        enableContentPanningGesture={true}
         enablePanDownToClose={ratingSheet.enablePanDownToClose}
         handleIndicatorStyle={{ backgroundColor: colors.sheetHandle }}
         backgroundStyle={{ backgroundColor: colors.sheetBg }}
@@ -2503,6 +2557,7 @@ export default function SharedAppointmentScreen() {
       <BottomSheetModal
         ref={complaintSheet.ref}
         snapPoints={complaintSheet.snapPoints}
+        enableDynamicSizing={false}
         enablePanDownToClose={complaintSheet.enablePanDownToClose}
         handleIndicatorStyle={{ backgroundColor: colors.sheetHandle }}
         backgroundStyle={{ backgroundColor: colors.sheetBg }}
@@ -2638,7 +2693,7 @@ export default function SharedAppointmentScreen() {
             }}
           >
             {cardMenuFlags.showComplaintBlock && (
-              <>
+              <View collapsable={false}>
                 <TouchableOpacity
                   onPress={() => {
                     closeCardMenu();
@@ -2689,7 +2744,7 @@ export default function SharedAppointmentScreen() {
                     {t("block.submit")}
                   </Text>
                 </TouchableOpacity>
-              </>
+              </View>
             )}
             {cardMenuFlags.showDelete && (
               <TouchableOpacity

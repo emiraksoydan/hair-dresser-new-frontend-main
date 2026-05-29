@@ -1,0 +1,10 @@
+{
+  "backendRoot": "C:/Users/yazilimciemir/source/repos/HairDresser-master",
+  "csFilesScanned": 184,
+  "uniqueBackendStrings": 204,
+  "mapKeys": 440,
+  "missingFromMapCount": 0,
+  "missingFromMapSample": [],
+  "note": "FluentValidation / controller anonim mesajları dahil. $\" ile birleşik mesajlar ve Bilinen ürün: {id} gibi dinamikler tam yakalanmaz.",
+  "missingFromMapFull": []
+}

@@ -10,23 +10,26 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { IconButton } from "react-native-paper";
 import { Text } from "../../components/common/Text";
 import { BottomSheetModal, BottomSheetView } from "@gorhom/bottom-sheet";
-import { useBottomSheet } from "../../hook/useBottomSheet";
-import { FormFreeBarberOperation } from "../../components/freebarber/formfreebarberoper";
+import { useFullHeightBottomSheet } from "../../hook/useBottomSheet";
+import { FormFreeBarberOperation } from "../../components/freebarber/FormFreeBarberOper";
 import { FreeBarberPanelSection } from "../../components/freebarber/freebarberpanelsection";
 import * as Location from "expo-location";
 import {
+  api,
   useGetAllCategoriesQuery,
   useGetFreeBarberMinePanelQuery,
   useGetSettingQuery,
 } from "../../store/api";
+import { useAppDispatch } from "../../store/hook";
 import { useLanguage } from "../../hook/useLanguage";
 import { useTheme } from "../../hook/useTheme";
+import { getPanelHeaderAccentIconColor } from "../../constants/colors";
 import { useSafeNavigation } from "../../hook/useSafeNavigation";
 import { useFreeBarberLocationTracking } from "../../components/freebarber/FreeBarberLocationProvider";
 import { DeferredRender } from "../../components/common/deferredrender";
 import { CrudSkeletonComponent } from "../../components/common/crudskeleton";
 import { SkeletonComponent } from "../../components/common/skeleton";
-import { RatingsBottomSheet } from "../../components/rating/ratingsbottomsheet";
+import { RatingsBottomSheet } from "../../components/rating/RatingsBottomSheet";
 import { useFabOverlayWhenSheetOpen } from "../../hook/usePanelMoreFab";
 import { useDeferredSheetPresent } from "../../hook/useDeferredSheetPresent";
 
@@ -35,8 +38,9 @@ import { useDeferredSheetPresent } from "../../hook/useDeferredSheetPresent";
  */
 export default function MyPanelScreen() {
   const insets = useSafeAreaInsets();
+  const dispatch = useAppDispatch();
   const router = useSafeNavigation();
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
   const { t } = useLanguage();
   const [fgPerm] = Location.useForegroundPermissions();
   const locationStatusForForm = useMemo((): "unknown" | "granted" | "denied" => {
@@ -66,15 +70,12 @@ export default function MyPanelScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const isRefreshingRef = useRef(false);
 
-  const freeBarberPanelSheet = useBottomSheet({
-    snapPoints: ["100%"],
+  const freeBarberPanelSheet = useFullHeightBottomSheet({
     enablePanDownToClose: false,
-    enableOverDrag: false,
     enableHandlePanningGesture: false,
     pressBehavior: "none",
   });
-  const ratingsSheet = useBottomSheet({
-    snapPoints: ["100%"],
+  const ratingsSheet = useFullHeightBottomSheet({
     enablePanDownToClose: true,
   });
 
@@ -130,12 +131,17 @@ export default function MyPanelScreen() {
     setRefreshing(true);
     try {
       isRefreshingRef.current = true;
-      await refetchFreeBarber();
+      await dispatch(
+        api.endpoints.getFreeBarberMinePanel.initiate(undefined, {
+          subscribe: false,
+          forceRefetch: true,
+        }),
+      ).unwrap();
     } finally {
       setRefreshing(false);
       isRefreshingRef.current = false;
     }
-  }, [refetchFreeBarber]);
+  }, [dispatch]);
 
   const { isTracking, isUpdating } = useFreeBarberLocationTracking();
 
@@ -176,7 +182,7 @@ export default function MyPanelScreen() {
         </Text>
         <IconButton
           icon={isList ? "format-list-bulleted" : "view-grid-outline"}
-          iconColor="#FACC15"
+          iconColor={getPanelHeaderAccentIconColor(isDark)}
           size={20}
           onPress={() => setIsList((v) => !v)}
           style={{ margin: 0, marginTop: 8 }}
@@ -225,6 +231,8 @@ export default function MyPanelScreen() {
           freeBarberPanelSheet.handleDismiss();
         }}
         snapPoints={freeBarberPanelSheet.snapPoints}
+        index={0}
+        enableDynamicSizing={false}
         enableOverDrag={freeBarberPanelSheet.enableOverDrag}
         enablePanDownToClose={freeBarberPanelSheet.enablePanDownToClose}
         enableHandlePanningGesture={freeBarberPanelSheet.enableHandlePanningGesture}
@@ -252,6 +260,9 @@ export default function MyPanelScreen() {
       <BottomSheetModal
         ref={ratingsSheet.ref}
         snapPoints={ratingsSheet.snapPoints}
+        index={0}
+        enableDynamicSizing={false}
+        enableContentPanningGesture={true}
         enablePanDownToClose={ratingsSheet.enablePanDownToClose}
         handleIndicatorStyle={{ backgroundColor: colors.sheetHandle }}
         backgroundStyle={{ backgroundColor: colors.sheetBg }}

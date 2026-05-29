@@ -1,5 +1,4 @@
-import { Icon } from "react-native-paper";
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -25,17 +24,13 @@ import Animated, {
 import { SafeAreaView } from "react-native-safe-area-context";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { BottomSheetModal, BottomSheetScrollView } from "@gorhom/bottom-sheet";
-
-import { BarChart, LineChart, PieChart } from "react-native-chart-kit";
+import { Icon } from "react-native-paper";
 import { MultiSelect } from "react-native-element-dropdown";
 import { Text } from "../../components/common/Text";
 import { useTheme } from "../../hook/useTheme";
-import { getEarningsChartSwitchProps } from "../../constants/colors";
 import { useLanguage } from "../../hook/useLanguage";
 import { useSafeNavigation } from "../../hook/useSafeNavigation";
 import { useBottomSheet } from "../../hook/useBottomSheet";
-import { useFabOverlayWhenSheetOpen } from "../../hook/usePanelMoreFab";
-import { useDeferredSheetPresent } from "../../hook/useDeferredSheetPresent";
 import {
   shareEarningsCsv,
   shareEarningsPdf,
@@ -45,17 +40,31 @@ import {
   useGetMeQuery,
   useGetMineStoresQuery,
   useGetSettingQuery,
-  useLazyGetBarberStoreEarningsAggregatedQuery,
+  useLazyGetBarberStoreEarningsQuery,
   useGetFreeBarberEarningsQuery,
 } from "../../store/api";
 import { EarningsDto, UserType } from "../../types";
+import { mergeEarnings } from "../../utils/earnings/merge-earnings";
 import LottieView from "lottie-react-native";
 import { AnimatedMoneyText } from "../../components/common/AnimatedMoneyText";
+import { getEarningsTheme, getPiePalette } from "./earningsTheme";
+import { buildGiftedChartStyle, getEarningsChartViewportWidth } from "./earningsChartConfig";
+import { aggregateBreakdown } from "./earningsAggregate";
+import {
+  EarningsLineBarChart,
+  EarningsChartShell,
+  EarningsChartTypeTabs,
+  EarningsPeriodStrip,
+  EarningsPieBlock,
+  EarningsBreakdownList,
+  type ChartType,
+  type PieSlice,
+} from "./earningsChartUi";
+import { getEarningsChartSwitchProps } from "../../constants/colors";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const CURRENCY = "₺";
 
-/** Yan peek: dar kart + header/footer spacer + separator — paddingHorizontal yerine */
 const EARNINGS_CARD_HEIGHT = 182;
 const EARNINGS_CARD_WIDTH = Math.round(SCREEN_WIDTH * 0.68);
 const EARNINGS_CARD_GAP = 14;
@@ -79,7 +88,6 @@ const LOTTIE_EARNINGS_TREASURE = require("../../../assets/animations/treasurerco
 const LOTTIE_EARNINGS_GROWTH = require("../../../assets/animations/profitgrowth.json");
 
 type DateFilterType = "daily" | "weekly" | "monthly" | "yearly" | "custom";
-type ChartType = "line" | "bar" | "pie";
 
 function toDateStr(d: Date) {
   return d.toISOString().split("T")[0];
@@ -109,82 +117,6 @@ function computeRange(filter: DateFilterType, customStart: Date, customEnd: Date
   return [customStart, customEnd];
 }
 
-function aggregateBreakdown(
-  breakdown: { date: string; amount: number }[],
-  filter: DateFilterType
-): { labels: string[]; values: number[] } {
-  const dayNames = ["Paz", "Pzt", "Sal", "Çar", "Per", "Cum", "Cmt"];
-  const monthNames = ["Oca", "Şub", "Mar", "Nis", "May", "Haz", "Tem", "Ağu", "Eyl", "Eki", "Kas", "Ara"];
-
-  if (filter === "daily") {
-    const now = new Date();
-    const key = toDateStr(now);
-    const found = breakdown.find((b) => b.date === key);
-    return { labels: [dayNames[now.getDay()]], values: [found ? found.amount : 0] };
-  }
-
-  if (filter === "weekly") {
-    const labels: string[] = [];
-    const values: number[] = [];
-    const now = new Date();
-    for (let i = 6; i >= 0; i--) {
-      const d = new Date(now);
-      d.setDate(now.getDate() - i);
-      const key = toDateStr(d);
-      labels.push(dayNames[d.getDay()]);
-      const found = breakdown.find((b) => b.date === key);
-      values.push(found ? found.amount : 0);
-    }
-    return { labels, values };
-  }
-
-  if (filter === "monthly") {
-    const buckets: number[] = [0, 0, 0, 0, 0];
-    const labels = ["1.H", "2.H", "3.H", "4.H", "5.H"];
-    breakdown.forEach((b) => {
-      const day = new Date(b.date).getDate();
-      const bucket = Math.min(Math.floor((day - 1) / 7), 4);
-      buckets[bucket] += b.amount;
-    });
-    return { labels, values: buckets };
-  }
-
-  if (filter === "yearly") {
-    const now = new Date();
-    const labels: string[] = [];
-    const buckets = new Array(12).fill(0);
-    for (let i = 11; i >= 0; i--) {
-      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      labels.push(monthNames[d.getMonth()]);
-    }
-    breakdown.forEach((b) => {
-      const d = new Date(b.date);
-      const monthsDiff =
-        (now.getFullYear() - d.getFullYear()) * 12 + (now.getMonth() - d.getMonth());
-      if (monthsDiff >= 0 && monthsDiff < 12) {
-        const idx = 11 - monthsDiff;
-        buckets[idx] += b.amount;
-      }
-    });
-    return { labels, values: buckets };
-  }
-
-  const monthMap: Record<string, number> = {};
-  breakdown.forEach((b) => {
-    const d = new Date(b.date);
-    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-    monthMap[key] = (monthMap[key] || 0) + b.amount;
-  });
-  const sorted = Object.keys(monthMap).sort();
-  return {
-    labels: sorted.map((k) => {
-      const [, m] = k.split("-");
-      return monthNames[parseInt(m, 10) - 1];
-    }),
-    values: sorted.map((k) => monthMap[k]),
-  };
-}
-
 const EarningsCard = ({
   label,
   value,
@@ -201,7 +133,6 @@ const EarningsCard = ({
 }: {
   label: string;
   value: number;
-  /** Yüzde vb. metin göstermek için (ör. kar oranı) */
   valueOverride?: string;
   subText?: string;
   icon: string;
@@ -210,9 +141,7 @@ const EarningsCard = ({
   showLottie?: boolean;
   lottieSource?: number;
   animateNumbers?: boolean;
-  /** Varsayılan ₺ yerine özel sonek (örn. %) */
   valueSuffix?: string;
-  /** Carousel: alt metin + Lottie için merkez odaklı opacity */
   detailAnimatedStyle?: AnimatedStyle<ViewStyle>;
 }) => {
   const cardBg = isDark ? "rgba(30,41,59,0.97)" : `${accentColor}22`;
@@ -220,7 +149,7 @@ const EarningsCard = ({
   const suffix = valueSuffix ?? CURRENCY;
   const subTextStyle = {
     color: isDark ? "rgba(255,255,255,0.45)" : "rgba(30,41,59,0.45)",
-    fontSize: 12,
+    fontSize: 10,
     marginTop: 5,
     fontFamily: "CenturyGothic",
   } as const;
@@ -239,11 +168,12 @@ const EarningsCard = ({
         overflow: "hidden",
       }}
     >
-      {/* Top accent line */}
       <View
         style={{
           position: "absolute",
-          top: 0, left: 0, right: 0,
+          top: 0,
+          left: 0,
+          right: 0,
           height: 3,
           borderTopLeftRadius: 20,
           borderTopRightRadius: 20,
@@ -253,7 +183,6 @@ const EarningsCard = ({
       />
       <View style={{ flexDirection: "row", alignItems: "flex-start" }}>
         <View style={{ flex: 1, minWidth: 0, paddingRight: showLottie && lottieSource != null ? 6 : 0 }}>
-          {/* Icon + label */}
           <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 12, gap: 10 }}>
             <View
               style={{
@@ -272,24 +201,18 @@ const EarningsCard = ({
               style={{
                 color: isDark ? "rgba(255,255,255,0.82)" : "rgba(30,41,59,0.82)",
                 fontFamily: "CenturyGothic-Bold",
-                fontSize: 15,
+                fontSize: 13,
                 flex: 1,
-                lineHeight: 20,
+                lineHeight: 18,
               }}
               numberOfLines={2}
             >
               {label}
             </Text>
           </View>
-
-          {/* Value */}
           {valueOverride != null ? (
             <Text
-              style={{
-                color: accentColor,
-                fontFamily: "CenturyGothic-Bold",
-                fontSize: 28,
-              }}
+              style={{ color: accentColor, fontFamily: "CenturyGothic-Bold", fontSize: 26 }}
               numberOfLines={1}
               adjustsFontSizeToFit
               minimumFontScale={0.85}
@@ -300,29 +223,19 @@ const EarningsCard = ({
             <AnimatedMoneyText
               value={value}
               suffix={suffix}
-              style={{
-                color: accentColor,
-                fontFamily: "CenturyGothic-Bold",
-                fontSize: 28,
-              }}
+              style={{ color: accentColor, fontFamily: "CenturyGothic-Bold", fontSize: 26 }}
               enabled={animateNumbers}
             />
           ) : (
             <Text
-              style={{
-                color: accentColor,
-                fontFamily: "CenturyGothic-Bold",
-                fontSize: 28,
-              }}
+              style={{ color: accentColor, fontFamily: "CenturyGothic-Bold", fontSize: 26 }}
               numberOfLines={1}
               adjustsFontSizeToFit
               minimumFontScale={0.8}
             >
-              {value.toLocaleString("tr-TR", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}{" "}
-              {suffix}
+              {value.toLocaleString("tr-TR", { minimumFractionDigits: 0, maximumFractionDigits: 2 })} {suffix}
             </Text>
           )}
-
           {!!subText &&
             (detailAnimatedStyle ? (
               <Animated.View style={detailAnimatedStyle}>
@@ -377,33 +290,17 @@ function EarningsCarouselItem({
   const animStyle = useAnimatedStyle(() => {
     const x = scrollX.value;
     return {
-      opacity: interpolate(
-        x,
-        [(index - 1) * s, index * s, (index + 1) * s],
-        [0.45, 1, 0.45],
-        Extrapolation.CLAMP
-      ),
+      opacity: interpolate(x, [(index - 1) * s, index * s, (index + 1) * s], [0.45, 1, 0.45], Extrapolation.CLAMP),
       transform: [
         {
-          scale: interpolate(
-            x,
-            [(index - 1) * s, index * s, (index + 1) * s],
-            [0.86, 1, 0.86],
-            Extrapolation.CLAMP
-          ),
+          scale: interpolate(x, [(index - 1) * s, index * s, (index + 1) * s], [0.86, 1, 0.86], Extrapolation.CLAMP),
         },
       ],
     };
   }, [index, s]);
 
   return (
-    <View
-      style={{
-        width: EARNINGS_CARD_WIDTH,
-        height: EARNINGS_CAROUSEL_HEIGHT,
-        justifyContent: "center",
-      }}
-    >
+    <View style={{ width: EARNINGS_CARD_WIDTH, height: EARNINGS_CAROUSEL_HEIGHT, justifyContent: "center" }}>
       <Animated.View style={[{ width: EARNINGS_CARD_WIDTH, height: EARNINGS_CARD_HEIGHT }, animStyle]}>
         <EarningsCard
           label={item.label}
@@ -455,18 +352,10 @@ function ShopInsightsEarningsCarousel({
         ListHeaderComponent={<View style={{ width: EARNINGS_SIDE_PAD }} />}
         ListFooterComponent={<View style={{ width: EARNINGS_SIDE_PAD }} />}
         ItemSeparatorComponent={() => <View style={{ width: EARNINGS_CARD_GAP }} />}
-        contentContainerStyle={{
-          paddingVertical: 7,
-        }}
+        contentContainerStyle={{ paddingVertical: 4 }}
         style={{ height: EARNINGS_CAROUSEL_HEIGHT }}
         renderItem={({ item, index }) => (
-          <EarningsCarouselItem
-            item={item}
-            index={index}
-            scrollX={scrollX}
-            isDark={isDark}
-            showLottie={showLottie}
-          />
+          <EarningsCarouselItem item={item} index={index} scrollX={scrollX} isDark={isDark} showLottie={showLottie} />
         )}
       />
     </View>
@@ -478,11 +367,13 @@ const FilterChip = ({
   active,
   onPress,
   colors,
+  activeColor,
 }: {
   label: string;
   active: boolean;
   onPress: () => void;
   colors: any;
+  activeColor: string;
 }) => (
   <TouchableOpacity
     onPress={onPress}
@@ -490,34 +381,23 @@ const FilterChip = ({
       paddingHorizontal: 13,
       paddingVertical: 7,
       borderRadius: 20,
-      backgroundColor: active ? "#FACC15" : colors.cardBg3,
+      backgroundColor: active ? activeColor : colors.cardBg3,
       borderWidth: 1,
-      borderColor: active ? "#FACC15" : colors.borderColor2,
+      borderColor: active ? activeColor : colors.borderColor2,
       marginRight: 6,
     }}
   >
     <Text
       style={{
-        color: active ? "#1f2937" : colors.sectionHeaderText,
+        color: active ? "#ffffff" : colors.sectionHeaderText,
         fontFamily: "CenturyGothic-Bold",
-        fontSize: 14,
+        fontSize: 12,
       }}
     >
       {label}
     </Text>
   </TouchableOpacity>
 );
-
-const PIE_COLORS = [
-  "rgba(251,191,36,0.85)",
-  "rgba(45,212,191,0.88)",
-  "rgba(96,165,250,0.9)",
-  "rgba(192,132,252,0.88)",
-  "rgba(244,114,182,0.85)",
-  "rgba(52,211,153,0.88)",
-  "rgba(251,146,60,0.85)",
-  "rgba(148,163,184,0.85)",
-];
 
 export default function ShopInsightsPage() {
   const { colors, isDark } = useTheme();
@@ -532,12 +412,19 @@ export default function ShopInsightsPage() {
   const isBarberStore = userType === UserType.BarberStore;
   const isFreeBarber = userType === UserType.FreeBarber;
 
-  const { data: myStoresRaw = [] } = useGetMineStoresQuery(undefined, {
+  const variant = isBarberStore ? "store" : "freeBarber";
+  const earningsTheme = useMemo(() => getEarningsTheme(variant, isDark), [variant, isDark]);
+  const chartStyle = useMemo(() => buildGiftedChartStyle(earningsTheme, isDark), [earningsTheme, isDark]);
+  const viewportWidth = useMemo(() => getEarningsChartViewportWidth(SCREEN_WIDTH), []);
+
+  // = [] kullanmıyoruz: her render'da yeni [] referansı üretir ve
+  // aşağıdaki useEffect sonsuz döngüye girer.
+  const { data: myStoresRaw } = useGetMineStoresQuery(undefined, {
     skip: !isBarberStore,
   });
   const stores = useMemo(
-    () => (myStoresRaw ?? []).map((s: any) => ({ id: s.id, name: s.storeName || "Dükkan" })),
-    [myStoresRaw],
+    () => (myStoresRaw ?? []).map((s: any) => ({ id: s.id, name: s.storeName || t("labels.storeDefaultName") })),
+    [myStoresRaw, t]
   );
   const storeSelectOptions = useMemo(
     () => stores.map((s) => ({ label: s.name, value: s.id })),
@@ -547,17 +434,12 @@ export default function ShopInsightsPage() {
   const [selectedStoreIds, setSelectedStoreIds] = useState<string[]>([]);
   useEffect(() => {
     if (!stores.length) {
-      setSelectedStoreIds((prev) => (prev.length === 0 ? prev : []));
+      setSelectedStoreIds([]);
       return;
     }
-    const allIds = stores.map((s) => s.id);
     setSelectedStoreIds((prev) => {
-      const valid = prev.filter((id) => allIds.includes(id));
-      const next = valid.length > 0 ? valid : allIds;
-      const a = [...next].sort().join(",");
-      const b = [...prev].sort().join(",");
-      if (a === b) return prev;
-      return next;
+      const valid = prev.filter((id) => stores.some((s) => s.id === id));
+      return valid.length > 0 ? valid : stores.map((s) => s.id);
     });
   }, [stores]);
 
@@ -576,78 +458,75 @@ export default function ShopInsightsPage() {
   const [showChart, setShowChart] = useState(true);
   const [chartType, setChartType] = useState<ChartType>("line");
 
-  const [fetchStoreEarningsAggregated] = useLazyGetBarberStoreEarningsAggregatedQuery();
-  const fetchEarningsRef = useRef(fetchStoreEarningsAggregated);
-  fetchEarningsRef.current = fetchStoreEarningsAggregated;
+  const chartSwitchProps = useMemo(() => getEarningsChartSwitchProps(showChart), [showChart]);
 
+  const [fetchStoreEarnings] = useLazyGetBarberStoreEarningsQuery();
   const [storeEarnings, setStoreEarnings] = useState<EarningsDto | null>(null);
   const [storeAllTimeEarnings, setStoreAllTimeEarnings] = useState<EarningsDto | null>(null);
   const [loadingStore, setLoadingStore] = useState(false);
 
-  const selectedStoreIdsKey = useMemo(() => [...selectedStoreIds].sort().join(","), [selectedStoreIds]);
-  const rangeStartStr = useMemo(() => toDateStr(rangeStart), [rangeStart]);
-  const rangeEndStr = useMemo(() => toDateStr(rangeEnd), [rangeEnd]);
-
-  const selectedStoreIdsRef = useRef(selectedStoreIds);
-  selectedStoreIdsRef.current = selectedStoreIds;
-
-  useEffect(() => {
-    const ids = selectedStoreIdsRef.current;
-    if (!isBarberStore || ids.length === 0) {
-      setStoreEarnings(null);
-      setLoadingStore(false);
-      return;
-    }
-    let cancelled = false;
+  const loadBarberStoreEarnings = useCallback(async () => {
+    if (!isBarberStore || selectedStoreIds.length === 0) return;
     setLoadingStore(true);
-    fetchEarningsRef
-      .current({
-        storeIds: ids,
-        startDate: rangeStartStr,
-        endDate: rangeEndStr,
-      })
-      .unwrap()
-      .then((data) => {
-        if (!cancelled) setStoreEarnings(data);
-      })
-      .catch(() => {
-        if (!cancelled) setStoreEarnings(null);
-      })
-      .finally(() => {
-        if (!cancelled) setLoadingStore(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [isBarberStore, selectedStoreIdsKey, rangeStartStr, rangeEndStr]);
+    try {
+      const start = toDateStr(rangeStart);
+      const end = toDateStr(rangeEnd);
+      if (selectedStoreIds.length > 1) {
+        const results = await Promise.all(selectedStoreIds.map((id) =>
+          fetchStoreEarnings({ storeId: id, startDate: start, endDate: end }).unwrap()
+        ));
+        setStoreEarnings(mergeEarnings(results));
+      } else {
+        const data = await fetchStoreEarnings({
+          storeId: selectedStoreIds[0],
+          startDate: start,
+          endDate: end,
+        }).unwrap();
+        setStoreEarnings(data);
+      }
+    } catch {
+      setStoreEarnings(null);
+    } finally {
+      setLoadingStore(false);
+    }
+  }, [isBarberStore, selectedStoreIds, rangeStart, rangeEnd, fetchStoreEarnings]);
 
   useEffect(() => {
-    const ids = selectedStoreIdsRef.current;
-    if (!isBarberStore || ids.length === 0) {
+    loadBarberStoreEarnings();
+  }, [loadBarberStoreEarnings]);
+
+  const loadBarberStoreAllTimeEarnings = useCallback(async () => {
+    if (!isBarberStore || selectedStoreIds.length === 0) {
       setStoreAllTimeEarnings(null);
       return;
     }
-    let cancelled = false;
-    const end = toDateStr(new Date());
-    fetchEarningsRef
-      .current({
-        storeIds: ids,
-        startDate: ALL_TIME_START,
-        endDate: end,
-      })
-      .unwrap()
-      .then((data) => {
-        if (!cancelled) setStoreAllTimeEarnings(data);
-      })
-      .catch(() => {
-        if (!cancelled) setStoreAllTimeEarnings(null);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [isBarberStore, selectedStoreIdsKey]);
+    try {
+      const end = toDateStr(new Date());
+      if (selectedStoreIds.length > 1) {
+        const results = await Promise.all(
+          selectedStoreIds.map((id) =>
+            fetchStoreEarnings({ storeId: id, startDate: ALL_TIME_START, endDate: end }).unwrap()
+          )
+        );
+        setStoreAllTimeEarnings(mergeEarnings(results));
+      } else {
+        const data = await fetchStoreEarnings({
+          storeId: selectedStoreIds[0],
+          startDate: ALL_TIME_START,
+          endDate: end,
+        }).unwrap();
+        setStoreAllTimeEarnings(data);
+      }
+    } catch {
+      setStoreAllTimeEarnings(null);
+    }
+  }, [isBarberStore, selectedStoreIds, fetchStoreEarnings]);
 
-  const { data: fbEarnings, isFetching: fbEarningsFetching } = useGetFreeBarberEarningsQuery(
+  useEffect(() => {
+    loadBarberStoreAllTimeEarnings();
+  }, [loadBarberStoreAllTimeEarnings]);
+
+  const { data: fbEarnings } = useGetFreeBarberEarningsQuery(
     { startDate: toDateStr(rangeStart), endDate: toDateStr(rangeEnd) },
     { skip: !isFreeBarber }
   );
@@ -661,107 +540,57 @@ export default function ShopInsightsPage() {
     ? (storeAllTimeEarnings?.totalEarnings ?? 0)
     : (fbAllTimeEarnings?.totalEarnings ?? 0);
 
-  const { labels: chartLabels, values: chartValues } = useMemo(
-    () => aggregateBreakdown(earnings?.dailyBreakdown ?? [], dateFilter),
-    [earnings, dateFilter]
+  const { labels: chartLabels, values: chartValues, labelHint } = useMemo(
+    () => aggregateBreakdown(earnings?.dailyBreakdown ?? [], dateFilter, t),
+    [earnings, dateFilter, t]
   );
+
   const rawValues = chartValues.map((v) => (isNaN(v) || !isFinite(v) ? 0 : v));
   const safeValues = rawValues.length > 0 ? rawValues : [0];
   const safeLabels = chartLabels.length > 0 ? chartLabels : [""];
-  const chartLineColor = isDark ? "rgba(251,191,36,0.78)" : "rgba(245,158,11,0.88)";
-  const chartData = {
-    labels: safeLabels,
-    datasets: [{ data: safeValues, color: () => chartLineColor, strokeWidth: 2.5 }],
-  };
-  const chartConfig = useMemo(
-    () => ({
-      backgroundGradientFrom: isDark ? colors.cardBg3 : colors.cardBg3,
-      backgroundGradientTo: isDark ? colors.cardBg : "#f8fafc",
-      decimalPlaces: 0,
-      color: (opacity = 1) => `rgba(251,191,36,${0.32 + opacity * 0.48})`,
-      labelColor: (opacity = 1) =>
-        isDark ? `rgba(203,213,225,${opacity})` : `rgba(71,85,105,${opacity})`,
-      propsForDots: { r: "4", strokeWidth: "1.5", stroke: chartLineColor },
-      propsForBackgroundLines: {
-        stroke: isDark ? "rgba(255,255,255,0.07)" : "rgba(15,23,42,0.07)",
-      },
-      propsForLabels: {
-        fontSize: safeLabels.length > 10 ? 11 : 12,
-      },
-      fillShadowGradient: "rgba(251,191,36,0.95)",
-      fillShadowGradientOpacity: isDark ? 0.1 : 0.14,
-    }),
-    [isDark, colors.cardBg, colors.cardBg3, chartLineColor, safeLabels.length],
-  );
-
-  const horizontalLabelRotation =
-    safeLabels.length > 10 ? -55 : safeLabels.length > 6 ? -40 : 0;
-  const minLabelPx =
-    dateFilter === "monthly" || safeLabels.length > 8 ? 52 : 46;
-  const chartInnerWidth = Math.max(
-    SCREEN_WIDTH - 32,
-    safeLabels.length * minLabelPx,
-  );
-  const chartPlotHeight = horizontalLabelRotation !== 0 ? 210 : 190;
 
   const hasChartActivity = rawValues.some((v) => v > 0);
 
-  const chartAwaitingEarnings =
-    (isBarberStore && loadingStore && !storeEarnings) ||
-    (isFreeBarber && fbEarningsFetching && fbEarnings === undefined);
+  const pieSlices: PieSlice[] = useMemo(() => {
+    const palette = getPiePalette(variant);
+    const pairs = safeLabels.map((label, i) => ({
+      name: label.includes("\n") ? label.split("\n").join(" ") : label,
+      amount: safeValues[i] ?? 0,
+    }));
+    const nonZero = pairs.filter((p) => p.amount > 0);
+    if (nonZero.length === 0) return [{ name: "—", population: 1, color: "#64748b" }];
+    const top = nonZero.slice(0, 6);
+    const rest = nonZero.slice(6).reduce((s, x) => s + x.amount, 0);
+    const data: PieSlice[] = top.map((p, i) => ({
+      name: p.name.length > 8 ? `${p.name.slice(0, 7)}…` : p.name,
+      population: p.amount,
+      color: palette[i % palette.length],
+    }));
+    if (rest > 0) {
+      data.push({ name: "…", population: rest, color: palette[data.length % palette.length] });
+    }
+    return data;
+  }, [safeLabels, safeValues, variant]);
 
   const datePickerSheet = useBottomSheet({
     snapPoints: Platform.OS === "ios" ? ["62%", "88%"] : ["58%", "78%"],
     enablePanDownToClose: true,
   });
 
-  useFabOverlayWhenSheetOpen(datePickerSheet.isOpen);
-
-  const { present: presentDatePicker } = datePickerSheet;
-  const { schedulePresent: scheduleDatePickerPresent, cancelScheduledPresent: cancelDatePickerPresent } =
-    useDeferredSheetPresent(presentDatePicker);
-
   const pct = earnings?.changePercent ?? 0;
   const pctText = `${pct >= 0 ? "+" : ""}${pct.toFixed(1)}%`;
-  const prevText = `${t("profile.previousPeriod")}: ${(earnings?.previousPeriodEarnings ?? 0).toLocaleString("tr-TR")} ${CURRENCY}`;
-  const profitFg = pct >= 0 ? "#4ade80" : "#fb923c";
+  const softPositive = pct >= 0;
+  const profitBg = softPositive ? (isDark ? "rgba(16,185,129,0.22)" : "rgba(187,247,208,0.95)") : (isDark ? "rgba(248,113,113,0.18)" : "rgba(254,202,202,0.95)");
+  const profitFg = softPositive ? "#059669" : "#dc2626";
 
-  const pieSlices = useMemo(() => {
-    const pairs = safeLabels.map((label, i) => ({
-      name: label.length > 8 ? `${label.slice(0, 7)}…` : label,
-      amount: safeValues[i] ?? 0,
-    }));
-    const nonZero = pairs.filter((p) => p.amount > 0);
-    if (nonZero.length === 0) return [{ name: "—", population: 1, color: "#64748b", legendFontColor: "#94a3b8" }];
-    const top = nonZero.slice(0, 7);
-    const rest = nonZero.slice(7).reduce((s, x) => s + x.amount, 0);
-    const data = top.map((p, i) => ({
-      name: p.name,
-      population: p.amount,
-      color: PIE_COLORS[i % PIE_COLORS.length],
-      legendFontColor: isDark ? "#cbd5e1" : "#475569",
-    }));
-    if (rest > 0) {
-      data.push({
-        name: "…",
-        population: rest,
-        color: PIE_COLORS[data.length % PIE_COLORS.length],
-        legendFontColor: isDark ? "#cbd5e1" : "#475569",
-      });
-    }
-    return data;
-  }, [safeLabels, safeValues, isDark]);
-
-  const filterLabels: Record<DateFilterType, string> = useMemo(
-    () => ({
-      daily: t("profile.filterDaily") || "Günlük",
-      weekly: t("profile.filterWeekly") || "Haftalık",
-      monthly: t("profile.filterMonthly") || "Aylık",
-      yearly: t("profile.filterYearly") || "Yıllık",
-      custom: t("profile.filterCustom") || "Tarih Aralığı",
-    }),
-    [t],
-  );
+  // useMemo ile sarmalıyoruz; düz obje her render'da yeni referans üretir.
+  const filterLabels = useMemo<Record<DateFilterType, string>>(() => ({
+    daily: t("profile.filterDaily"),
+    weekly: t("profile.filterWeekly"),
+    monthly: t("profile.filterMonthly"),
+    yearly: t("profile.filterYearly"),
+    custom: t("profile.filterCustom"),
+  }), [t]);
 
   const pageTitle = isFreeBarber
     ? t("profile.panelEarningsTitle")
@@ -814,7 +643,6 @@ export default function ShopInsightsPage() {
   const onPickerChange = (event: any, d?: Date) => {
     if (Platform.OS === "android" && event?.type === "dismissed") {
       setPickerMode(null);
-      cancelDatePickerPresent();
       datePickerSheet.dismiss();
       return;
     }
@@ -822,7 +650,6 @@ export default function ShopInsightsPage() {
       if (pickerMode === "start") setCustomStart(d);
       if (pickerMode === "end") setCustomEnd(d);
       setPickerMode(null);
-      cancelDatePickerPresent();
       datePickerSheet.dismiss();
       return;
     }
@@ -832,636 +659,424 @@ export default function ShopInsightsPage() {
   };
 
   return (
-    <SafeAreaView
-      style={{ flex: 1, backgroundColor: colors.screenBg }}
-      edges={["top"]}
-    >
-      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={colors.screenBg} />
+    <View style={{ flex: 1, backgroundColor: earningsTheme.pageBg }}>
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={earningsTheme.headerSurface} translucent={false} />
+      <SafeAreaView
+        style={{ flex: 1, backgroundColor: earningsTheme.headerSurface }}
+        edges={["top"]}
+      >
+      {/* ── Header ── */}
       <View
         style={{
-          flexDirection: "row",
-          alignItems: "center",
           paddingHorizontal: 16,
           paddingVertical: 12,
-          backgroundColor: colors.screenBg,
+          backgroundColor: earningsTheme.headerSurface,
           borderBottomWidth: 1,
-          borderBottomColor: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.07)",
+          borderBottomColor: earningsTheme.accentBorder,
         }}
       >
-        <TouchableOpacity
-          onPress={() => router.back()}
-          style={{
-            padding: 8,
-            borderRadius: 12,
-            backgroundColor: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)",
-          }}
-        >
-          <Icon source="chevron-left" size={24} color={colors.sectionHeaderText} />
-        </TouchableOpacity>
-        <View style={{ flex: 1, marginLeft: 12 }}>
-          <Text
-            style={{
-              color: colors.sectionHeaderText,
-              fontFamily: "CenturyGothic-Bold",
-              fontSize: 19,
-            }}
-          >
-            {pageTitle}
-          </Text>
-          <Text style={{ color: colors.textSecondary, fontSize: 13, marginTop: 2 }}>
-            {isFreeBarber ? t("profile.panelEarningsSubtitle") : t("profile.storeEarningsSubtitle")}
-          </Text>
-        </View>
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+        <View style={{ flexDirection: "row", alignItems: "center" }}>
           <TouchableOpacity
-            onPress={onExportCsv}
-            accessibilityLabel={t("profile.exportExcel")}
-            style={{ padding: 8, borderRadius: 12, backgroundColor: isDark ? "rgba(16,185,129,0.15)" : "rgba(16,185,129,0.18)" }}
+            onPress={() => router.back()}
+            style={{ padding: 8, borderRadius: 12, backgroundColor: earningsTheme.accentSoft, flexShrink: 0 }}
           >
-            <Icon source="microsoft-excel" size={22} color="#059669" />
+            <Icon source="chevron-left" size={24} color={earningsTheme.accent} />
           </TouchableOpacity>
-          <TouchableOpacity
-            onPress={onExportPdf}
-            accessibilityLabel={t("profile.exportPdf")}
-            style={{ padding: 8, borderRadius: 12, backgroundColor: isDark ? "rgba(239,68,68,0.15)" : "rgba(239,68,68,0.16)" }}
-          >
-            <Icon source="file-pdf-box" size={22} color="#dc2626" />
-          </TouchableOpacity>
-          {isBarberStore && stores.length >= 2 && (
-            <TouchableOpacity
-              onPress={() => router.push("/(screens)/profile/store-compare")}
-              style={{ padding: 8, borderRadius: 12, backgroundColor: isDark ? "rgba(250, 204, 21,0.12)" : "rgba(250, 204, 21,0.2)" }}
+          <View style={{ flex: 1, marginLeft: 10, minWidth: 0, flexDirection: "row", alignItems: "center", gap: 8 }}>
+            <View
+              style={{
+                width: 34,
+                height: 34,
+                borderRadius: 10,
+                backgroundColor: earningsTheme.accentSoft,
+                alignItems: "center",
+                justifyContent: "center",
+                flexShrink: 0,
+              }}
             >
-              <Icon source="compare-horizontal" size={22} color="#FACC15" />
+              <Icon source={earningsTheme.headerIcon} size={18} color={earningsTheme.accent} />
+            </View>
+            <Text
+              numberOfLines={1}
+              style={{
+                flex: 1,
+                color: colors.sectionHeaderText,
+                fontFamily: "CenturyGothic-Bold",
+                fontSize: 16,
+              }}
+            >
+              {pageTitle}
+            </Text>
+          </View>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 4, flexShrink: 0, marginLeft: 6 }}>
+            <TouchableOpacity
+              onPress={onExportCsv}
+              accessibilityLabel={t("profile.exportExcel")}
+              style={{ padding: 7, borderRadius: 10, backgroundColor: isDark ? "rgba(16,185,129,0.15)" : "rgba(16,185,129,0.18)" }}
+            >
+              <Icon source="microsoft-excel" size={20} color="#059669" />
             </TouchableOpacity>
-          )}
+            <TouchableOpacity
+              onPress={onExportPdf}
+              accessibilityLabel={t("profile.exportPdf")}
+              style={{ padding: 7, borderRadius: 10, backgroundColor: isDark ? "rgba(239,68,68,0.15)" : "rgba(239,68,68,0.16)" }}
+            >
+              <Icon source="file-pdf-box" size={20} color="#dc2626" />
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
 
-      <ScrollView
-        style={{ backgroundColor: colors.screenBg }}
-        contentContainerStyle={{ paddingBottom: 72, flexGrow: 1, backgroundColor: colors.screenBg }}
-        showsVerticalScrollIndicator={false}
-        stickyHeaderIndices={[0]}
+      {/* ── Filtreler — header'ın hemen altında, sabit şerit ── */}
+      <View
+        style={{
+          backgroundColor: earningsTheme.headerSurface,
+          borderBottomWidth: isBarberStore && stores.length > 0 ? 0 : 1,
+          borderBottomColor: earningsTheme.accentBorder,
+          paddingTop: 8,
+          paddingBottom: isBarberStore && stores.length > 0 ? 4 : 10,
+        }}
       >
-        <View
+        <Text
           style={{
-            paddingHorizontal: 12,
-            paddingTop: 10,
-            paddingBottom: 10,
-            backgroundColor: colors.screenBg,
-            borderBottomWidth: 1,
-            borderBottomColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.07)",
-            zIndex: 10,
+            color: colors.sectionHeaderText,
+            fontFamily: "CenturyGothic-Bold",
+            fontSize: 12,
+            paddingHorizontal: 16,
+            marginBottom: 6,
           }}
         >
-          <Text
-            style={{
-              color: colors.sectionHeaderText,
-              fontFamily: "CenturyGothic-Bold",
-              marginBottom: 8,
-              fontSize: 14,
-            }}
-          >
-            {t("profile.filter") || "Filtreler"}
-          </Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingRight: 4 }}>
-            {(["daily", "weekly", "monthly", "yearly", "custom"] as DateFilterType[]).map((f) => (
-              <FilterChip
-                key={f}
-                label={filterLabels[f]}
-                active={dateFilter === f}
-                onPress={() => setDateFilter(f)}
-                colors={colors}
-              />
-            ))}
-          </ScrollView>
+          {t("profile.filter")}
+        </Text>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={{ paddingHorizontal: 16, gap: 6 }}
+        >
+          {(["daily", "weekly", "monthly", "yearly", "custom"] as DateFilterType[]).map((f) => (
+            <FilterChip
+              key={f}
+              label={filterLabels[f]}
+              active={dateFilter === f}
+              onPress={() => setDateFilter(f)}
+              colors={colors}
+              activeColor={earningsTheme.chipActiveBg}
+            />
+          ))}
+        </ScrollView>
 
-          {dateFilter === "custom" && (
-            <View style={{ flexDirection: "row", gap: 8, marginTop: 10, marginBottom: 4 }}>
-              <TouchableOpacity
-                onPress={() => {
-                  setPickerMode("start");
-                  scheduleDatePickerPresent(60);
-                }}
-                style={{
-                  flex: 1,
-                  borderRadius: 12,
-                  padding: 10,
-                  backgroundColor: isDark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)",
-                  borderWidth: 1,
-                  borderColor: isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.08)",
-                }}
-              >
-                <Text style={{ color: colors.textSecondary, fontSize: 13 }}>{t("profile.customStart") || "Başlangıç"}</Text>
-                <Text style={{ color: colors.sectionHeaderText, fontFamily: "CenturyGothic-Bold", fontSize: 15, marginTop: 2 }}>
-                  {customStart.toLocaleDateString("tr-TR")}
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                onPress={() => {
-                  setPickerMode("end");
-                  scheduleDatePickerPresent(60);
-                }}
-                style={{
-                  flex: 1,
-                  borderRadius: 12,
-                  padding: 10,
-                  backgroundColor: isDark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)",
-                  borderWidth: 1,
-                  borderColor: isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.08)",
-                }}
-              >
-                <Text style={{ color: colors.textSecondary, fontSize: 13 }}>{t("profile.customEnd") || "Bitiş"}</Text>
-                <Text style={{ color: colors.sectionHeaderText, fontFamily: "CenturyGothic-Bold", fontSize: 15, marginTop: 2 }}>
-                  {customEnd.toLocaleDateString("tr-TR")}
-                </Text>
-              </TouchableOpacity>
-            </View>
-          )}
-
-          {isBarberStore && stores.length > 0 && (
-            <View style={{ marginTop: 10 }}>
-              <Text
-                style={{
-                  color: colors.sectionHeaderText,
-                  fontFamily: "CenturyGothic-Bold",
-                  marginBottom: 8,
-                  fontSize: 14,
-                }}
-              >
-                {t("profile.selectStore")}
+        {/* Özel Tarih Aralığı */}
+        {dateFilter === "custom" && (
+          <View style={{ flexDirection: "row", gap: 8, marginTop: 8, paddingHorizontal: 16 }}>
+            <TouchableOpacity
+              onPress={() => { setPickerMode("start"); setTimeout(() => datePickerSheet.present(), 60); }}
+              style={{
+                flex: 1, borderRadius: 12, padding: 10,
+                backgroundColor: earningsTheme.accentSoft,
+                borderWidth: 1, borderColor: earningsTheme.accentBorder,
+              }}
+            >
+              <Text style={{ color: colors.textSecondary, fontSize: 11 }}>{t("profile.customStart")}</Text>
+              <Text style={{ color: colors.sectionHeaderText, fontFamily: "CenturyGothic-Bold", marginTop: 2 }}>
+                {customStart.toLocaleDateString("tr-TR")}
               </Text>
-              <MultiSelect
-                data={storeSelectOptions}
-                labelField="label"
-                valueField="value"
-                value={selectedStoreIds}
-                onChange={(values: string[]) => {
-                  if (!values || values.length === 0) return;
-                  setSelectedStoreIds(values);
-                }}
-                placeholder={t("profile.selectStore")}
-                search
-                searchPlaceholder={t("common.search")}
-                dropdownPosition="auto"
-                inside
-                alwaysRenderSelectedItem
-                visibleSelectedItem
-                activeColor="#FACC15"
-                style={{
-                  borderWidth: 1,
-                  borderColor: isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.1)",
-                  borderRadius: 10,
-                  paddingHorizontal: 10,
-                  minHeight: 44,
-                  backgroundColor: isDark ? "rgba(255,255,255,0.03)" : "#f8fafc",
-                }}
-                containerStyle={{
-                  borderRadius: 12,
-                  borderWidth: 1,
-                  borderColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)",
-                  backgroundColor: isDark ? "#121522" : colors.cardBg,
-                }}
-                inputSearchStyle={{
-                  color: colors.sectionHeaderText,
-                  borderRadius: 8,
-                  borderColor: isDark ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.12)",
-                }}
-                placeholderStyle={{
-                  color: colors.textSecondary,
-                  fontSize: 14,
-                }}
-                selectedTextStyle={{
-                  color: colors.sectionHeaderText,
-                  fontSize: 14,
-                  fontFamily: "CenturyGothic-Bold",
-                }}
-                itemTextStyle={{
-                  color: colors.sectionHeaderText,
-                  fontSize: 14,
-                }}
-                selectedStyle={{
-                  borderRadius: 14,
-                  backgroundColor: isDark ? "rgba(250, 204, 21,0.22)" : "rgba(250, 204, 21,0.2)",
-                  borderColor: "#FACC15",
-                }}
-                selectedTextProps={{ numberOfLines: 1 }}
-              />
-            </View>
-          )}
-        </View>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => { setPickerMode("end"); setTimeout(() => datePickerSheet.present(), 60); }}
+              style={{
+                flex: 1, borderRadius: 12, padding: 10,
+                backgroundColor: earningsTheme.accentSoft,
+                borderWidth: 1, borderColor: earningsTheme.accentBorder,
+              }}
+            >
+              <Text style={{ color: colors.textSecondary, fontSize: 11 }}>{t("profile.customEnd")}</Text>
+              <Text style={{ color: colors.sectionHeaderText, fontFamily: "CenturyGothic-Bold", marginTop: 2 }}>
+                {customEnd.toLocaleDateString("tr-TR")}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
+      </View>
 
-        <View style={{ paddingTop: 8, paddingBottom: 6, backgroundColor: colors.screenBg }}>
-          {loadingStore && (
-            <View style={{ alignItems: "center", marginBottom: 12 }}>
-              <ActivityIndicator color="#FACC15" />
-            </View>
-          )}
-
-          {/* Kazanç kartları: yatay snap + scroll’a göre yan kartlar silik/küçük */}
-          <ShopInsightsEarningsCarousel
-            cards={[
-              {
-                label: `${filterLabels[dateFilter]} ${t("profile.earningsSuffix")}`,
-                value: earnings?.totalEarnings ?? 0,
-                icon: "cash-multiple",
-                accentColor: "#5eead4",
-                lottieSource: LOTTIE_EARNINGS_COIN,
-                animateNumbers: showPriceAnimationSetting,
-              },
-              {
-                label: t("profile.previousPeriod"),
-                value: earnings?.previousPeriodEarnings ?? 0,
-                icon: "history",
-                accentColor: "#7dd3fc",
-                lottieSource: LOTTIE_EARNINGS_TREASURE,
-                animateNumbers: showPriceAnimationSetting,
-              },
-              {
-                label: t("profile.profitRate"),
-                value: 0,
-                valueOverride: pctText,
-                icon: pct >= 0 ? "trending-up" : "trending-down",
-                accentColor: profitFg,
-                lottieSource: LOTTIE_EARNINGS_GROWTH,
-                animateNumbers: false,
-              },
-              {
-                label: t("profile.allTimeTotalLabel"),
-                value: allTimeTotalEarnings,
-                icon: "chart-timeline-variant",
-                accentColor: "#fcd34d",
-                lottieSource: LOTTIE_EARNINGS_TREASURE,
-                animateNumbers: showPriceAnimationSetting,
-              },
-            ]}
-            isDark={isDark}
-            showLottie={showImageAnimationSetting}
+      {/* ── Dükkan Seçici (BarberStore) — filtrelerin altında sabit ── */}
+      {isBarberStore && stores.length > 0 && (
+        <View
+          style={{
+            backgroundColor: earningsTheme.headerSurface,
+            borderBottomWidth: 1,
+            borderBottomColor: earningsTheme.accentBorder,
+            paddingHorizontal: 16,
+            paddingTop: 10,
+            paddingBottom: 12,
+          }}
+        >
+          <Text style={{ color: colors.sectionHeaderText, fontFamily: "CenturyGothic-Bold", marginBottom: 8, fontSize: 13 }}>
+            {t("profile.selectStore")}
+          </Text>
+          <MultiSelect
+            data={storeSelectOptions}
+            labelField="label"
+            valueField="value"
+            value={selectedStoreIds}
+            onChange={(values: string[]) => {
+              if (!values || values.length === 0) return;
+              setSelectedStoreIds(values);
+            }}
+            placeholder={t("profile.selectStore")}
+            search
+            searchPlaceholder={t("common.search")}
+            dropdownPosition="auto"
+            inside
+            alwaysRenderSelectedItem
+            visibleSelectedItem
+            activeColor={earningsTheme.accentSoft}
+            style={{
+              borderWidth: 1,
+              borderColor: earningsTheme.accentBorder,
+              borderRadius: 10,
+              paddingHorizontal: 10,
+              minHeight: 44,
+              backgroundColor: isDark ? "rgba(255,255,255,0.03)" : "#f8fafc",
+            }}
+            containerStyle={{
+              borderRadius: 12,
+              borderWidth: 1,
+              borderColor: earningsTheme.accentBorder,
+              backgroundColor: isDark ? "#121522" : "#ffffff",
+            }}
+            inputSearchStyle={{ color: colors.sectionHeaderText, borderRadius: 8, borderColor: earningsTheme.accentBorder }}
+            placeholderStyle={{ color: colors.textSecondary, fontSize: 12 }}
+            selectedTextStyle={{ color: colors.sectionHeaderText, fontSize: 12, fontFamily: "CenturyGothic-Bold" }}
+            itemTextStyle={{ color: colors.sectionHeaderText, fontSize: 12 }}
+            selectedStyle={{ borderRadius: 14, backgroundColor: earningsTheme.accentSoft, borderColor: earningsTheme.accent }}
+            selectedTextProps={{ numberOfLines: 1 }}
           />
         </View>
+      )}
 
+      <ScrollView
+        contentContainerStyle={{ paddingTop: 4, paddingBottom: 60 }}
+        showsVerticalScrollIndicator={false}
+      >
+        {loadingStore && (
+          <View style={{ alignItems: "center", marginBottom: 10 }}>
+            <ActivityIndicator color={earningsTheme.accent} />
+          </View>
+        )}
+
+        <View style={{ marginBottom: 16 }}>
+        <ShopInsightsEarningsCarousel
+          cards={[
+            {
+              label: `${filterLabels[dateFilter]} ${t("profile.earningsSuffix")}`,
+              value: earnings?.totalEarnings ?? 0,
+              icon: "cash-multiple",
+              accentColor: "#5eead4",
+              lottieSource: LOTTIE_EARNINGS_COIN,
+              animateNumbers: showPriceAnimationSetting,
+            },
+            {
+              label: t("profile.previousPeriod"),
+              value: earnings?.previousPeriodEarnings ?? 0,
+              icon: "history",
+              accentColor: "#7dd3fc",
+              lottieSource: LOTTIE_EARNINGS_TREASURE,
+              animateNumbers: showPriceAnimationSetting,
+            },
+            {
+              label: t("profile.profitRate"),
+              value: 0,
+              valueOverride: pctText,
+              icon: pct >= 0 ? "trending-up" : "trending-down",
+              accentColor: profitFg,
+              lottieSource: LOTTIE_EARNINGS_GROWTH,
+              animateNumbers: false,
+            },
+            {
+              label: t("profile.allTimeTotalLabel"),
+              value: allTimeTotalEarnings,
+              icon: "chart-timeline-variant",
+              accentColor: "#fcd34d",
+              lottieSource: LOTTIE_EARNINGS_TREASURE,
+              animateNumbers: showPriceAnimationSetting,
+            },
+          ]}
+          isDark={isDark}
+          showLottie={showImageAnimationSetting}
+        />
+        </View>
+
+        {/* ── Grafik / Tablo Kartı ── */}
         <View
           style={{
-            backgroundColor: colors.cardBg,
-            borderRadius: 18,
+            backgroundColor: earningsTheme.headerSurface,
+            borderRadius: earningsTheme.cardRadius,
             padding: 14,
-            marginHorizontal: 12,
-            marginTop: 14,
-            borderWidth: StyleSheet.hairlineWidth,
-            borderColor: colors.borderColor2,
+            marginHorizontal: 16,
+            marginTop: 2,
+            borderWidth: earningsTheme.cardBorderWidth,
+            borderColor: earningsTheme.accentBorder,
           }}
         >
-          <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
-            <View style={{ flexDirection: "row", alignItems: "center", flex: 1, gap: 10, marginRight: 8 }}>
+          {/* Kart Başlığı: sol → ikon + başlık + alt başlık | sağ → "Grafik/Tablo" + switch */}
+          <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 10, flex: 1 }}>
               <View
                 style={{
-                  width: 38,
-                  height: 38,
-                  borderRadius: 12,
-                  backgroundColor: isDark ? "rgba(250, 204, 21,0.12)" : "rgba(250, 204, 21,0.2)",
-                  alignItems: "center",
-                  justifyContent: "center",
+                  width: 40, height: 40, borderRadius: 12,
+                  backgroundColor: earningsTheme.accentSoft,
+                  alignItems: "center", justifyContent: "center",
                 }}
               >
-                <Icon source="chart-areaspline" size={22} color="#FACC15" />
+                <Icon source="chart-line-variant" size={22} color={earningsTheme.accent} />
               </View>
-              <View style={{ flex: 1, minWidth: 0 }}>
-                <Text
-                  style={{ color: colors.sectionHeaderText, fontFamily: "CenturyGothic-Bold", fontSize: 16 }}
-                  numberOfLines={1}
-                >
-                  {t("profile.earningsChart") || "Kazanç Grafiği"}
+              <View style={{ flex: 1 }}>
+                <Text style={{ color: colors.sectionHeaderText, fontFamily: "CenturyGothic-Bold", fontSize: 15 }}>
+                  {t("profile.earningsChart")}
                 </Text>
-                <Text style={{ color: colors.textTertiary, fontSize: 12, marginTop: 2 }} numberOfLines={2}>
-                  {t("profile.earningsBreakdownHint")}
+                <Text style={{ color: colors.textSecondary, fontSize: 11, marginTop: 1 }}>
+                  {t("profile.earningsChartSubtitle")}
+
                 </Text>
               </View>
             </View>
             <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-              <Text style={{ color: colors.textSecondary, fontSize: 13 }}>{showChart ? t("profile.viewChart") : t("profile.viewTable")}</Text>
-              <View
-                style={{
-                  borderRadius: 22,
-                  borderWidth: StyleSheet.hairlineWidth,
-                  borderColor: isDark ? "rgba(255,255,255,0.12)" : "rgba(15,23,42,0.12)",
-                }}
-              >
-                <Switch
-                  value={showChart}
-                  onValueChange={setShowChart}
-                  {...getEarningsChartSwitchProps(showChart)}
-                />
-              </View>
+              <Text style={{ color: colors.textSecondary, fontSize: 12 }}>
+                {showChart ? t("profile.viewChart") : t("profile.viewTable")}
+              </Text>
+              <Switch value={showChart} onValueChange={setShowChart} {...chartSwitchProps} />
             </View>
           </View>
 
           {showChart ? (
             <>
-              <View style={{ flexDirection: "row", gap: 6, marginBottom: 10, flexWrap: "wrap" }}>
-                {(["line", "bar", "pie"] as ChartType[]).map((ct) => (
-                  <TouchableOpacity
-                    key={ct}
-                    onPress={() => setChartType(ct)}
-                    style={{
-                      paddingHorizontal: 12,
-                      paddingVertical: 6,
-                      borderRadius: 10,
-                      backgroundColor: chartType === ct ? "#FACC15" : colors.cardBg3,
-                      borderWidth: 1,
-                      borderColor: chartType === ct ? "#FACC15" : colors.borderColor2,
-                    }}
-                  >
-                    <Text
-                      style={{
-                        color: chartType === ct ? "#1f2937" : colors.sectionHeaderText,
-                        fontFamily: "CenturyGothic-Bold",
-                        fontSize: 14,
-                      }}
-                    >
-                      {ct === "line" ? t("profile.chartModeLine") : ct === "bar" ? t("profile.chartModeBar") : t("profile.chartModePie")}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
+              {/* Grafik Tipi Sekmeleri */}
+              <EarningsChartTypeTabs
+                chartType={chartType}
+                onChange={setChartType}
+                theme={earningsTheme}
+                colors={colors}
+                labels={{
+                  line: t("profile.chartModeLine"),
+                  bar: t("profile.chartModeBar"),
+                  pie: t("profile.chartModePie"),
+                }}
+              />
+
+              {/* Dönem Bilgi Şeridi */}
+              <View style={{ marginTop: 10 }}>
+                <EarningsPeriodStrip
+                  theme={earningsTheme}
+                  colors={colors}
+                  periodLabel={filterLabels[dateFilter]}
+                  rangeLabel={`${toDateStr(rangeStart)} — ${toDateStr(rangeEnd)}`}
+                  totalLabel={t("profile.chartPeriodTotal")}
+                  totalAmount={earnings?.totalEarnings ?? 0}
+                  currency={CURRENCY}
+                  animateNumbers={showPriceAnimationSetting}
+                />
               </View>
 
-              {!chartAwaitingEarnings && earnings != null && (
+              {!hasChartActivity ? (
                 <View
                   style={{
-                    marginBottom: 12,
-                    paddingVertical: 10,
-                    paddingHorizontal: 12,
-                    borderRadius: 12,
-                    backgroundColor: colors.cardBg3,
-                    borderWidth: StyleSheet.hairlineWidth,
-                    borderColor: colors.borderColor2,
-                  }}
-                >
-                  <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-                    <Icon source="calendar-range" size={18} color="#FACC15" />
-                    <Text style={{ color: colors.textSecondary, fontSize: 13, flex: 1 }} numberOfLines={2}>
-                      {filterLabels[dateFilter]} · {toDateStr(rangeStart)} — {toDateStr(rangeEnd)}
-                    </Text>
-                  </View>
-                  <Text
-                    style={{
-                      marginTop: 8,
-                      color: colors.sectionHeaderText,
-                      fontFamily: "CenturyGothic-Bold",
-                      fontSize: 18,
-                    }}
-                  >
-                    {t("profile.chartPeriodTotal")}{" "}
-                    {(earnings.totalEarnings ?? 0).toLocaleString("tr-TR", {
-                      minimumFractionDigits: 0,
-                      maximumFractionDigits: 2,
-                    })}{" "}
-                    {CURRENCY}
-                  </Text>
-                </View>
-              )}
-
-              {chartAwaitingEarnings ? (
-                <View
-                  style={{
-                    minHeight: 210,
-                    alignItems: "center",
-                    justifyContent: "center",
-                    borderRadius: 14,
-                    backgroundColor: colors.cardBg3,
-                    borderWidth: StyleSheet.hairlineWidth,
-                    borderColor: colors.borderColor2,
-                  }}
-                >
-                  <ActivityIndicator color="#FACC15" size="large" />
-                  <Text style={{ color: colors.textSecondary, fontSize: 14, marginTop: 12 }}>{t("profile.chartLoading")}</Text>
-                </View>
-              ) : !hasChartActivity ? (
-                <View
-                  style={{
-                    alignItems: "center",
-                    justifyContent: "center",
-                    paddingVertical: 28,
-                    paddingHorizontal: 12,
-                    borderRadius: 14,
-                    borderWidth: 1,
-                    borderStyle: "dashed",
-                    borderColor: isDark ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.1)",
-                    backgroundColor: isDark ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)",
+                    alignItems: "center", justifyContent: "center",
+                    paddingVertical: 28, paddingHorizontal: 12,
+                    borderRadius: earningsTheme.cardRadius,
+                    borderWidth: 1, borderStyle: "dashed",
+                    borderColor: earningsTheme.accentBorder,
+                    backgroundColor: earningsTheme.accentSoft,
                   }}
                 >
                   {showImageAnimationSetting ? (
                     <LottieView
                       source={require("../../../assets/animations/earnings-empty.json") as any}
-                      autoPlay
-                      loop
-                      style={{ width: 120, height: 120 }}
+                      autoPlay loop style={{ width: 120, height: 120 }}
                     />
                   ) : (
-                    <Icon source="chart-timeline-variant" size={44} color={colors.textTertiary} />
+                    <Icon source="chart-timeline-variant" size={44} color={earningsTheme.accent} />
                   )}
-                  <Text
-                    style={{
-                      color: colors.sectionHeaderText,
-                      fontFamily: "CenturyGothic-Bold",
-                      fontSize: 16,
-                      marginTop: 10,
-                      textAlign: "center",
-                    }}
-                  >
+                  <Text style={{ color: colors.sectionHeaderText, fontFamily: "CenturyGothic-Bold", fontSize: 14, marginTop: 10, textAlign: "center" }}>
                     {t("profile.earningsEmptyTitle")}
                   </Text>
-                  <Text style={{ color: colors.textSecondary, fontSize: 14, marginTop: 6, textAlign: "center" }}>
+                  <Text style={{ color: colors.textSecondary, fontSize: 12, marginTop: 6, textAlign: "center" }}>
                     {t("profile.earningsEmptySubtitle")}
                   </Text>
                 </View>
               ) : chartType === "pie" ? (
-                <View
-                  style={{
-                    alignItems: "center",
-                    overflow: "hidden",
-                    borderRadius: 14,
-                    backgroundColor: isDark ? "rgba(0,0,0,0.2)" : colors.cardBg3,
-                    borderWidth: StyleSheet.hairlineWidth,
-                    borderColor: colors.borderColor2,
-                    paddingVertical: 8,
-                  }}
-                >
-                  <PieChart
-                    data={pieSlices as any}
-                    width={Math.min(SCREEN_WIDTH - 56, 360)}
-                    height={220}
-                    chartConfig={chartConfig}
-                    accessor="population"
-                    backgroundColor="transparent"
-                    paddingLeft="12"
-                    hasLegend={false}
-                    absolute
-                    style={{ marginVertical: 4 }}
-                  />
-                  <View style={{ width: "100%", marginTop: 8, gap: 6, paddingHorizontal: 4 }}>
-                    {pieSlices.map((s, idx) => (
-                      <View key={`${s.name}-${idx}`} style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
-                        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-                          <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: (s as any).color }} />
-                          <Text style={{ color: colors.sectionHeaderText, fontSize: 14 }} numberOfLines={1}>
-                            {s.name}
-                          </Text>
-                        </View>
-                        <Text style={{ color: colors.textSecondary, fontSize: 14, fontFamily: "CenturyGothic-Bold" }}>
-                          {(s as any).population?.toLocaleString?.("tr-TR") ?? ""} {CURRENCY}
-                        </Text>
-                      </View>
-                    ))}
-                  </View>
-                </View>
+                <EarningsPieBlock
+                  pieSlices={pieSlices}
+                  width={viewportWidth}
+                  colors={colors}
+                  chartStyle={chartStyle}
+                />
               ) : (
-                <View
-                  style={{
-                    overflow: "hidden",
-                    alignItems: "flex-start",
-                    borderRadius: 14,
-                    backgroundColor: isDark ? "rgba(0,0,0,0.2)" : colors.cardBg3,
-                    borderWidth: StyleSheet.hairlineWidth,
-                    borderColor: colors.borderColor2,
-                    paddingTop: 6,
-                    paddingBottom: 4,
-                  }}
+                <EarningsChartShell
+                  theme={earningsTheme}
+                  isDark={isDark}
+                  hintColor={earningsTheme.accent}
+                  labelHint={labelHint}
+                  axisHint={t("profile.chartScrollHint")}
                 >
-                  <Text style={{ color: colors.textTertiary, fontSize: 12, marginBottom: 6, marginHorizontal: 8 }}>
-                    {t("profile.chartScrollHint")}
-                  </Text>
-                  <ScrollView horizontal showsHorizontalScrollIndicator={safeLabels.length > 6}>
-                    {chartType === "line" ? (
-                      <LineChart
-                        data={chartData}
-                        width={chartInnerWidth}
-                        height={chartPlotHeight}
-                        chartConfig={chartConfig}
-                        bezier
-                        withInnerLines
-                        withOuterLines={false}
-                        style={{ borderRadius: 12, marginLeft: 0 }}
-                        fromZero
-                        yAxisLabel=""
-                        yAxisSuffix=""
-                        segments={4}
-                        horizontalLabelRotation={horizontalLabelRotation}
-                      />
-                    ) : (
-                      <BarChart
-                        data={chartData}
-                        width={chartInnerWidth}
-                        height={chartPlotHeight}
-                        yAxisLabel=""
-                        yAxisSuffix=""
-                        chartConfig={chartConfig}
-                        style={{ borderRadius: 12, marginLeft: 0 }}
-                        fromZero
-                        showBarTops={false}
-                        withInnerLines={false}
-                        segments={4}
-                        horizontalLabelRotation={horizontalLabelRotation}
-                      />
-                    )}
-                  </ScrollView>
-                </View>
+                  <EarningsLineBarChart
+                    chartType={chartType}
+                    labels={safeLabels}
+                    values={safeValues}
+                    chartStyle={chartStyle}
+                    viewportWidth={viewportWidth}
+                    safeLabelsLength={safeLabels.length}
+                  />
+                </EarningsChartShell>
               )}
             </>
           ) : !hasChartActivity ? (
             <View
               style={{
-                alignItems: "center",
-                justifyContent: "center",
-                paddingVertical: 24,
-                paddingHorizontal: 12,
-                marginTop: 14,
-                borderRadius: 14,
-                borderWidth: 1,
-                borderStyle: "dashed",
-                borderColor: isDark ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.1)",
-                backgroundColor: isDark ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)",
+                alignItems: "center", justifyContent: "center",
+                paddingVertical: 24, paddingHorizontal: 12,
+                borderRadius: earningsTheme.cardRadius,
+                borderWidth: 1, borderStyle: "dashed",
+                borderColor: earningsTheme.accentBorder,
+                backgroundColor: earningsTheme.accentSoft,
               }}
             >
               {showImageAnimationSetting ? (
                 <LottieView
                   source={require("../../../assets/animations/earnings-empty.json") as any}
-                  autoPlay
-                  loop
-                  style={{ width: 100, height: 100 }}
+                  autoPlay loop style={{ width: 100, height: 100 }}
                 />
               ) : (
-                <Icon source="table-large" size={40} color={colors.textTertiary} />
+                <Icon source="table-large" size={40} color={earningsTheme.accent} />
               )}
-              <Text
-                style={{
-                  color: colors.sectionHeaderText,
-                  fontFamily: "CenturyGothic-Bold",
-                  fontSize: 16,
-                  marginTop: 10,
-                  textAlign: "center",
-                }}
-              >
+              <Text style={{ color: colors.sectionHeaderText, fontFamily: "CenturyGothic-Bold", fontSize: 14, marginTop: 10, textAlign: "center" }}>
                 {t("profile.earningsEmptyTitle")}
               </Text>
-              <Text style={{ color: colors.textSecondary, fontSize: 14, marginTop: 6, textAlign: "center" }}>
+              <Text style={{ color: colors.textSecondary, fontSize: 12, marginTop: 6, textAlign: "center" }}>
                 {t("profile.earningsEmptySubtitle")}
               </Text>
             </View>
           ) : (
-            <View
-              style={{
-                flexDirection: "row",
-                flexWrap: "wrap",
-                gap: 10,
-                justifyContent: "space-between",
-              }}
-            >
-              {safeLabels.map((label, i) => (
-                <View
-                  key={label + i}
-                  style={{
-                    width: (SCREEN_WIDTH - 12 * 2 - 14 * 2 - 10) / 2,
-                    borderRadius: 14,
-                    paddingVertical: 12,
-                    paddingHorizontal: 10,
-                    backgroundColor: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)",
-                    borderWidth: 1,
-                    borderColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)",
-                  }}
-                >
-                  <Text style={{ color: colors.textSecondary, fontSize: 13 }} numberOfLines={1}>
-                    {label}
-                  </Text>
-                  <Text
-                    style={{
-                      color: safeValues[i] > 0 ? "#0d9488" : colors.textSecondary,
-                      fontFamily: "CenturyGothic-Bold",
-                      fontSize: 17,
-                      marginTop: 6,
-                    }}
-                  >
-                    {safeValues[i].toLocaleString("tr-TR", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}{" "}
-                    {CURRENCY}
-                  </Text>
-                </View>
-              ))}
-            </View>
+            <EarningsBreakdownList
+              labels={safeLabels}
+              values={safeValues}
+              theme={earningsTheme}
+              colors={colors}
+              isDark={isDark}
+              currency={CURRENCY}
+            />
           )}
         </View>
       </ScrollView>
 
+      {/* Tarih Seçici Bottom Sheet */}
       <BottomSheetModal
         ref={datePickerSheet.ref}
         index={0}
         snapPoints={datePickerSheet.snapPoints}
+        enableDynamicSizing={false}
         enablePanDownToClose={datePickerSheet.enablePanDownToClose}
         backdropComponent={datePickerSheet.makeBackdrop()}
         onChange={datePickerSheet.handleChange}
-        onDismiss={() => {
-          cancelDatePickerPresent();
-          datePickerSheet.handleDismiss();
-        }}
         backgroundStyle={{ backgroundColor: colors.sheetBg }}
         handleIndicatorStyle={{ backgroundColor: colors.sheetHandle }}
       >
@@ -1469,10 +1084,10 @@ export default function ShopInsightsPage() {
           contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 32 }}
           keyboardShouldPersistTaps="handled"
         >
-          <Text style={{ color: colors.sectionHeaderText, fontFamily: "CenturyGothic-Bold", fontSize: 17, marginBottom: 8 }}>
+          <Text style={{ color: colors.sectionHeaderText, fontFamily: "CenturyGothic-Bold", fontSize: 15, marginBottom: 8 }}>
             {pickerMode === "start" ? t("profile.customStart") : pickerMode === "end" ? t("profile.customEnd") : ""}
           </Text>
-          <Text style={{ color: colors.textSecondary, fontSize: 14, marginBottom: 12 }}>
+          <Text style={{ color: colors.textSecondary, fontSize: 12, marginBottom: 12 }}>
             {t("profile.pickDateHint")}
           </Text>
           {pickerMode !== null && (
@@ -1499,22 +1114,24 @@ export default function ShopInsightsPage() {
           )}
           <TouchableOpacity
             onPress={() => {
-              cancelDatePickerPresent();
               datePickerSheet.dismiss();
               setPickerMode(null);
             }}
             style={{
               marginTop: 16,
-              backgroundColor: "#FACC15",
+              backgroundColor: earningsTheme.chipActiveBg,
               borderRadius: 12,
               paddingVertical: 12,
               alignItems: "center",
             }}
           >
-            <Text style={{ color: "#1f2937", fontFamily: "CenturyGothic-Bold", fontSize: 16 }}>{t("common.ok")}</Text>
+            <Text style={{ color: earningsTheme.chipActiveText, fontFamily: "CenturyGothic-Bold", fontSize: 15 }}>
+              {t("common.ok")}
+            </Text>
           </TouchableOpacity>
         </BottomSheetScrollView>
       </BottomSheetModal>
-    </SafeAreaView>
+      </SafeAreaView>
+    </View>
   );
 }

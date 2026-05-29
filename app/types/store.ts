@@ -31,6 +31,7 @@ export type BarberStoreCreateDto = {
   offerings: ServiceOfferingCreateDto[];
   manuelBarbers: ManuelBarberCreateDto[];
   workingHours: WorkingHourCreateDto[];
+  servicePackages?: ServicePackageSyncItemDto[];
 };
 
 export type BarberStoreUpdateDto = {
@@ -48,6 +49,15 @@ export type BarberStoreUpdateDto = {
   offerings: ServiceOfferingUpdateDto[];
   manuelBarbers: ManuelBarberUpdateDto[];
   workingHours: WorkingHourUpdateDto[];
+  servicePackages?: ServicePackageSyncItemDto[];
+};
+
+export type ServicePackageSyncItemDto = {
+  id?: string;
+  packageName: string;
+  totalPrice: number;
+  serviceOfferingIds?: string[];
+  serviceNames?: string[];
 };
 
 export type BarberStoreGetDto = {

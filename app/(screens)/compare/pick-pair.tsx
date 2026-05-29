@@ -17,6 +17,7 @@ import {
   isOtherUsersStore,
   shouldFilterOwnFreeBarberFromCompare,
   shouldFilterStoresToOthersOnly,
+  shouldShowFreeBarberCompareTab,
 } from "../../utils/compare-eligibility";
 import {
   CompareHeaderChrome,
@@ -58,6 +59,7 @@ export default function PickPairCompareScreen() {
   const { data: me } = useGetMeQuery();
   const userType = me?.data?.userType;
   const uid = me?.data?.id;
+  const showFreeBarberTab = shouldShowFreeBarberCompareTab(userType);
 
   const [kind, setKind] = useState<Kind>("store");
   const [selected, setSelected] = useState<string[]>([]);
@@ -76,6 +78,10 @@ export default function PickPairCompareScreen() {
   }, [favorites, userType, uid]);
 
   useEffect(() => {
+    if (!showFreeBarberTab) {
+      setKind("store");
+      return;
+    }
     if (kindParam === "freebarber") {
       setKind("freebarber");
       return;
@@ -86,7 +92,7 @@ export default function PickPairCompareScreen() {
     }
     if (storeItems.length >= 2 && fbItems.length < 2) setKind("store");
     else if (fbItems.length >= 2 && storeItems.length < 2) setKind("freebarber");
-  }, [kindParam, storeItems.length, fbItems.length]);
+  }, [kindParam, storeItems.length, fbItems.length, showFreeBarberTab]);
 
   useEffect(() => {
     setSelected([]);
@@ -141,99 +147,103 @@ export default function PickPairCompareScreen() {
         </View>
       </CompareHeaderChrome>
 
-      <View
-        style={{
-          flexDirection: "row",
-          paddingHorizontal: m.scrollPadH,
-          paddingTop: m.pickTopPad,
-          gap: m.pickTabGap,
-        }}
-      >
-        <MotiView
-          from={{ scale: 0.98, opacity: 0.9 }}
-          animate={{ scale: 1, opacity: 1 }}
-          transition={{ type: "spring", damping: 15, mass: 0.6 }}
-          style={{ flex: 1 }}
+      {showFreeBarberTab ? (
+        <View
+          style={{
+            flexDirection: "row",
+            paddingHorizontal: m.scrollPadH,
+            paddingTop: m.pickTopPad,
+            gap: m.pickTabGap,
+          }}
         >
-          <TouchableOpacity
-            onPress={() => {
-              setKind("store");
-              setSelected([]);
-            }}
-            disabled={storeItems.length < 2}
-            style={{
-              paddingVertical: m.pickTabPadV,
-              borderRadius: m.pickTabRadius,
-              alignItems: "center",
-              flexDirection: "row",
-              justifyContent: "center",
-              gap: 8,
-              backgroundColor:
-                kind === "store"
-                  ? CMP_GOLD
-                  : isDark
-                    ? "rgba(255,255,255,0.06)"
-                    : "rgba(255,255,255,0.85)",
-              borderWidth: kind === "store" ? 0 : 1,
-              borderColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(203,213,225,0.6)",
-              opacity: storeItems.length < 2 ? 0.45 : 1,
-            }}
+          <MotiView
+            from={{ scale: 0.98, opacity: 0.9 }}
+            animate={{ scale: 1, opacity: 1 }}
+            transition={{ type: "spring", damping: 15, mass: 0.6 }}
+            style={{ flex: 1 }}
           >
-            <Icon source="storefront-outline" size={m.backIcon - 2} color={kind === "store" ? "#1f2937" : colors.textSecondary} />
-            <Text
+            <TouchableOpacity
+              onPress={() => {
+                setKind("store");
+                setSelected([]);
+              }}
+              disabled={storeItems.length < 2}
               style={{
-                fontFamily: "CenturyGothic-Bold",
-                fontSize: m.rowFont + 1,
-                color: kind === "store" ? "#1f2937" : colors.sectionHeaderText,
+                paddingVertical: m.pickTabPadV,
+                borderRadius: m.pickTabRadius,
+                alignItems: "center",
+                flexDirection: "row",
+                justifyContent: "center",
+                gap: 8,
+                backgroundColor:
+                  kind === "store"
+                    ? CMP_GOLD
+                    : isDark
+                      ? "rgba(255,255,255,0.06)"
+                      : "rgba(255,255,255,0.85)",
+                borderWidth: kind === "store" ? 0 : 1,
+                borderColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(203,213,225,0.6)",
+                opacity: storeItems.length < 2 ? 0.45 : 1,
               }}
             >
-              {t("compare.tabStores")}
-            </Text>
-          </TouchableOpacity>
-        </MotiView>
-        <MotiView
-          from={{ scale: 0.98, opacity: 0.9 }}
-          animate={{ scale: 1, opacity: 1 }}
-          transition={{ type: "spring", damping: 15, mass: 0.6 }}
-          style={{ flex: 1 }}
-        >
-          <TouchableOpacity
-            onPress={() => {
-              setKind("freebarber");
-              setSelected([]);
-            }}
-            disabled={fbItems.length < 2}
-            style={{
-              paddingVertical: m.pickTabPadV,
-              borderRadius: m.pickTabRadius,
-              alignItems: "center",
-              flexDirection: "row",
-              justifyContent: "center",
-              gap: 8,
-              backgroundColor:
-                kind === "freebarber"
-                  ? CMP_GOLD
-                  : isDark
-                    ? "rgba(255,255,255,0.06)"
-                    : "rgba(255,255,255,0.85)",
-              borderWidth: kind === "freebarber" ? 0 : 1,
-              borderColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(203,213,225,0.6)",
-              opacity: fbItems.length < 2 ? 0.45 : 1,
-            }}
+              <Icon source="storefront-outline" size={m.backIcon - 2} color={kind === "store" ? "#1f2937" : colors.textSecondary} />
+              <Text
+                style={{
+                  fontFamily: "CenturyGothic-Bold",
+                  fontSize: m.rowFont + 1,
+                  color: kind === "store" ? "#1f2937" : colors.sectionHeaderText,
+                }}
+              >
+                {t("compare.tabStores")}
+              </Text>
+            </TouchableOpacity>
+          </MotiView>
+          <MotiView
+            from={{ scale: 0.98, opacity: 0.9 }}
+            animate={{ scale: 1, opacity: 1 }}
+            transition={{ type: "spring", damping: 15, mass: 0.6 }}
+            style={{ flex: 1 }}
           >
-            <Icon source="content-cut" size={m.backIcon - 2} color={kind === "freebarber" ? "#1f2937" : colors.textSecondary} />
-            <Text
+            <TouchableOpacity
+              onPress={() => {
+                setKind("freebarber");
+                setSelected([]);
+              }}
+              disabled={fbItems.length < 2}
               style={{
-                fontFamily: "CenturyGothic-Bold",
-                fontSize: m.rowFont + 1,
-                color: kind === "freebarber" ? "#1f2937" : colors.sectionHeaderText,
+                paddingVertical: m.pickTabPadV,
+                borderRadius: m.pickTabRadius,
+                alignItems: "center",
+                flexDirection: "row",
+                justifyContent: "center",
+                gap: 8,
+                backgroundColor:
+                  kind === "freebarber"
+                    ? CMP_GOLD
+                    : isDark
+                      ? "rgba(255,255,255,0.06)"
+                      : "rgba(255,255,255,0.85)",
+                borderWidth: kind === "freebarber" ? 0 : 1,
+                borderColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(203,213,225,0.6)",
+                opacity: fbItems.length < 2 ? 0.45 : 1,
               }}
             >
-              {t("compare.tabFreeBarbers")}
-            </Text>
-          </TouchableOpacity>
-        </MotiView>
-      </View>
+              <Icon source="content-cut" size={m.backIcon - 2} color={kind === "freebarber" ? "#1f2937" : colors.textSecondary} />
+              <Text
+                style={{
+                  fontFamily: "CenturyGothic-Bold",
+                  fontSize: m.rowFont + 1,
+                  color: kind === "freebarber" ? "#1f2937" : colors.sectionHeaderText,
+                }}
+              >
+                {t("compare.tabFreeBarbers")}
+              </Text>
+            </TouchableOpacity>
+          </MotiView>
+        </View>
+      ) : (
+        <View style={{ paddingTop: m.pickTopPad }} />
+      )}
 
       {list.length < 2 ? (
         <View style={{ padding: m.emptyPad }}>
@@ -245,6 +255,9 @@ export default function PickPairCompareScreen() {
           keyExtractor={(item) => item.id}
           contentContainerStyle={{
             paddingHorizontal: m.scrollPadH,
+            // Üst başlık + tab bar ile listenin ilk item'ı arasında nefes payı
+            // (kullanıcı isteği: hem dükkan hem freebarber tablarında listeye yukarıdan margin ver).
+            paddingTop: 24,
             paddingBottom: m.listPadBottom,
           }}
           renderItem={({ item, index: rowIndex }) => {

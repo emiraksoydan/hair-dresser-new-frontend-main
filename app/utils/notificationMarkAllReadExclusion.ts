@@ -165,8 +165,6 @@ export function shouldKeepNotificationUnreadForMarkAll(
   let appointmentStatus: AppointmentStatus;
   if (payload?.status !== undefined && payload.status !== null) {
     appointmentStatus = payload.status as AppointmentStatus;
-  } else if (item.type === NotificationType.AppointmentUnanswered) {
-    appointmentStatus = AppointmentStatus.Unanswered;
   } else {
     appointmentStatus = AppointmentStatus.Pending;
   }

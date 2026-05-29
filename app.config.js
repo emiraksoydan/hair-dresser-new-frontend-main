@@ -109,6 +109,8 @@ module.exports = {
         "expo-build-properties",
         {
           android: {
+            /** Modern Android toolchain (Play / Gradle uyumu) */
+            kotlinVersion: "2.1.20",
             compileSdkVersion: 35,
             targetSdkVersion: 35,
             buildToolsVersion: "35.0.0",

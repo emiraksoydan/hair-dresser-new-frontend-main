@@ -1,8 +1,12 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { FAB, Portal } from "react-native-paper";
 import { useTheme } from "../../hook/useTheme";
-import { COLORS } from "../../constants/colors";
+import {
+  COLORS,
+  getFabMenuRowWrapperStyle,
+  getTextOnGold,
+} from "../../constants/colors";
 import type { MoreFabMenuItem } from "./MoreFabContext";
 import { getMoreFabAnchorBottom } from "./panelBottomOverlays";
 
@@ -12,7 +16,7 @@ import { getMoreFabAnchorBottom } from "./panelBottomOverlays";
  */
 export const FAB_NUDGE_LAST_TAB_CLEARANCE = 14;
 
-const FAB_ICON_TINT = "#FFFFFF";
+const FAB_ACTION_SIZE = 34;
 
 type Props = {
   items: MoreFabMenuItem[];
@@ -26,6 +30,7 @@ type Props = {
 
 /**
  * React Native Paper FAB.Group (speed dial); tab bar üzerinde konumlanır.
+ * Kapalıyken `actions=[]` — gri satırların hayalet renderını önler.
  */
 export function MoreActionsFab({
   items,
@@ -36,6 +41,9 @@ export function MoreActionsFab({
   const { isDark } = useTheme();
   const insets = useSafeAreaInsets();
   const [open, setOpen] = useState(false);
+  const onGold = getTextOnGold(isDark);
+
+  const menuRowWrapper = useMemo(() => getFabMenuRowWrapperStyle(isDark), [isDark]);
 
   const basePadding = useMemo(() => {
     const anchor = getMoreFabAnchorBottom(insets.bottom);
@@ -55,34 +63,80 @@ export function MoreActionsFab({
     setOpen(false);
   }, [itemsKey]);
 
-  /** Sheet / tam ekran overlay açılınca FAB gizlenir; menü açık kaldıysa kapat (çift dokunma / z-index). */
   useEffect(() => {
     if (hidden) setOpen(false);
   }, [hidden]);
 
-  const actions = useMemo(
+  // Hayalet render koruması: FAB kapandıktan sonra kısa süre actions'ı
+  // boş tutmak için küçük bir gecikme. Paper'ın kapanma animasyonu
+  // bitmeden actions kaldırılırsa gri kartlar anlık görünebiliyordu.
+  const [actionsVisible, setActionsVisible] = useState(false);
+  const actionsTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (actionsTimerRef.current) clearTimeout(actionsTimerRef.current);
+    if (open) {
+      // Açılırken hemen göster
+      setActionsVisible(true);
+    } else {
+      // Kapanırken animasyon bittikten sonra kaldır (~250ms)
+      actionsTimerRef.current = setTimeout(() => {
+        setActionsVisible(false);
+      }, 250);
+    }
+    return () => {
+      if (actionsTimerRef.current) clearTimeout(actionsTimerRef.current);
+    };
+  }, [open]);
+
+  const menuActions = useMemo(
     () =>
       items.map((item) => ({
         icon: item.icon,
         label: item.label,
-        labelTextColor: FAB_ICON_TINT,
-        labelStyle: { fontFamily: "CenturyGothic-Bold" } as const,
+        labelTextColor: onGold,
+        labelStyle: {
+          fontFamily: "CenturyGothic-Bold",
+          fontSize: 13,
+          includeFontPadding: false,
+        },
         size: "small" as const,
+        wrapperStyle: menuRowWrapper,
+        containerStyle: {
+          backgroundColor: "transparent",
+          elevation: 0,
+          shadowOpacity: 0,
+          // Paper default: marginVertical:8, paddingVertical:6, marginHorizontal:16
+          // Bunlar wrapperStyle padding'iyle çakışıyor — sıfırla
+          marginVertical: 0,
+          marginHorizontal: 0,
+          paddingVertical: 0,
+          paddingHorizontal: 0,
+        },
         style: {
           backgroundColor: chipBackground,
           borderWidth: 0,
+          margin: 0,
+          width: FAB_ACTION_SIZE,
+          height: FAB_ACTION_SIZE,
+          borderRadius: FAB_ACTION_SIZE / 2,
+          alignItems: "center" as const,
+          justifyContent: "center" as const,
         },
-        color: FAB_ICON_TINT,
+        color: onGold,
         onPress: () => {
+          setOpen(false);
           item.onPress();
         },
       })),
-    [items, chipBackground],
+    [items, chipBackground, onGold, menuRowWrapper],
   );
 
   if (items.length === 0) {
     return null;
   }
+
+  const showMenu = open && !hidden;
 
   return (
     <Portal>
@@ -90,14 +144,16 @@ export function MoreActionsFab({
         open={open}
         visible={!hidden}
         icon={open ? "close" : "plus"}
-        actions={actions}
+        // Hayalet render: animasyon bitmeden actions kaldırılmaz,
+        // animasyon başlamadan önce de gösterilmez.
+        actions={showMenu && actionsVisible ? menuActions : []}
         onStateChange={({ open: next }) => setOpen(next)}
-        style={{ paddingBottom: paddingBottom }}
+        style={{ paddingBottom }}
         fabStyle={{
           backgroundColor: open
             ? isDark
-              ? "rgba(148,163,184,0.4)"
-              : "#e5e7eb"
+              ? COLORS.UI.FAB_MENU_ROW_BG_DARK
+              : COLORS.UI.FAB_MENU_ROW_BG_LIGHT
             : chipBackground,
           borderWidth: 0,
           width: 48,
@@ -107,8 +163,8 @@ export function MoreActionsFab({
           alignItems: "center",
           justifyContent: "center",
         }}
-        color={open ? (isDark ? "#f9fafb" : "#1f2937") : FAB_ICON_TINT}
-        backdropColor="rgba(0,0,0,0.22)"
+        color={open ? (isDark ? "#f9fafb" : "#1f2937") : onGold}
+        backdropColor={showMenu ? "rgba(0,0,0,0.22)" : "transparent"}
         accessibilityLabel={open ? "Menüyü kapat" : "Daha fazla işlem"}
       />
     </Portal>

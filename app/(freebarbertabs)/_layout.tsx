@@ -7,12 +7,12 @@ import { FreeBarberLocationProvider } from "../components/freebarber/FreeBarberL
 import { UserType } from "../types";
 import { useLanguage } from "../hook/useLanguage";
 import { getCommonTabs, panelTabConfigs, accentColors } from "../config/tabConfig";
-import { useBottomSheet } from "../hook/useBottomSheet";
+import { useFullHeightBottomSheet } from "../hook/useBottomSheet";
 import { useDeferredSheetPresent } from "../hook/useDeferredSheetPresent";
 import { useTheme } from "../hook/useTheme";
 import { DeferredRender } from "../components/common/deferredrender";
 import { CrudSkeletonComponent } from "../components/common/crudskeleton";
-import { FormFreeBarberOperation } from "../components/freebarber/formfreebarberoper";
+import { FormFreeBarberOperation } from "../components/freebarber/FormFreeBarberOper";
 import { useGetFreeBarberMinePanelQuery } from "../store/api";
 import { FreeBarberPanelSheetContext } from "../context/FreeBarberPanelSheetContext";
 
@@ -21,10 +21,8 @@ const FreeBarberLayout = () => {
   const { colors } = useTheme();
   const [panelTargetId, setPanelTargetId] = useState<string | null>(null);
 
-  const panelSheet = useBottomSheet({
-    snapPoints: ["100%"],
+  const panelSheet = useFullHeightBottomSheet({
     enablePanDownToClose: false,
-    enableOverDrag: false,
     enableHandlePanningGesture: false,
     pressBehavior: "none",
   });
@@ -78,6 +76,8 @@ const FreeBarberLayout = () => {
         panelSheet.handleDismiss();
       }}
       snapPoints={panelSheet.snapPoints}
+      index={0}
+      enableDynamicSizing={false}
       enableOverDrag={panelSheet.enableOverDrag}
       enablePanDownToClose={panelSheet.enablePanDownToClose}
       enableHandlePanningGesture={panelSheet.enableHandlePanningGesture}

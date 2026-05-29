@@ -33,6 +33,36 @@ const LOAD_MORE_GRACE_MS = 450;
 
 type FilteredTriggerArgs = FilterRequestDto & { limit?: number; offset?: number };
 
+function mergeFirstPageIntoAccumulated<T>(prev: T[], firstPage: T[]): T[] {
+    if (prev.length === 0) return firstPage;
+
+    const byId = new Map<string, T>();
+    for (const item of prev) {
+        const id = (item as any)?.id;
+        if (id) byId.set(String(id), item);
+    }
+
+    const mergedFirstPage: T[] = [];
+    for (const item of firstPage) {
+        const id = (item as any)?.id;
+        if (!id) {
+            mergedFirstPage.push(item);
+            continue;
+        }
+        const key = String(id);
+        byId.set(key, item);
+        mergedFirstPage.push(item);
+    }
+
+    for (const item of prev) {
+        const id = (item as any)?.id;
+        if (!id || firstPage.some((x) => String((x as any)?.id) === String(id))) continue;
+        mergedFirstPage.push(byId.get(String(id)) ?? item);
+    }
+
+    return mergedFirstPage;
+}
+
 interface UseNearbyWithFilterOptions<T> {
     enabled: boolean;
     moveThresholdM?: number;
@@ -185,10 +215,10 @@ export function useNearbyWithFilter<T>(
         const useFiltered = useFilteredEndpoint && f;
 
         if (useFiltered) {
-            // İlk sayfa: accumulatedItems'ı temizleyip yenile.
+            // İlk sayfa arka planda yenilenirken loadMore ile gelen sayfaları düşürme.
             const items = await fetchPage(lat, lon, 0);
             if (items === null) return; // token eskimiş ya da hata — mevcut listeyi koru
-            setAccumulatedItems(items);
+            setAccumulatedItems((prev) => mergeFirstPageIntoAccumulated(prev, items));
             setHasMore(items.length >= pageSize);
             suppressLoadMoreUntilMsRef.current = Date.now() + LOAD_MORE_GRACE_MS;
         } else {

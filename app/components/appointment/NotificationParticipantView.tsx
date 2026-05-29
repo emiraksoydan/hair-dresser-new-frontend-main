@@ -15,8 +15,16 @@ import { OwnerAvatar } from "../common/owneravatar";
 import { useLanguage } from "../../hook/useLanguage";
 import { useTheme } from "../../hook/useTheme";
 import type { ThemeColors } from "../../hook/useTheme";
+import { StarRatingDisplay } from "react-native-star-rating-widget";
+import {
+  COLORS,
+  getStarRatingScoreColor,
+  getStarRatingWidgetProps,
+  getTextOnGold,
+} from "../../constants/colors";
+import { ThemedStarIcon } from "../common/ThemedStarIcon";
 
-const ACCENT = "#f05e23";
+const ACCENT = COLORS.UI.ACCENT_GOLD;
 
 function ParticipantSurface({
   isDark,
@@ -89,7 +97,7 @@ function MetaChip({
         },
       ]}
     >
-      <Icon source={icon as any} size={15} color="#d97706" />
+      <Icon source={icon as any} size={15} color={isDark ? "#d97706" : getTextOnGold(false)} />
       <Text
         style={[styles.metaChipText, { color: colors.sectionHeaderText }]}
         numberOfLines={2}
@@ -100,11 +108,51 @@ function MetaChip({
   );
 }
 
-function FavoritePill({ children }: { children: React.ReactNode }) {
+function FavoritePill({
+  children,
+  isDark,
+}: {
+  children: React.ReactNode;
+  isDark: boolean;
+}) {
+  const onGoldFg = getTextOnGold(isDark);
   return (
-    <View style={styles.favPill}>
-      <Icon source="heart" size={12} color={ACCENT} />
-      <Text style={styles.favPillText}>{children}</Text>
+    <View
+      style={[
+        styles.favPill,
+        { backgroundColor: isDark ? "rgba(254, 243, 199, 0.7)" : COLORS.UI.ACCENT_GOLD },
+      ]}
+    >
+      <Icon source="heart" size={12} color={onGoldFg} />
+      <Text style={[styles.favPillText, { color: onGoldFg }]}>{children}</Text>
+    </View>
+  );
+}
+
+function RatingRow({
+  rating,
+  formatRating,
+  isDark,
+}: {
+  rating: number;
+  formatRating: (r?: number) => string;
+  isDark: boolean;
+}) {
+  const starProps = getStarRatingWidgetProps(isDark);
+  const scoreColor = getStarRatingScoreColor(isDark);
+  return (
+    <View style={styles.ratingRow}>
+      <StarRatingDisplay
+        rating={rating}
+        starSize={14}
+        color={starProps.color}
+        emptyColor={starProps.emptyColor}
+        StarIconComponent={ThemedStarIcon}
+        starStyle={{ marginHorizontal: 0 }}
+      />
+      <Text style={[styles.ratingText, { color: scoreColor }]}>
+        {formatRating(rating)}
+      </Text>
     </View>
   );
 }
@@ -156,7 +204,7 @@ export const NotificationParticipantView: React.FC<
                 <Text
                   style={[styles.name, { color: colors.sectionHeaderText }]}
                 >
-                  {payload.customer?.displayName || t("card.customer")}
+                  {payload.customer?.displayName || t("labels.customerDefaultName")}
                 </Text>
                 <View style={styles.chipRow}>
                   {payload.customer?.customerNumber ? (
@@ -169,7 +217,7 @@ export const NotificationParticipantView: React.FC<
                   ) : null}
                 </View>
                 {isCustomerInFavorites ? (
-                  <FavoritePill>{t("appointment.actions.inFavorites")}</FavoritePill>
+                  <FavoritePill isDark={isDark}>{t("appointment.actions.inFavorites")}</FavoritePill>
                 ) : null}
               </View>
             </View>
@@ -214,7 +262,7 @@ export const NotificationParticipantView: React.FC<
                   ) : null}
                 </View>
                 {isFreeBarberInFavorites ? (
-                  <FavoritePill>{t("appointment.actions.inFavorites")}</FavoritePill>
+                  <FavoritePill isDark={isDark}>{t("appointment.actions.inFavorites")}</FavoritePill>
                 ) : null}
               </View>
             </View>
@@ -239,7 +287,7 @@ export const NotificationParticipantView: React.FC<
                 <Text
                   style={[styles.name, { color: colors.sectionHeaderText }]}
                 >
-                  {payload?.chair?.manuelBarberName}
+                  {payload?.chair?.manuelBarberName || t("chatDefaults.barberDefaultName")}
                 </Text>
                 {payload?.chair?.manuelBarberType !== undefined ? (
                   <Text
@@ -352,7 +400,7 @@ export const NotificationParticipantView: React.FC<
                   </View>
                 ) : null}
                 {isStoreInFavorites ? (
-                  <FavoritePill>{t("appointment.actions.inFavorites")}</FavoritePill>
+                  <FavoritePill isDark={isDark}>{t("appointment.actions.inFavorites")}</FavoritePill>
                 ) : null}
               </View>
             </View>
@@ -376,7 +424,7 @@ export const NotificationParticipantView: React.FC<
                 <Text
                   style={[styles.name, { color: colors.sectionHeaderText }]}
                 >
-                  {payload.customer?.displayName || t("card.customer")}
+                  {payload.customer?.displayName || t("labels.customerDefaultName")}
                 </Text>
                 <View style={styles.chipRow}>
                   {payload.customer?.customerNumber ? (
@@ -389,7 +437,7 @@ export const NotificationParticipantView: React.FC<
                   ) : null}
                 </View>
                 {isCustomerInFavorites ? (
-                  <FavoritePill>{t("appointment.actions.inFavorites")}</FavoritePill>
+                  <FavoritePill isDark={isDark}>{t("appointment.actions.inFavorites")}</FavoritePill>
                 ) : null}
               </View>
             </View>
@@ -470,15 +518,10 @@ export const NotificationParticipantView: React.FC<
                   </View>
                 ) : null}
                 {payload.store.rating !== undefined ? (
-                  <View style={styles.ratingRow}>
-                    <Icon source="star" size={17} color="#fbbf24" />
-                    <Text style={styles.ratingText}>
-                      {formatRating(payload.store.rating)}
-                    </Text>
-                  </View>
+                  <RatingRow rating={payload.store.rating} formatRating={formatRating} isDark={isDark} />
                 ) : null}
                 {isStoreInFavorites ? (
-                  <FavoritePill>{t("appointment.actions.inFavorites")}</FavoritePill>
+                  <FavoritePill isDark={isDark}>{t("appointment.actions.inFavorites")}</FavoritePill>
                 ) : null}
               </View>
             </View>
@@ -524,15 +567,10 @@ export const NotificationParticipantView: React.FC<
                   ) : null}
                 </View>
                 {payload.freeBarber?.rating !== undefined ? (
-                  <View style={styles.ratingRow}>
-                    <Icon source="star" size={17} color="#fbbf24" />
-                    <Text style={styles.ratingText}>
-                      {formatRating(payload.freeBarber.rating)}
-                    </Text>
-                  </View>
+                  <RatingRow rating={payload.freeBarber.rating} formatRating={formatRating} isDark={isDark} />
                 ) : null}
                 {isFreeBarberInFavorites ? (
-                  <FavoritePill>{t("appointment.actions.inFavorites")}</FavoritePill>
+                  <FavoritePill isDark={isDark}>{t("appointment.actions.inFavorites")}</FavoritePill>
                 ) : null}
               </View>
             </View>
@@ -557,7 +595,7 @@ export const NotificationParticipantView: React.FC<
                 <Text
                   style={[styles.name, { color: colors.sectionHeaderText }]}
                 >
-                  {payload?.chair?.manuelBarberName}
+                  {payload?.chair?.manuelBarberName || t("chatDefaults.barberDefaultName")}
                 </Text>
                 {payload?.chair?.manuelBarberType !== undefined ? (
                   <Text
@@ -569,12 +607,11 @@ export const NotificationParticipantView: React.FC<
                   </Text>
                 ) : null}
                 {payload?.chair?.manuelBarberRating !== undefined ? (
-                  <View style={styles.ratingRow}>
-                    <Icon source="star" size={17} color="#fbbf24" />
-                    <Text style={styles.ratingText}>
-                      {formatRating(payload.chair.manuelBarberRating)}
-                    </Text>
-                  </View>
+                  <RatingRow
+                    rating={payload.chair.manuelBarberRating}
+                    formatRating={formatRating}
+                    isDark={isDark}
+                  />
                 ) : null}
               </View>
             </View>

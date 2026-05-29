@@ -1,28 +1,25 @@
 import { useSelector } from "react-redux";
 import { hideSnack } from "../store/snackbarSlice";
 import { RootState } from "../store/redux-store";
-import { Portal, Snackbar } from "react-native-paper";
 import React, { useRef, useCallback, useEffect } from "react";
-import { useDispatch } from "react-redux";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { StyleSheet, View } from "react-native";
+import { Modal, Pressable, StyleSheet, View } from "react-native";
 import { useLanguage } from "./useLanguage";
+import { useAppDispatch } from "../store/hook";
+import { Text } from "../components/common/Text";
 
-// useSnackbar hook kaldırıldı - direkt slice kullanın:
-// import { useAppDispatch } from '../store/hook';
-// import { showSnack } from '../store/snackbarSlice';
-// const dispatch = useAppDispatch();
-// dispatch(showSnack({ message: 'Mesaj', isError: false }));
+// Mesaj göstermek için hook yok: `useAppDispatch` + `showSnack` (`../store/snackbarSlice`).
+// Bu dosyada yalnızca `GlobalSnackbar` — `_layout` içinde mount; geri kalan kod `dispatch(showSnack({...}))`.
 
-// Global Snackbar Component
+// Global Snackbar Component — Paper `Snackbar` yerine sabit bar: kütüphane giriş animasyonu gecikmeyi artırıyordu.
 export const GlobalSnackbar: React.FC = () => {
   const { visible, message, isError } = useSelector(
     (state: RootState) => state.snackbar,
   );
-  const dispatch = useDispatch();
+  const dispatch = useAppDispatch();
   const { t } = useLanguage();
   const insets = useSafeAreaInsets();
-  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const handleDismiss = useCallback(() => {
     if (timeoutRef.current) {
@@ -32,7 +29,6 @@ export const GlobalSnackbar: React.FC = () => {
     dispatch(hideSnack());
   }, [dispatch]);
 
-  // Auto-hide after 3 seconds
   useEffect(() => {
     if (visible) {
       if (timeoutRef.current) {
@@ -40,7 +36,7 @@ export const GlobalSnackbar: React.FC = () => {
       }
       timeoutRef.current = setTimeout(() => {
         handleDismiss();
-      }, 3000);
+      }, 2800);
       return () => {
         if (timeoutRef.current) {
           clearTimeout(timeoutRef.current);
@@ -49,41 +45,66 @@ export const GlobalSnackbar: React.FC = () => {
     }
   }, [visible, handleDismiss]);
 
-  // Portal kullanımı: Modal'ın aksine arkasındaki UI'ı bloke etmez (Android'de Modal tüm dokunuşları engeller)
   return (
-    <Portal>
-      <View style={styles.overlay} pointerEvents="box-none">
-        <Snackbar
-          visible={visible}
-          onDismiss={handleDismiss}
-          duration={3000}
-          wrapperStyle={{
-            top: 0,
-            bottom: "auto",
-            paddingTop: insets.top,
-            paddingBottom: 0,
-            zIndex: 99999,
-            elevation: 999,
-          }}
-          style={{
-            backgroundColor: isError ? "#b91c1c" : "#15803d",
-          }}
-          action={{
-            label: t("common.close"),
-            onPress: handleDismiss,
-            textColor: "white",
-          }}
+    <Modal
+      visible={visible}
+      transparent
+      animationType="none"
+      statusBarTranslucent
+      onRequestClose={handleDismiss}
+    >
+      <Pressable style={styles.backdrop} onPress={handleDismiss} accessibilityRole="button">
+        <Pressable
+          onPress={(e) => e.stopPropagation()}
+          style={[
+            styles.bar,
+            {
+              marginTop: insets.top + 6,
+              backgroundColor: isError ? "#b91c1c" : "#15803d",
+            },
+          ]}
         >
-          {message}
-        </Snackbar>
-      </View>
-    </Portal>
+          <Text style={styles.barText} numberOfLines={4}>
+            {message}
+          </Text>
+          <Pressable onPress={handleDismiss} hitSlop={12} accessibilityRole="button">
+            <Text style={styles.barAction}>{t("common.close")}</Text>
+          </Pressable>
+        </Pressable>
+      </Pressable>
+    </Modal>
   );
 };
 
 const styles = StyleSheet.create({
-  overlay: {
-    ...StyleSheet.absoluteFillObject,
+  backdrop: {
     flex: 1,
+    justifyContent: "flex-start",
+    paddingHorizontal: 12,
+  },
+  bar: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: 8,
+    elevation: 6,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    zIndex: 99999,
+  },
+  barText: {
+    flex: 1,
+    color: "white",
+    fontSize: 15,
+  },
+  barAction: {
+    color: "white",
+    fontWeight: "600",
+    fontSize: 14,
   },
 });

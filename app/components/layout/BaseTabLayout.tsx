@@ -9,8 +9,8 @@ import { Tabs } from "expo-router";
 import { BottomSheetModal, BottomSheetView } from "@gorhom/bottom-sheet";
 import { CustomCurvedTabBar, CustomTabItem } from "../common/CustomCurvedTabBar";
 import { Text } from "../common/Text";
-import { BadgeIconButton } from "../common/badgeiconbutton";
-import { NotificationsSheet } from "../appointment/notificationsheet";
+import { BadgeIconButton } from "../common/BadgeIconButton";
+import { NotificationsSheet } from "../appointment/NotificationSheet";
 import {
   MoreActionsFab,
   FAB_NUDGE_LAST_TAB_CLEARANCE,
@@ -173,6 +173,8 @@ export const BaseTabLayout: React.FC<BaseTabLayoutProps> = ({
     registerOpenAccountSwitcher,
     prepareAccountSwitcherList,
     isSwitchingAccount,
+    accountBadges,
+    removeSavedAccount,
   } = useMultiAccount();
   const accountSwitcherSheet = useBottomSheet({
     snapPoints: ["50%", "85%"],
@@ -283,7 +285,14 @@ export const BaseTabLayout: React.FC<BaseTabLayoutProps> = ({
 
   const renderHeaderRight = useCallback(
     () => (
-      <View className="flex-row items-center justify-center mr-1 h-full gap-1.5">
+      <View
+        className="flex-row items-center justify-center h-full gap-1.5"
+        style={
+          Platform.OS === "android"
+            ? { marginRight: 14 }
+            : { marginRight: 4 }
+        }
+      >
         {headerDeleteAction &&
           tabs[activeTabIndex]?.name === "(appointment)" && (
           <Pressable
@@ -444,7 +453,8 @@ export const BaseTabLayout: React.FC<BaseTabLayoutProps> = ({
             onTabPress={handleTabPress}
             onTabDoubleTap={handleTabDoubleTap}
             chipBackground={COLORS.UI.ACCENT_GOLD}
-            chipForeground={COLORS.UI.ACCENT_GOLD}
+            chipForeground={isDark ? COLORS.UI.ACCENT_GOLD : COLORS.PROFILE.NAVY}
+            onGoldIconColor={isDark ? COLORS.UI.TEXT_ON_GOLD_DARK : COLORS.UI.TEXT_ON_GOLD}
             backgroundColor={colors.tabBarBg}
             inactiveIconColor={isDark ? "#9CA3AF" : "#6b7280"}
             height={60}
@@ -557,10 +567,7 @@ export const BaseTabLayout: React.FC<BaseTabLayoutProps> = ({
         enableDynamicSizing={false}
         enableOverDrag={notificationsSheet.enableOverDrag}
         enablePanDownToClose={notificationsSheet.enablePanDownToClose}
-        // İçerik (BottomSheetFlatList) kendi scroll'unu yönetebilsin diye
-        // dış container'ın panning gesture'ını kapatıyoruz. Aksi halde Android'de
-        // liste kaydırma denemesi sheet'i drag ediyor ve kaydırma çalışmıyor.
-        enableContentPanningGesture={false}
+        enableContentPanningGesture={true}
         onChange={(index) => { notificationsSheet.handleChange(index); setNotiSheetOpen(index >= 0); }}
         onDismiss={() => setNotiSheetOpen(false)}
       >
@@ -695,6 +702,7 @@ export const BaseTabLayout: React.FC<BaseTabLayoutProps> = ({
         handleIndicatorStyle={{ backgroundColor: colors.sheetHandle }}
         backgroundStyle={{ backgroundColor: colors.sheetBg }}
         snapPoints={accountSwitcherSheet.snapPoints}
+        enableDynamicSizing={false}
         enableOverDrag={accountSwitcherSheet.enableOverDrag}
         enablePanDownToClose={accountSwitcherSheet.enablePanDownToClose}
         onChange={(index) => {
@@ -716,6 +724,20 @@ export const BaseTabLayout: React.FC<BaseTabLayoutProps> = ({
           }}
           onClose={() => accountSwitcherSheet.dismiss()}
           onAddAccount={() => router.push({ pathname: '/(auth)', params: { addAccount: 'true' } } as any)}
+          onReauthAccount={(acc) =>
+            router.push({
+              pathname: '/(auth)',
+              params: {
+                addAccount: 'true',
+                reauth: 'true',
+                phone: acc.phone || '',
+                userType: String(acc.userType),
+              },
+            } as any)
+          }
+          onRemoveAccount={(acc) => removeSavedAccount(acc.id)}
+          accountBadges={accountBadges}
+          currentAccountUnread={badgeCounts?.data?.notificationUnreadCount ?? 0}
         />
       </BottomSheetModal>
 

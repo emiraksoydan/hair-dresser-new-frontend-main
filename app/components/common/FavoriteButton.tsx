@@ -8,6 +8,7 @@ import { Text } from "./Text";
 import { useTheme } from "../../hook/useTheme";
 import { useFavoriteHeartPulse } from "./useFavoriteHeartPulse";
 import { useLanguage } from "../../hook/useLanguage";
+import { formatFavoriteCount } from "../../utils/formatFavoriteCount";
 
 interface FavoriteButtonProps {
   isFavorite: boolean;
@@ -90,6 +91,7 @@ export const FavoriteButton: React.FC<FavoriteButtonProps> = ({
             (
             <AnimatedCountText
               value={favoriteCount}
+              formatValue={formatFavoriteCount}
               style={{ color: colors.sectionHeaderText, fontSize: countFontSize }}
               className={`font-century-gothic-sans-regular ${className}`}
             />
@@ -120,6 +122,7 @@ export const FavoriteButton: React.FC<FavoriteButtonProps> = ({
           (
           <AnimatedCountText
             value={favoriteCount}
+            formatValue={formatFavoriteCount}
             style={{ color: colors.sectionHeaderText, fontSize: countFontSize }}
             className={`font-century-gothic-sans-regular ${className}`}
           />

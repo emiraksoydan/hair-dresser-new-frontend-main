@@ -15,15 +15,14 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import React, { useEffect, useMemo, useState, useRef } from "react";
 import { z } from "zod";
 import {
-  DAYS_TR,
-  PRICING_OPTIONS,
+  getWorkingDays,
+  getPricingOptions,
   trMoneyRegex,
 } from "../../constants";
-import { parseTR } from "../../utils/form/money-helper";
+import { formatPackagePriceFromApi, parseTR } from "../../utils/form/money-helper";
 import {
   fmtHHmm,
   fromHHmm,
-  HOLIDAY_OPTIONS,
   normalizeTime,
   timeHHmmRegex,
   toMinutes,
@@ -45,9 +44,6 @@ import {
   useUploadMultipleImagesMutation,
   useUploadImageMutation,
   useUpdateImageBlobMutation,
-  useAddServicePackageMutation,
-  useUpdateServicePackageMutation,
-  useDeleteServicePackageMutation,
   useLazyGetServicePackagesByOwnerQuery,
 } from "../../store/api";
 import { useCategoryHierarchy } from "../../hook/useCategoryHierarchy";
@@ -64,7 +60,7 @@ import DateTimePicker from "@react-native-community/datetimepicker";
 import { MapPicker } from "../common/mappicker";
 import { createStoreLocationHelpers } from "../../utils/store/store-location-helper";
 import { getCurrentLocationSafe } from "../../utils/location/location-helper";
-import { BarberEditModal } from "./barbereditmodal";
+import { BarberEditModal } from "./BarberEditModal";
 import {
   BarberFormValues,
   BarberStoreUpdateDto,
@@ -74,7 +70,7 @@ import {
 } from "../../types";
 import { getErrorMessage } from "../../utils/errorHandler";
 import { MESSAGES } from "../../constants/messages";
-import { ChairEditModal } from "./chaireditmodal";
+import { ChairEditModal } from "./ChairEditModal";
 import { safeCoord } from "../../utils/location/geo";
 import { useAppDispatch } from "../../store/hook";
 import { showSnack } from "../../store/snackbarSlice";
@@ -84,6 +80,12 @@ import {
   ServicePackageStep,
   type PackageFormItem,
 } from "./ServicePackageStep";
+import { FormPackagesPreview } from "../common/FormPackagesPreview";
+import {
+  buildServicePackageSyncItems,
+  buildStorePackageServiceOptions,
+} from "../../utils/service-package-sync";
+import { useSyncPackagesWithServiceOptions } from "../../hook/useSyncPackagesWithServiceOptions";
 import { useOptimizedChairOptions } from "../../hooks/useOptimizedFieldArray";
 import {
   mapBarberType,
@@ -95,10 +97,16 @@ import { useLanguage } from "../../hook/useLanguage";
 import { useAlert } from "../../hook/useAlert";
 import { StepFormIndicator } from "../common/StepFormIndicator";
 import { useTheme } from "../../hook/useTheme";
+import {
+  getFormAccentBoxBorderColor,
+  getFormNavButtonColors,
+  getFormPreviewPriceColor,
+} from "../../constants/colors";
 import { useActionGuard } from "../../hook/useActionGuard";
 import { SheetCloseButton } from "../common/SheetCloseButton";
+import { isMonetaryWithinLimit, MAX_MONETARY_TRY_DISPLAY } from "../../constants/priceLimits";
 
-const createChairPricingSchema = (t: (key: string) => string) =>
+const createChairPricingSchema = (t: (key: string, options?: Record<string, unknown>) => string) =>
   z
     .object({
       mode: z.enum(["rent", "percent"]),
@@ -129,6 +137,12 @@ const createChairPricingSchema = (t: (key: string) => string) =>
             code: z.ZodIssueCode.custom,
             path: ["rent"],
             message: t("form.rentPricePositive"),
+          });
+        } else if (!isMonetaryWithinLimit(n)) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["rent"],
+            message: t("form.priceExceedsPlatformMax", { max: MAX_MONETARY_TRY_DISPLAY }),
           });
         }
       } else if (val.mode === "percent") {
@@ -174,7 +188,7 @@ const createChairPricingSchema = (t: (key: string) => string) =>
       }
     });
 
-const createBarberSchema = (t: (key: string) => string) =>
+const createBarberSchema = (t: (key: string, options?: Record<string, unknown>) => string) =>
   z.object({
     id: z.string().uuid(),
     name: z.string().trim().min(1, t("form.personnelNameRequired")),
@@ -188,7 +202,7 @@ const createBarberSchema = (t: (key: string) => string) =>
       .optional(),
   });
 
-const createLocationSchema = (t: (key: string) => string) =>
+const createLocationSchema = (t: (key: string, options?: Record<string, unknown>) => string) =>
   z
     .object({
       latitude: z.number(),
@@ -206,7 +220,7 @@ const createLocationSchema = (t: (key: string) => string) =>
       }
     });
 
-const createWorkingDaySchema = (t: (key: string) => string) =>
+const createWorkingDaySchema = (t: (key: string, options?: Record<string, unknown>) => string) =>
   z
     .object({
       id: z.string().uuid().optional(),
@@ -248,7 +262,7 @@ const createWorkingDaySchema = (t: (key: string) => string) =>
       // Minimum ve maksimum saat kontrolleri kaldırıldı
     });
 
-const createChairSchema = (t: (key: string) => string) =>
+const createChairSchema = (t: (key: string, options?: Record<string, unknown>) => string) =>
   z
     .object({
       id: z.string().uuid(),
@@ -278,7 +292,7 @@ const ImageAssetSchema = z.object({
   type: z.string().optional(),
 });
 
-const createTaxDocumentImageField = (t: (key: string) => string) =>
+const createTaxDocumentImageField = (t: (key: string, options?: Record<string, unknown>) => string) =>
   z
     .custom<{
       uri: string;
@@ -291,7 +305,7 @@ const createTaxDocumentImageField = (t: (key: string) => string) =>
     )
     .pipe(ImageAssetSchema);
 
-const createSchema = (t: (key: string) => string) =>
+const createSchema = (t: (key: string, options?: Record<string, unknown>) => string) =>
   z
     .object({
       storeImages: z
@@ -328,6 +342,15 @@ const createSchema = (t: (key: string) => string) =>
               return !isNaN(num) && num >= 0; // 0 veya daha büyük olmalı
             },
             { message: t("form.priceCannotBeNegative") },
+          )
+          .refine(
+            (val) => {
+              if (!val || val.trim() === "") return true;
+              const num = parseFloat(val.replace(/\./g, "").replace(",", "."));
+              if (isNaN(num) || num < 0) return true;
+              return isMonetaryWithinLimit(num);
+            },
+            { message: t("form.priceExceedsPlatformMax", { max: MAX_MONETARY_TRY_DISPLAY }) },
           ),
       ),
       pricingType: createChairPricingSchema(t),
@@ -375,10 +398,7 @@ const createSchema = (t: (key: string) => string) =>
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ["barbers"],
-          message: t("form.maxBarbers").replace(
-            "{{count}}",
-            validBarbersCount.toString(),
-          ),
+          message: t("form.maxBarbers", { max: 30 }),
         });
       }
       const validChairsCount = chairs.length;
@@ -386,10 +406,7 @@ const createSchema = (t: (key: string) => string) =>
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ["chairs"],
-          message: t("form.maxChairs").replace(
-            "{{count}}",
-            validChairsCount.toString(),
-          ),
+          message: t("form.maxChairs", { max: 30 }),
         });
       }
     });
@@ -462,8 +479,11 @@ const FormStoreUpdate = React.memo(({
   const insets = useSafeAreaInsets();
   const { userId } = useAuth();
   const { t, currentLanguage } = useLanguage();
+  const workingDays = useMemo(() => getWorkingDays(t), [t, currentLanguage]);
+  const pricingOptions = useMemo(() => getPricingOptions(t), [t, currentLanguage]);
   const { confirm } = useAlert();
   const { colors, isDark } = useTheme();
+  const formNav = React.useMemo(() => getFormNavButtonColors(isDark), [isDark]);
 
   // MultiSelect style objects - depend on colors so defined inside component
   const MULTI_SELECT_STYLE = useMemo(() => ({
@@ -490,7 +510,7 @@ const FormStoreUpdate = React.memo(({
 
   const MULTI_SELECT_INPUT_SEARCH_STYLE = useMemo(() => ({
     backgroundColor: colors.cardBg,
-    borderColor: "#FACC15",
+    borderColor: getFormAccentBoxBorderColor(isDark),
     borderWidth: 1,
     borderRadius: 8,
     color: colors.sectionHeaderText,
@@ -498,7 +518,7 @@ const FormStoreUpdate = React.memo(({
     paddingVertical: 8,
     fontSize: 14,
     fontFamily: 'CenturyGothic',
-  }), [colors]);
+  }), [colors, isDark]);
 
   const MULTI_SELECT_PLACEHOLDER_STYLE = useMemo(() => ({ color: colors.textSecondary, fontFamily: 'CenturyGothic' }), [colors]);
   const MULTI_SELECT_SELECTED_TEXT_STYLE = useMemo(() => ({ color: colors.sectionHeaderText, fontFamily: 'CenturyGothic' }), [colors]);
@@ -523,9 +543,6 @@ const FormStoreUpdate = React.memo(({
     useLazyGetStoreByIdQuery();
   const [updateStore, { isLoading: updateLoading, isSuccess }] =
     useUpdateBarberStoreMutation();
-  const [addServicePackage] = useAddServicePackageMutation();
-  const [updateServicePackage] = useUpdateServicePackageMutation();
-  const [deleteServicePackageMutation] = useDeleteServicePackageMutation();
   const [triggerGetPackagesByOwner] = useLazyGetServicePackagesByOwnerQuery();
   const [uploadMultipleImages] = useUploadMultipleImagesMutation();
   const [uploadImage] = useUploadImageMutation();
@@ -648,7 +665,6 @@ const FormStoreUpdate = React.memo(({
   useEffect(() => {
     if (enabled && storeId) {
       triggerGetStore(storeId);
-      // Mevcut paketleri yükle
       triggerGetPackagesByOwner(storeId).then((res) => {
         if (res.data) {
           setFormPackages(
@@ -656,16 +672,16 @@ const FormStoreUpdate = React.memo(({
               localId: p.id,
               id: p.id,
               packageName: p.packageName,
-              totalPrice: p.totalPrice.toString().replace(".", ","),
-              serviceOfferingIds: p.items.map((i) => i.serviceOfferingId),
+              totalPrice: formatPackagePriceFromApi(p.totalPrice),
+              serviceOfferingIds: p.items.map(
+                (i) => i.serviceName ?? i.serviceOfferingId,
+              ),
             })),
           );
         }
       });
     }
-    // enabled false olduğunda veya storeId değiştiğinde data'yı temizle
     if (!enabled) {
-      // Form'u reset et
       reset();
       setCurrentStep(0);
       setCompletedSteps(new Set());
@@ -969,6 +985,21 @@ const FormStoreUpdate = React.memo(({
     selectedMainHeadings,
     selectedSubHeadings,
   });
+
+  const packageServiceOptions = React.useMemo(
+    () =>
+      buildStorePackageServiceOptions(
+        selectedCategories,
+        services,
+        data?.serviceOfferings,
+      ),
+    [selectedCategories, services, data?.serviceOfferings],
+  );
+  useSyncPackagesWithServiceOptions(
+    formPackages,
+    packageServiceOptions,
+    setFormPackages,
+  );
 
   // Data yüklendiğinde mevcut hizmetlerden geriye doğru ana başlık ve alt başlık bul
   React.useEffect(() => {
@@ -1365,7 +1396,7 @@ const FormStoreUpdate = React.memo(({
   const { checkAndAlert: checkCanPerformAction } = useCanPerformAction(
     externalError,
     locationStatus,
-    "Bu işlemi gerçekleştirmek için konum izni gereklidir. Lütfen ayarlardan konum iznini açın.",
+    t("location.permissionDeniedSettings"),
   );
 
   const OnSubmit = async (form: FormUpdateValues) => {
@@ -1523,6 +1554,15 @@ const FormStoreUpdate = React.memo(({
         };
       }),
       workingHours: form.workingHours,
+      servicePackages: buildServicePackageSyncItems(
+        formPackages,
+        (id) => {
+          const fromOffering = data?.serviceOfferings?.find((o) => o.id === id);
+          if (fromOffering?.serviceName) return fromOffering.serviceName;
+          return services.find((s) => s.id === id)?.name ?? id;
+        },
+        { preferServiceNames: true },
+      ),
     };
 
     const storeResult = await updateStore(payload);
@@ -1640,47 +1680,6 @@ const FormStoreUpdate = React.memo(({
           isError: false,
         }),
       );
-    }
-
-    // Hizmet paketlerini senkronize et (ekleme / güncelleme / silme)
-    try {
-      const existingPackagesRes = await triggerGetPackagesByOwner(storeId);
-      const existingPackages = existingPackagesRes.data ?? [];
-      const existingIds = new Set(existingPackages.map((p) => p.id));
-      const formIds = new Set(formPackages.filter((p) => p.id).map((p) => p.id!));
-
-      // Silinen paketler
-      for (const existing of existingPackages) {
-        if (!formIds.has(existing.id)) {
-          await deleteServicePackageMutation(existing.id).unwrap();
-        }
-      }
-
-      for (const pkg of formPackages) {
-        const totalPriceNum = parseTR(pkg.totalPrice);
-        if (!totalPriceNum || totalPriceNum <= 0 || pkg.serviceOfferingIds.length === 0) continue;
-
-        if (pkg.id && existingIds.has(pkg.id)) {
-          // Güncelle
-          await updateServicePackage({
-            id: pkg.id,
-            ownerId: storeId,
-            packageName: pkg.packageName,
-            totalPrice: totalPriceNum,
-            serviceOfferingIds: pkg.serviceOfferingIds,
-          }).unwrap();
-        } else {
-          // Yeni ekle
-          await addServicePackage({
-            ownerId: storeId,
-            packageName: pkg.packageName,
-            totalPrice: totalPriceNum,
-            serviceOfferingIds: pkg.serviceOfferingIds,
-          }).unwrap();
-        }
-      }
-    } catch {
-      // Paket sync hatası güncellemeyi engellemez
     }
 
     // Refresh store data to show updated images
@@ -2219,10 +2218,7 @@ const FormStoreUpdate = React.memo(({
                     <View className="px-2 mt-4">
                       <ServicePackageStep
                         packages={formPackages}
-                        serviceOptions={(data?.serviceOfferings ?? []).map((s: any) => ({
-                          id: s.id,
-                          label: s.serviceName,
-                        }))}
+                        serviceOptions={packageServiceOptions}
                         onPackagesChange={setFormPackages}
                       />
                     </View>
@@ -2235,7 +2231,7 @@ const FormStoreUpdate = React.memo(({
                       style={{
                         backgroundColor: isDark ? "rgba(194,165,35,0.10)" : "rgba(194,165,35,0.07)",
                         borderWidth: 1,
-                        borderColor: isDark ? "rgba(194,165,35,0.28)" : "rgba(194,165,35,0.35)",
+                        borderColor: getFormAccentBoxBorderColor(isDark),
                       }}
                     >
                       <Text style={{ fontFamily: "CenturyGothic", fontSize: 13, lineHeight: 20, color: colors.sectionHeaderText }}>
@@ -2398,7 +2394,7 @@ const FormStoreUpdate = React.memo(({
                       style={{
                         backgroundColor: isDark ? "rgba(194,165,35,0.10)" : "rgba(194,165,35,0.07)",
                         borderWidth: 1,
-                        borderColor: isDark ? "rgba(194,165,35,0.28)" : "rgba(194,165,35,0.35)",
+                        borderColor: getFormAccentBoxBorderColor(isDark),
                       }}
                     >
                       <Text style={{ fontFamily: "CenturyGothic", fontSize: 13, lineHeight: 20, color: colors.sectionHeaderText }}>
@@ -2602,7 +2598,7 @@ const FormStoreUpdate = React.memo(({
                           name="pricingType.mode"
                           render={({ field: { value, onChange } }) => (
                             <View className="flex-row justify-center gap-16 ">
-                              {PRICING_OPTIONS.map((opt) => (
+                              {pricingOptions.map((opt) => (
                                 <TouchableOpacity
                                   key={opt.value}
                                   onPress={() => onChange(opt.value)}
@@ -2893,7 +2889,22 @@ const FormStoreUpdate = React.memo(({
                         <PreviewRow label={t("form.storeNameLabel")} value={getValues("storeName") ?? ""} colors={colors} />
                         <PreviewRowList label={t("form.stepMainHeadings")} items={(getValues("selectedMainHeadings") ?? []).map((id: string) => mainHeadings.find((h: any) => h.id === id)?.name ?? id)} colors={colors} />
                         <PreviewRowList label={t("form.stepSubHeadings")} items={(getValues("selectedSubHeadings") ?? []).map((id: string) => subHeadings.find((h: any) => h.id === id)?.name ?? id)} colors={colors} />
-                        <PreviewRowList label={t("form.servicesTitle")} items={(getValues("selectedCategories") ?? []).map((id: string) => services.find((s: any) => s.id === id)?.name ?? id)} colors={colors} />
+                        <PreviewRowList
+                          label={t("form.servicesTitle")}
+                          items={(getValues("selectedCategories") ?? []).map(
+                            (id: string) => services.find((s: any) => s.id === id)?.name ?? id,
+                          )}
+                          colors={colors}
+                        />
+                        {formPackages.length > 0 && (
+                          <FormPackagesPreview
+                            packages={formPackages}
+                            serviceOptions={packageServiceOptions}
+                            colors={colors}
+                            title={t("servicePackage.title")}
+                            currencySymbol={t("card.currencySymbol")}
+                          />
+                        )}
                         {Object.keys(getValues("prices") ?? {}).length > 0 && (
                           <View className="mt-2">
                             <Text className="text-gray-400 text-lg mb-1">{t("form.stepStorePrices")}</Text>
@@ -2902,7 +2913,7 @@ const FormStoreUpdate = React.memo(({
                                 <Text className="flex-1 text-lg" style={{ color: colors.sectionHeaderText }}>
                                   {services.find((s: any) => s.id === catId)?.name ?? catId}
                                 </Text>
-                                <Text className="text-lg" style={{ color: '#fea60e' }}>{typeof price === "string" ? price : ""}</Text>
+                                <Text className="text-lg" style={{ color: getFormPreviewPriceColor() }}>{typeof price === "string" ? price : ""}</Text>
                               </View>
                             ))}
                           </View>
@@ -2916,8 +2927,8 @@ const FormStoreUpdate = React.memo(({
                           const ptLabel = isRent ? "Kira (Koltuk kirası)" : "Yüzde (Komisyon)";
                           return (
                             <View className="py-1.5" style={{ borderBottomWidth: 1, borderBottomColor: colors.borderColor }}>
-                              <Text className="text-gray-400 text-lg mb-0.5">{t("form.pricingTitle") || "Fiyatlandırma Tipi"}</Text>
-                              <Text className="text-lg" style={{ color: colors.sectionHeaderText }}>{ptLabel}: <Text style={{ color: '#fea60e' }}>{ptValue}</Text></Text>
+                              <Text className="text-gray-400 text-lg mb-0.5">{t("form.pricingTitle")}</Text>
+                              <Text className="text-lg" style={{ color: colors.sectionHeaderText }}>{ptLabel}: <Text style={{ color: getFormPreviewPriceColor() }}>{ptValue}</Text></Text>
                             </View>
                           );
                         })()}
@@ -2945,7 +2956,7 @@ const FormStoreUpdate = React.memo(({
                         {(() => {
                           const wh = getValues("workingHours") ?? [];
                           const hd = new Set(getValues("holidayDays") ?? []);
-                          const rows = DAYS_TR.map((d) => {
+                          const rows = workingDays.map((d) => {
                             const row = wh.find((w: any) => w.dayOfWeek === d.day);
                             const isHoliday = hd.has(d.day);
                             if (!row) return null;
@@ -2958,7 +2969,7 @@ const FormStoreUpdate = React.memo(({
                               {rows.map((r: any, i: number) => (
                                 <View key={i} className="flex-row justify-between py-0.5">
                                   <Text className="text-lg" style={{ color: colors.sectionHeaderText }}>{r.label}</Text>
-                                  <Text className="text-lg" style={{ color: r.isClosed ? '#ef4444' : '#fea60e' }}>
+                                  <Text className="text-lg" style={{ color: r.isClosed ? '#ef4444' : getFormPreviewPriceColor() }}>
                                     {r.isClosed ? "Kapalı" : `${r.start} - ${r.end}`}
                                   </Text>
                                 </View>
@@ -2985,8 +2996,8 @@ const FormStoreUpdate = React.memo(({
                   className="flex-1"
                   mode="outlined"
                   onPress={handlePrevStep}
-                  buttonColor="#FACC15"
-                  textColor="#FACC15"
+                  textColor={formNav.prevText}
+                  style={{ borderColor: formNav.prevBorder }}
                 >
                   {t("form.stepPrev")}
                 </Button>
@@ -2996,8 +3007,8 @@ const FormStoreUpdate = React.memo(({
                   className="flex-1"
                   mode="contained"
                   onPress={handleNextStep}
-                  buttonColor="#FACC15"
-                  textColor="#1F2937"
+                  buttonColor={formNav.nextBg}
+                  textColor={formNav.nextText}
                 >
                   {t("form.stepNext")}
                 </Button>

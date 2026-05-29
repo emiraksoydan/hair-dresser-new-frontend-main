@@ -11,6 +11,7 @@ import {
 import { Text } from "./Text";
 
 import { useTheme } from "../../hook/useTheme";
+import { getFormStepLabelColor } from "../../constants/colors";
 
 export type StepConfig = {
   id: string;
@@ -174,7 +175,7 @@ export const StepFormIndicator = React.memo(
                         className="font-century-gothic text-center"
                         style={{
                           fontSize: 10,
-                          color: isActive ? "#FACC15" : colors.sectionHeaderText,
+                          color: getFormStepLabelColor(isDark, isActive, colors.sectionHeaderText),
                         }}
                         numberOfLines={1}
                       >

@@ -2,6 +2,8 @@ import { Icon } from "react-native-paper";
 import React from 'react';
 import { TouchableOpacity, View, ViewStyle, TextStyle, ActivityIndicator } from 'react-native';
 import { Text } from './Text';
+import { getTextOnGold, isGoldBackground } from '../../constants/colors';
+import { useTheme } from '../../hook/useTheme';
 
 interface ButtonProps {
     onPress: () => void;
@@ -37,7 +39,14 @@ export const Button: React.FC<ButtonProps> = ({
     testID,
     compact = false,
 }) => {
+    const { isDark } = useTheme();
     const isDisabled = disabled || loading;
+    const resolvedButtonColor = buttonColor;
+    const resolvedTextColor =
+        textColor ??
+        (mode === 'contained' && isGoldBackground(resolvedButtonColor)
+            ? getTextOnGold(isDark)
+            : undefined);
 
     // buttonColor'a göre disabled rengi hesapla
     const getDisabledColor = (color: string): string => {
@@ -74,9 +83,9 @@ export const Button: React.FC<ButtonProps> = ({
         switch (mode) {
             case 'contained':
                 return {
-                    bg: buttonColor || '#10B981', // emerald-500
-                    text: textColor || '#FFFFFF',
-                    bgDisabled: buttonColor ? getDisabledColor(buttonColor) : '#374151', // gray-700
+                    bg: resolvedButtonColor || '#10B981', // emerald-500
+                    text: resolvedTextColor || '#FFFFFF',
+                    bgDisabled: resolvedButtonColor ? getDisabledColor(resolvedButtonColor) : '#374151', // gray-700
                     textDisabled: '#9CA3AF', // gray-400
                     border: 'transparent',
                 };

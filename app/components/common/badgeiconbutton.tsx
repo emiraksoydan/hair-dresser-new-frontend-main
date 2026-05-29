@@ -9,6 +9,7 @@ import Animated, {
     withTiming,
     interpolate
 } from "react-native-reanimated";
+import { badgeCountLabel } from "../../utils/badgeDisplay";
 
 type Props = {
     icon: string;
@@ -31,7 +32,7 @@ export function BadgeIconButton({
 }: Props) {
     const { colors, isDark } = useTheme();
     const show = badgeCount > 0;
-    const text = badgeCount > 99 ? "99+" : String(badgeCount);
+    const text = badgeCountLabel(badgeCount);
 
     // Animasyon değerleri
     const scale = useSharedValue(1);
@@ -95,8 +96,10 @@ export function BadgeIconButton({
                     ]}
                 >
                     <Text
-                        style={styles.countText}
-                        includeFontPadding={Platform.OS === "android" ? false : undefined}
+                        style={[
+                            styles.countText,
+                            Platform.OS === "android" ? { includeFontPadding: false } : null,
+                        ]}
                     >
                         {text}
                     </Text>

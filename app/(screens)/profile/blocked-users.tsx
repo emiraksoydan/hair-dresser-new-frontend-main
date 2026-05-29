@@ -89,7 +89,7 @@ export default function BlockedUsersPage() {
     }, [refetch]);
 
     const renderBlockedItem = ({ item, index }: { item: BlockedGetDto; index: number }) => {
-        const displayName = item.targetUserName || "Bilinmeyen Kullanıcı";
+        const displayName = item.targetUserName || t("chatDefaults.userDefaultName");
         const imageUrl = item.targetUserImage;
         const userTypeName = getUserTypeName(item.targetUserType);
 

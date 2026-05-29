@@ -13,15 +13,55 @@ interface StoreMarkerProps {
     onPress: () => void;
 }
 
+const prefetchedMarkerImages = new Set<string>();
+
 export const StoreMarker = memo(({ storeId, coordinate, title, description, imageUrl, storeType, onPress }: StoreMarkerProps) => {
     const [tracksViewChanges, setTracksViewChanges] = useState(true);
-    const [imageError, setImageError] = useState(false);
-    const imageUrlRef = useRef<string | undefined>(imageUrl);
+    const [imageReady, setImageReady] = useState(() => !!imageUrl && prefetchedMarkerImages.has(imageUrl));
+    const imageUrlRef = useRef<string | undefined>(undefined);
     const mountedRef = useRef(true);
 
     const bg = storeType == 0 ? "#2563eb" : storeType == 1 ? "#db2777" : "#16a34a";
     const iconName = storeType == 0 ? "face-man" : "face-woman";
-    const hasImage = imageUrl && !imageError;
+
+    useEffect(() => {
+        imageUrlRef.current = imageUrl;
+
+        if (!imageUrl) {
+            setImageReady(false);
+            return;
+        }
+
+        if (prefetchedMarkerImages.has(imageUrl)) {
+            setImageReady(true);
+            return;
+        }
+
+        setImageReady(false);
+
+        let cancelled = false;
+        Image.prefetch(imageUrl)
+            .then((ok) => {
+                if (cancelled || !mountedRef.current || imageUrlRef.current !== imageUrl || !ok) return;
+                prefetchedMarkerImages.add(imageUrl);
+                setImageReady(true);
+                setTracksViewChanges(true);
+                setTimeout(() => {
+                    if (mountedRef.current && imageUrlRef.current === imageUrl) {
+                        setTracksViewChanges(false);
+                    }
+                }, 500);
+            })
+            .catch(() => {
+                if (!cancelled && mountedRef.current && imageUrlRef.current === imageUrl) {
+                    setImageReady(false);
+                }
+            });
+
+        return () => {
+            cancelled = true;
+        };
+    }, [imageUrl]);
 
     useEffect(() => {
         mountedRef.current = true;
@@ -39,25 +79,6 @@ export const StoreMarker = memo(({ storeId, coordinate, title, description, imag
         return () => clearTimeout(safetyTimer);
     }, []);
 
-    // Image URL değiştiğinde error'ı sıfırla ve tracking'i aç
-    useEffect(() => {
-        if (imageUrl !== imageUrlRef.current) {
-            imageUrlRef.current = imageUrl;
-            setImageError(false);
-            setTracksViewChanges(true);
-        }
-    }, [imageUrl]);
-
-    // Resim yoksa veya hata varsa tracking'i kapat
-    useEffect(() => {
-        if (!hasImage) {
-            const timer = setTimeout(() => {
-                if (mountedRef.current) setTracksViewChanges(false);
-            }, 300);
-            return () => clearTimeout(timer);
-        }
-    }, [hasImage]);
-
     return (
         <Marker
             key={`store-${storeId}`}
@@ -71,32 +92,19 @@ export const StoreMarker = memo(({ storeId, coordinate, title, description, imag
                 className="items-center justify-center w-9 h-9 rounded-full"
                 style={{
                     elevation: 4,
-                    borderWidth: hasImage ? 0 : 1,
+                    borderWidth: 1,
                     borderColor: "white",
                     backgroundColor: bg,
+                    overflow: "hidden",
                 }}
             >
-                {hasImage ? (
+                <Icon source={iconName} color="white" size={20} />
+                {imageUrl && imageReady && (
                     <Image
                         source={{ uri: imageUrl }}
-                        className="w-full h-full rounded-full"
+                        className="absolute inset-0 w-full h-full rounded-full"
                         resizeMode="cover"
-                        onLoad={() => {
-                            if (mountedRef.current) {
-                                setTracksViewChanges(true);
-                                setTimeout(() => {
-                                    if (mountedRef.current) setTracksViewChanges(false);
-                                }, 300);
-                            }
-                        }}
-                        onError={() => {
-                            if (mountedRef.current) {
-                                setImageError(true);
-                            }
-                        }}
                     />
-                ) : (
-                    <Icon source={iconName} color="white" size={20} />
                 )}
             </View>
         </Marker>

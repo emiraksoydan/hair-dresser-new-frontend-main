@@ -43,6 +43,12 @@ export function BookingSwipePager({
       defaultIndex={initialIndex}
       scrollAnimationDuration={380}
       windowSize={Math.min(5, ids.length + 2)}
+      onConfigurePanGesture={(gesture) => {
+        // failOffsetY küçük tutularak çapraz dokunuşlarda dikey scroll öncelik alır.
+        gesture
+          .activeOffsetX([-10, 10])
+          .failOffsetY([-5, 5]);
+      }}
       onSnapToItem={onSnap}
       renderItem={({ item }) => (
         <View style={{ width, height, flex: 1 }} key={item}>

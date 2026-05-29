@@ -5,6 +5,8 @@ type Props = {
   value: number;
   durationMs?: number;
   enabled?: boolean;
+  /** Örn. favori: bin/milyon kısaltması */
+  formatValue?: (n: number) => string;
 } & Omit<TextProps, "children">;
 
 /**
@@ -14,6 +16,7 @@ export function AnimatedCountText({
   value,
   durationMs = 380,
   enabled = true,
+  formatValue,
   ...textProps
 }: Props) {
   const [display, setDisplay] = useState(Math.round(value));
@@ -45,7 +48,9 @@ export function AnimatedCountText({
     };
   }, [value, durationMs, enabled]);
 
+  const label = formatValue ? formatValue(display) : String(display);
+
   return (
-    <Text {...textProps}>{display}</Text>
+    <Text {...textProps}>{label}</Text>
   );
 }

@@ -13,6 +13,11 @@ export function shouldFilterOwnFreeBarberFromCompare(userType: UserType | undefi
   return userType === UserType.BarberStore;
 }
 
+/** Favori karşılaştırma: serbest berber kullanıcısı yalnızca dükkan sekmesini görür. */
+export function shouldShowFreeBarberCompareTab(userType: UserType | undefined): boolean {
+  return userType !== UserType.FreeBarber;
+}
+
 export function isOtherUsersStore(store: StoreLike, currentUserId: string | undefined | null): boolean {
   if (!currentUserId) return true;
   if (store.isOwnStore) return false;

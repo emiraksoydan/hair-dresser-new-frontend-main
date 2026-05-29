@@ -11,9 +11,9 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Text } from "../../components/common/Text";
 import { IconButton } from "react-native-paper";
 import { OsmMapView as MapView } from "../../components/common/OsmMapView";
-import SearchBar from "../../components/common/searchbar";
+import SearchBar from "../../components/common/SearchBar";
 import { BottomSheetModal, BottomSheetView } from "@gorhom/bottom-sheet";
-import { useBottomSheet } from "../../hook/useBottomSheet";
+import { useFullHeightBottomSheet } from "../../hook/useBottomSheet";
 import MotiViewExpand from "../../components/common/motiviewexpand";
 import { toggleExpand } from "../../utils/common/expand-toggle";
 import { SkeletonComponent } from "../../components/common/skeleton";
@@ -35,19 +35,20 @@ import {
   shouldShowDiscoveryConnectivityError,
 } from "../../utils/panelDiscoveryErrors";
 import { SavedFilterChips } from "../../components/common/savedfilterchips";
-import { FilterDrawer } from "../../components/common/filterdrawer";
-import FormStoreUpdate from "../../components/store/formstoreupdate";
-import FormStoreAdd from "../../components/store/formstoreadd";
-import { StoreMineCardComp } from "../../components/store/storeminecard";
-import { FreeBarberCardInner } from "../../components/freebarber/freebarbercard";
-import FreeBarberBookingContent from "../../components/freebarber/freebarberbooking";
+import { FilterDrawer } from "../../components/common/FilterDrawer";
+import FormStoreUpdate from "../../components/store/FormStoreUpdate";
+import FormStoreAdd from "../../components/store/FormStoreAdd";
+import { StoreMineCardComp } from "../../components/store/StoreMineCard";
+import { FreeBarberCardInner } from "../../components/freebarber/FreeBarberCard";
+import FreeBarberBookingContent from "../../components/freebarber/FreeBarberBooking";
 import { useNearbyStoresControl } from "../../hook/useNearByFreeBarberForStore";
 import { safeCoord } from "../../utils/location/geo";
-import { BarberMarker } from "../../components/freebarber/barbermarker";
-import { RatingsBottomSheet } from "../../components/rating/ratingsbottomsheet";
+import { BarberMarker } from "../../components/freebarber/BarberMarker";
+import { RatingsBottomSheet } from "../../components/rating/RatingsBottomSheet";
 import { useBackendFilters } from "../../hook/useBackendFilters";
 import { DEFAULT_FILTER_RADIUS_KM, DEFAULT_DISTANCE_PRESET_ID } from "../../constants/filterDefaults";
-import { StoreMarker } from "../../components/common/storemarker";
+import { PANEL_FLAT_LIST_PERF } from "../../constants/panelFlatListPerf";
+import { StoreMarker } from "../../components/common/StoreMarker";
 import { DeferredRender } from "../../components/common/deferredrender";
 import { CrudSkeletonComponent } from "../../components/common/crudskeleton";
 import { useLanguage } from "../../hook/useLanguage";
@@ -194,26 +195,20 @@ const Index = () => {
   usePanelMoreFab(panelMapFabItems);
 
   // Bottom sheet hooks
-  const mapDetailSheet = useBottomSheet({
-    snapPoints: ["90%", "100%"],
+  const mapDetailSheet = useFullHeightBottomSheet({
     enablePanDownToClose: true,
   });
-  const addStoreSheet = useBottomSheet({
-    snapPoints: ["100%"],
+  const addStoreSheet = useFullHeightBottomSheet({
     enablePanDownToClose: false,
-    enableOverDrag: false,
     enableHandlePanningGesture: false,
     pressBehavior: "none",
   });
-  const updateStoreSheet = useBottomSheet({
-    snapPoints: ["100%"],
+  const updateStoreSheet = useFullHeightBottomSheet({
     enablePanDownToClose: false,
-    enableOverDrag: false,
     enableHandlePanningGesture: false,
     pressBehavior: "none",
   });
-  const ratingsSheet = useBottomSheet({
-    snapPoints: ["100%"],
+  const ratingsSheet = useFullHeightBottomSheet({
     enablePanDownToClose: true,
   });
 
@@ -240,10 +235,6 @@ const Index = () => {
     setRefreshing(true);
 
     try {
-      if (storesError) {
-        return;
-      }
-
       isRefreshingRef.current = true;
       await refetchStores();
       await manualFetch();
@@ -251,7 +242,7 @@ const Index = () => {
       setRefreshing(false);
       isRefreshingRef.current = false;
     }
-  }, [manualFetch, refetchStores, storesError]);
+  }, [manualFetch, refetchStores]);
 
   const [expandedStores, setExpandedStores] = useState(true);
   const [expandedFreeBarbers, setExpandedFreeBarbers] = useState(true);
@@ -480,7 +471,7 @@ const Index = () => {
         mode="barbershop"
         onPressRatings={handlePressRatings}
         onCallFreeBarber={handleManualFetch}
-        storeId={stores?.length === 1 ? stores[0].id : undefined}
+        storeId={stores && stores.length > 0 ? stores[0].id : undefined}
         showImageAnimation={settingData?.data?.showImageAnimation ?? true}
         panelCompare={
           isOtherUsersFreeBarber(item, currentUserId)
@@ -786,7 +777,6 @@ const Index = () => {
           scrollEventThrottle={16}
           contentContainerStyle={{ paddingBottom: 100 }}
           showsVerticalScrollIndicator={false}
-          removeClippedSubviews={false}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
@@ -794,8 +784,7 @@ const Index = () => {
               tintColor="#f05e23"
             />
           }
-          initialNumToRender={10}
-          windowSize={21}
+          {...PANEL_FLAT_LIST_PERF}
           renderItem={({ item }) => {
             if (item.type === "stores-header") {
               if (!hasStores) return null;
@@ -1121,6 +1110,8 @@ const Index = () => {
         onChange={addStoreSheet.handleChange}
         onDismiss={addStoreSheet.handleDismiss}
         snapPoints={addStoreSheet.snapPoints}
+        index={0}
+        enableDynamicSizing={false}
         enableOverDrag={addStoreSheet.enableOverDrag}
         enablePanDownToClose={addStoreSheet.enablePanDownToClose}
         enableHandlePanningGesture={addStoreSheet.enableHandlePanningGesture}
@@ -1146,6 +1137,8 @@ const Index = () => {
           updateStoreSheet.handleDismiss();
         }}
         snapPoints={updateStoreSheet.snapPoints}
+        index={0}
+        enableDynamicSizing={false}
         enableOverDrag={updateStoreSheet.enableOverDrag}
         enablePanDownToClose={updateStoreSheet.enablePanDownToClose}
         enableHandlePanningGesture={updateStoreSheet.enableHandlePanningGesture}
@@ -1177,6 +1170,8 @@ const Index = () => {
         ref={mapDetailSheet.ref}
         onChange={mapDetailSheet.handleChange}
         snapPoints={mapDetailSheet.snapPoints}
+        index={0}
+        enableDynamicSizing={false}
         enablePanDownToClose={mapDetailSheet.enablePanDownToClose}
         handleIndicatorStyle={{ backgroundColor: colors.sheetHandle }}
         backgroundStyle={{ backgroundColor: colors.sheetBg }}
@@ -1207,6 +1202,9 @@ const Index = () => {
       <BottomSheetModal
         ref={ratingsSheet.ref}
         snapPoints={ratingsSheet.snapPoints}
+        index={0}
+        enableDynamicSizing={false}
+        enableContentPanningGesture={true}
         enablePanDownToClose={ratingsSheet.enablePanDownToClose}
         handleIndicatorStyle={{ backgroundColor: colors.sheetHandle }}
         backgroundStyle={{ backgroundColor: colors.sheetBg }}

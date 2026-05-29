@@ -5,6 +5,8 @@ import { Text } from './Text';
 import { AnimatedCountText } from './AnimatedCountText';
 import { useLanguage } from '../../hook/useLanguage';
 import { useTheme } from '../../hook/useTheme';
+import { getStarRatingScoreColor, getStarRatingWidgetProps } from '../../constants/colors';
+import { ThemedStarIcon } from './ThemedStarIcon';
 
 interface RatingSectionProps {
   rating: number;
@@ -30,7 +32,9 @@ export const RatingSection: React.FC<RatingSectionProps> = ({
   compact = false,
 }) => {
   const { t } = useLanguage();
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
+  const starProps = getStarRatingWidgetProps(isDark);
+  const scoreColor = getStarRatingScoreColor(isDark);
   const formattedRating = rating?.toFixed(1) || '0.0';
   const starSize = starSizeProp ?? (compact ? 18 : 22);
   const ratingFont = compact ? 16 : 19;
@@ -43,10 +47,12 @@ export const RatingSection: React.FC<RatingSectionProps> = ({
       <StarRatingDisplay
         rating={rating || 0}
         starSize={starSize}
-        color="#FACC15"
+        color={starProps.color}
+        emptyColor={starProps.emptyColor}
+        StarIconComponent={ThemedStarIcon}
         starStyle={{ marginHorizontal: 0 }}
       />
-      <Text style={{ color: colors.sectionHeaderText, fontSize: ratingFont, lineHeight: ratingLineHeight, fontFamily: 'CenturyGothic-Bold' }} className="flex-1">
+      <Text style={{ color: scoreColor, fontSize: ratingFont, lineHeight: ratingLineHeight, fontFamily: 'CenturyGothic-Bold' }} className="flex-1">
         {formattedRating}
       </Text>
       {showReviewsLink && onPressRatings && (

@@ -5,14 +5,14 @@
 import type { Control, UseFormSetValue } from "react-hook-form";
 
 // Import types from component files
-import type { FormValues as FormStoreAddValues } from "../components/store/formstoreadd";
-import type { FormUpdateValues as FormStoreUpdateValues } from "../components/store/formstoreupdate";
-import type { FormFreeBarberValues as FormFreeBarberValuesType } from "../components/freebarber/formfreebarberoper";
+import type { FormValues as FormStoreAddValues } from "../components/store/FormStoreAdd";
+import type { FormUpdateValues as FormStoreUpdateValues } from "../components/store/FormStoreUpdate";
+import type { FormFreeBarberValues as FormFreeBarberValuesType } from "../components/freebarber/FormFreeBarberOper";
 
 // Re-export for convenience
-export type { FormValues } from "../components/store/formstoreadd";
-export type { FormUpdateValues } from "../components/store/formstoreupdate";
-export type { FormFreeBarberValues } from "../components/freebarber/formfreebarberoper";
+export type { FormValues } from "../components/store/FormStoreAdd";
+export type { FormUpdateValues } from "../components/store/FormStoreUpdate";
+export type { FormFreeBarberValues } from "../components/freebarber/FormFreeBarberOper";
 
 export type ChairRowProps = {
   index: number;

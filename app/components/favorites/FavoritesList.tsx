@@ -3,27 +3,28 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ActivityIndicator, View, FlatList, Dimensions, RefreshControl, ScrollView, TouchableOpacity } from 'react-native';
 import { PerplexityAnimatedList } from '../common/PerplexityAnimatedList';
 import { Text } from '../common/Text';
-import { api, useGetMyFavoritesQuery, useGetMeQuery, useGetFreeBarberMinePanelQuery, useGetSettingQuery } from '../../store/api';
+import { api, useGetMyFavoritesQuery, useGetMeQuery, useGetFreeBarberMinePanelQuery, useGetMineStoresQuery, useGetSettingQuery } from '../../store/api';
 import { useAppDispatch } from '../../store/hook';
 import { setFreeBarberSwipeIds, setStoreSwipeIds } from '../../store/bookingSwipeSlice';
 import { shouldFilterStoresToOthersOnly, shouldFilterOwnFreeBarberFromCompare, isOtherUsersStore, isOtherUsersFreeBarber } from '../../utils/compare-eligibility';
 import { FavoriteGetDto, FavoriteTargetType, UserType } from '../../types';
-import { StoreCardInner } from '../store/storecard';
-import { FreeBarberCardInner } from '../freebarber/freebarbercard';
+import { StoreCardInner } from '../store/StoreCard';
+import { FreeBarberCardInner } from '../freebarber/FreeBarberCard';
 import { CustomerCardInner } from '../customer/customercard';
 import { ManuelBarberCardInner } from '../manuelbarber/manuelbarbercard';
 import { useSafeNavigation } from '../../hook/useSafeNavigation';
 import { BarberStoreGetDto, FreeBarGetDto, UserFavoriteDto, ManuelBarberFavoriteDto } from '../../types';
 
 import { BottomSheetModal, BottomSheetView } from '@gorhom/bottom-sheet';
-import { RatingsBottomSheet } from '../rating/ratingsbottomsheet';
-import { useBottomSheet } from '../../hook/useBottomSheet';
-import FormStoreUpdate from '../store/formstoreupdate';
+import { RatingsBottomSheet } from '../rating/RatingsBottomSheet';
+import { useFullHeightBottomSheet } from '../../hook/useBottomSheet';
+import FormStoreUpdate from '../store/FormStoreUpdate';
 import { UnifiedStateWrapper } from '../common/UnifiedStateManager';
-import { FormFreeBarberOperation } from '../freebarber/formfreebarberoper';
+import { FormFreeBarberOperation } from '../freebarber/FormFreeBarberOper';
 import { SkeletonComponent } from '../common/skeleton';
 import { useLanguage } from '../../hook/useLanguage';
 import { useTheme } from '../../hook/useTheme';
+import { COLORS, getTextOnGold } from '../../constants/colors';
 import { useFabOverlayWhenSheetOpen } from '../../hook/usePanelMoreFab';
 import { useDeferredSheetPresent } from '../../hook/useDeferredSheetPresent';
 
@@ -38,7 +39,7 @@ const END_REACHED_GRACE_MS = 450;
 
 const FavoritesList: React.FC<FavoritesListProps> = ({ mode = 'store' }) => {
     const { t } = useLanguage();
-    const { colors } = useTheme();
+    const { colors, isDark } = useTheme();
     const { data: favorites, isLoading, refetch, error, isError } = useGetMyFavoritesQuery({ limit: FAVORITES_PAGE_SIZE });
     const { data: currentUser, isLoading: isUserLoading, isSuccess: isUserSuccess } = useGetMeQuery();
     const compareUid = currentUser?.data?.id;
@@ -53,25 +54,23 @@ const FavoritesList: React.FC<FavoritesListProps> = ({ mode = 'store' }) => {
         skip: !isUserSuccess || !isFreeBarberUser,
     });
     const { data: settingData } = useGetSettingQuery();
+    const { data: myStores = [] } = useGetMineStoresQuery(undefined, {
+        skip: mode !== 'store',
+    });
     const router = useSafeNavigation();
     const dispatch = useAppDispatch();
 
     // Bottom sheet hooks
-    const ratingsSheet = useBottomSheet({
-        snapPoints: ["100%"],
+    const ratingsSheet = useFullHeightBottomSheet({
         enablePanDownToClose: true,
     });
-    const updateStoreSheet = useBottomSheet({
-        snapPoints: ["100%"],
+    const updateStoreSheet = useFullHeightBottomSheet({
         enablePanDownToClose: false,
-        enableOverDrag: false,
         enableHandlePanningGesture: false,
         pressBehavior: "none",
     });
-    const updateFreeBarberSheet = useBottomSheet({
-        snapPoints: ["100%"],
+    const updateFreeBarberSheet = useFullHeightBottomSheet({
         enablePanDownToClose: false,
-        enableOverDrag: false,
         enableHandlePanningGesture: false,
         pressBehavior: "none",
     });
@@ -236,6 +235,7 @@ const FavoritesList: React.FC<FavoritesListProps> = ({ mode = 'store' }) => {
                 />
             );
         } else if (item.targetType === FavoriteTargetType.FreeBarber && item.freeBarber) {
+            const selectedStoreIdForCall = mode === 'store' && myStores.length > 0 ? myStores[0].id : undefined;
             return (
                 <FreeBarberCardInner
                     freeBarber={item.freeBarber}
@@ -248,6 +248,9 @@ const FavoritesList: React.FC<FavoritesListProps> = ({ mode = 'store' }) => {
                     onPressRatings={handlePressRatings}
                     showImageAnimation={settingData?.data?.showImageAnimation ?? true}
                     compactMeta
+                    mode={mode === 'store' ? 'barbershop' : 'default'}
+                    storeId={selectedStoreIdForCall}
+                    disableImageNavigation={mode === 'store'}
                 />
             );
         } else if (item.targetType === FavoriteTargetType.Customer && item.customer) {
@@ -275,7 +278,7 @@ const FavoritesList: React.FC<FavoritesListProps> = ({ mode = 'store' }) => {
             );
         }
         return null;
-    }, [cardWidth, goStoreDetail, goFreeBarberDetail, getTargetTypeLabel, getTargetTypeColor, mode, handlePressRatings, settingData]);
+    }, [cardWidth, goStoreDetail, goFreeBarberDetail, getTargetTypeLabel, getTargetTypeColor, mode, handlePressRatings, myStores, settingData]);
 
     // Infinite scroll state
     const [isLoadingOlder, setIsLoadingOlder] = useState(false);
@@ -412,7 +415,11 @@ const FavoritesList: React.FC<FavoritesListProps> = ({ mode = 'store' }) => {
                         borderColor: "#FACC1555",
                     }}
                 >
-                    <Icon source="compare-horizontal" size={22} color="#FACC15" />
+                    <Icon
+                        source="compare-horizontal"
+                        size={22}
+                        color={isDark ? COLORS.UI.ACCENT_GOLD : getTextOnGold(false)}
+                    />
                     <Text style={{ fontFamily: "CenturyGothic-Bold", color: colors.sectionHeaderText, fontSize: 14 }}>
                         {t("compare.fromFavorites")}
                     </Text>
@@ -452,6 +459,9 @@ const FavoritesList: React.FC<FavoritesListProps> = ({ mode = 'store' }) => {
             <BottomSheetModal
                 ref={ratingsSheet.ref}
                 snapPoints={ratingsSheet.snapPoints}
+                index={0}
+                enableDynamicSizing={false}
+                enableContentPanningGesture={true}
                 enablePanDownToClose={ratingsSheet.enablePanDownToClose}
                 handleIndicatorStyle={{ backgroundColor: colors.sheetHandle }}
                 backgroundStyle={{ backgroundColor: colors.sheetBg }}
@@ -488,6 +498,8 @@ const FavoritesList: React.FC<FavoritesListProps> = ({ mode = 'store' }) => {
             <BottomSheetModal
                 ref={updateStoreSheet.ref}
                 snapPoints={updateStoreSheet.snapPoints}
+                index={0}
+                enableDynamicSizing={false}
                 enablePanDownToClose={updateStoreSheet.enablePanDownToClose}
                 enableOverDrag={updateStoreSheet.enableOverDrag}
                 enableHandlePanningGesture={updateStoreSheet.enableHandlePanningGesture}
@@ -526,6 +538,8 @@ const FavoritesList: React.FC<FavoritesListProps> = ({ mode = 'store' }) => {
             <BottomSheetModal
                 ref={updateFreeBarberSheet.ref}
                 snapPoints={updateFreeBarberSheet.snapPoints}
+                index={0}
+                enableDynamicSizing={false}
                 enablePanDownToClose={updateFreeBarberSheet.enablePanDownToClose}
                 enableOverDrag={updateFreeBarberSheet.enableOverDrag}
                 enableHandlePanningGesture={updateFreeBarberSheet.enableHandlePanningGesture}

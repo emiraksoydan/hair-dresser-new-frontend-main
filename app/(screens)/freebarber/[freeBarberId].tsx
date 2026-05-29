@@ -1,9 +1,8 @@
-import { Icon } from "react-native-paper";
-import { TouchableOpacity, View, StatusBar } from 'react-native'
+import { View, StatusBar } from 'react-native'
 import React, { useCallback, useEffect, useMemo } from 'react'
 import { useLocalSearchParams } from 'expo-router';
 
-import FreeBarberBookingContent from '../../components/freebarber/freebarberbooking';
+import FreeBarberBookingContent from '../../components/freebarber/FreeBarberBooking';
 import { BookingSwipePager } from '../../components/common/BookingSwipePager';
 import { useTheme } from '../../hook/useTheme';
 import { useSafeNavigation } from '../../hook/useSafeNavigation';
@@ -80,13 +79,6 @@ const FreeBarberDetail = () => {
                     {...bookingProps}
                 />
             )}
-            <TouchableOpacity
-                onPress={() => router.back()}
-                className="absolute top-10 left-5 z-20 rounded-full p-3"
-                style={{ backgroundColor: "rgba(0,0,0,0.4)" }}
-            >
-                <Icon source="chevron-left" size={25} color="white" />
-            </TouchableOpacity>
         </View>
     );
 }

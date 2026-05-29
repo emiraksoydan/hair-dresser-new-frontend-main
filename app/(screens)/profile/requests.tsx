@@ -25,6 +25,7 @@ import { useTheme } from "../../hook/useTheme";
 import { useActionGuard } from "../../hook/useActionGuard";
 import { useSafeNavigation } from "../../hook/useSafeNavigation";
 import { ScrollStackItem } from "../../components/common/ScrollStackItem";
+import { getTextOnGold } from "../../constants/colors";
 
 const REQUEST_STRIDE = 148;
 
@@ -39,6 +40,7 @@ export default function RequestsPage() {
     const { t } = useLanguage();
     const { showSuccess, showError, showConfirm } = useAlert();
     const { colors, isDark } = useTheme();
+    const onGoldFg = getTextOnGold(isDark);
     const insets = useSafeAreaInsets();
     const { height: winH, width: winW } = useWindowDimensions();
     const guard = useActionGuard();
@@ -146,7 +148,7 @@ export default function RequestsPage() {
                 setShowForm(false);
                 refetch();
             } catch (error: any) {
-                showError(error?.data?.message || t("profile.requestCreateError") || "İstek gönderilemedi");
+                showError(error?.data?.message || t("profile.requestCreateError"));
             }
         });
 
@@ -158,7 +160,7 @@ export default function RequestsPage() {
                     showSuccess(t("profile.deleteSuccess"));
                     refetch();
                 } catch (error: any) {
-                    showError(error?.data?.message || t("profile.deleteError") || "İstek silinemedi");
+                    showError(error?.data?.message || t("profile.deleteError"));
                 }
             }),
         );
@@ -296,13 +298,13 @@ export default function RequestsPage() {
             }}
         >
             {loading ? (
-                <ActivityIndicator color="#fff" />
+                <ActivityIndicator color={onGoldFg} />
             ) : (
                 <>
-                    <Icon source="send" size={20} color="#fff" />
+                    <Icon source="send" size={20} color={onGoldFg} />
                     <Text
                         style={{
-                            color: "#fff",
+                            color: onGoldFg,
                             fontFamily: "CenturyGothic-Bold",
                             fontSize: 15,
                             marginLeft: 8,
@@ -357,7 +359,7 @@ export default function RequestsPage() {
                         borderColor: isDark ? "rgba(240, 94, 35, 0.35)" : "rgba(251, 146, 60, 0.35)",
                     }}
                 >
-                    <Icon source={showForm ? "close" : "plus"} size={22} color={ACCENT} />
+                    <Icon source={showForm ? "close" : "plus"} size={22} color={onGoldFg} />
                 </TouchableOpacity>
             </View>
 

@@ -11,10 +11,16 @@ interface BarberMarkerProps {
     onPress: (item: FreeBarGetDto) => void;
 }
 
+const prefetchedMarkerImages = new Set<string>();
+
 export const BarberMarker = memo(({ barber, onPress }: BarberMarkerProps) => {
     const [tracksViewChanges, setTracksViewChanges] = useState(true);
-    const [imageError, setImageError] = useState(false);
+    const [imageReady, setImageReady] = useState(() => {
+        const initialUrl = (barber as any)?.imageList?.[0]?.imageUrl;
+        return !!initialUrl && prefetchedMarkerImages.has(initialUrl);
+    });
     const mountedRef = useRef(true);
+    const imageUrlRef = useRef<string | undefined>(undefined);
 
     useEffect(() => {
         mountedRef.current = true;
@@ -32,22 +38,50 @@ export const BarberMarker = memo(({ barber, onPress }: BarberMarkerProps) => {
     }, []);
 
     const c = safeCoord((barber as any).latitude, (barber as any).longitude);
-    if (!c) return null;
-
     const avatarUrl = (barber as any)?.imageList?.[0]?.imageUrl;
     const bg = (barber as any).type == 0 ? "#2563eb" : "#db2777";
     const iconName = (barber as any).type == 0 ? "face-man" : "face-woman";
-    const hasImage = avatarUrl && !imageError;
 
-    // Resim yoksa ilk renderdan sonra tracking'i kapat
     useEffect(() => {
-        if (!hasImage) {
-            const timer = setTimeout(() => {
-                if (mountedRef.current) setTracksViewChanges(false);
-            }, 300);
-            return () => clearTimeout(timer);
+        imageUrlRef.current = avatarUrl;
+
+        if (!avatarUrl) {
+            setImageReady(false);
+            return;
         }
-    }, [hasImage]);
+
+        if (prefetchedMarkerImages.has(avatarUrl)) {
+            setImageReady(true);
+            return;
+        }
+
+        setImageReady(false);
+
+        let cancelled = false;
+        Image.prefetch(avatarUrl)
+            .then((ok) => {
+                if (cancelled || !mountedRef.current || imageUrlRef.current !== avatarUrl || !ok) return;
+                prefetchedMarkerImages.add(avatarUrl);
+                setImageReady(true);
+                setTracksViewChanges(true);
+                setTimeout(() => {
+                    if (mountedRef.current && imageUrlRef.current === avatarUrl) {
+                        setTracksViewChanges(false);
+                    }
+                }, 500);
+            })
+            .catch(() => {
+                if (!cancelled && mountedRef.current && imageUrlRef.current === avatarUrl) {
+                    setImageReady(false);
+                }
+            });
+
+        return () => {
+            cancelled = true;
+        };
+    }, [avatarUrl]);
+
+    if (!c) return null;
 
     return (
         <Marker
@@ -61,33 +95,19 @@ export const BarberMarker = memo(({ barber, onPress }: BarberMarkerProps) => {
                 className="items-center justify-center w-8 h-8 rounded-full"
                 style={{
                     elevation: 4,
-                    borderWidth: hasImage ? 0 : 1,
+                    borderWidth: 1,
                     borderColor: "white",
                     backgroundColor: bg,
+                    overflow: "hidden",
                 }}
             >
-                {hasImage ? (
+                <Icon source={iconName} color="white" size={20} />
+                {avatarUrl && imageReady && (
                     <Image
                         source={{ uri: avatarUrl }}
-                        className="w-full h-full rounded-full"
+                        className="absolute inset-0 w-full h-full rounded-full"
                         resizeMode="cover"
-                        onLoad={() => {
-                            if (mountedRef.current) {
-                                // Resim yüklendi, kısa süre track et ki görünsün sonra kapat
-                                setTracksViewChanges(true);
-                                setTimeout(() => {
-                                    if (mountedRef.current) setTracksViewChanges(false);
-                                }, 300);
-                            }
-                        }}
-                        onError={() => {
-                            if (mountedRef.current) {
-                                setImageError(true);
-                            }
-                        }}
                     />
-                ) : (
-                    <Icon source={iconName} color="white" size={20} />
                 )}
             </View>
         </Marker>

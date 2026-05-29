@@ -21,8 +21,68 @@ export const CMP_ADV_LEFT_SOFT = "rgba(45, 212, 191, 0.42)";
 export const CMP_ADV_RIGHT_SOFT = "rgba(96, 165, 250, 0.5)";
 export const CMP_ADV_TRACK = "rgba(148, 163, 184, 0.18)";
 
-export function screenBg(isDark: boolean) {
-  return isDark ? "#0c0f14" : "#f1f5f9";
+export type CompareVariant = "store" | "freeBarber";
+
+export type CompareVisualTokens = {
+  accent: string;
+  accentSoft: string;
+  accentBorder: string;
+  screenBgLight: string;
+  vsPillBg: string;
+  vsPillText: string;
+  winLeft: string;
+  winRight: string;
+  lose: string;
+  winLeftBg: string;
+  winRightBg: string;
+  advLeftSoft: string;
+  advRightSoft: string;
+  headerStripe: string;
+  backBtnBgLight: string;
+};
+
+export function getCompareVisualTokens(variant: CompareVariant, isDark: boolean): CompareVisualTokens {
+  if (variant === "store") {
+    return {
+      accent: isDark ? "#a5b4fc" : "#4f46e5",
+      accentSoft: isDark ? "rgba(129, 140, 248, 0.2)" : "rgba(79, 70, 229, 0.1)",
+      accentBorder: isDark ? "rgba(129, 140, 248, 0.35)" : "rgba(79, 70, 229, 0.22)",
+      screenBgLight: "#f1f5f9",
+      vsPillBg: isDark ? "#6366f1" : "#4f46e5",
+      vsPillText: "#ffffff",
+      winLeft: isDark ? "#2dd4bf" : "#0d9488",
+      winRight: isDark ? "#60a5fa" : "#2563eb",
+      lose: "#fb7185",
+      winLeftBg: isDark ? "rgba(45, 212, 191, 0.1)" : "rgba(13, 148, 136, 0.08)",
+      winRightBg: isDark ? "rgba(96, 165, 250, 0.1)" : "rgba(37, 99, 235, 0.08)",
+      advLeftSoft: isDark ? "rgba(45, 212, 191, 0.42)" : "rgba(13, 148, 136, 0.55)",
+      advRightSoft: isDark ? "rgba(96, 165, 250, 0.5)" : "rgba(37, 99, 235, 0.55)",
+      headerStripe: isDark ? "rgba(99, 102, 241, 0.55)" : "rgba(79, 70, 229, 0.35)",
+      backBtnBgLight: "rgba(79, 70, 229, 0.1)",
+    };
+  }
+  return {
+    accent: isDark ? "#fda4af" : "#e11d48",
+    accentSoft: isDark ? "rgba(251, 113, 133, 0.2)" : "rgba(225, 29, 72, 0.08)",
+    accentBorder: isDark ? "rgba(251, 113, 133, 0.35)" : "rgba(225, 29, 72, 0.2)",
+    screenBgLight: "#fff1f2",
+    vsPillBg: isDark ? "#fb7185" : "#e11d48",
+    vsPillText: "#ffffff",
+    winLeft: isDark ? "#fb7185" : "#e11d48",
+    winRight: isDark ? "#f472b6" : "#db2777",
+    lose: "#94a3b8",
+    winLeftBg: isDark ? "rgba(251, 113, 133, 0.12)" : "rgba(225, 29, 72, 0.08)",
+    winRightBg: isDark ? "rgba(244, 114, 182, 0.12)" : "rgba(219, 39, 119, 0.08)",
+    advLeftSoft: isDark ? "rgba(251, 113, 133, 0.45)" : "rgba(225, 29, 72, 0.55)",
+    advRightSoft: isDark ? "rgba(244, 114, 182, 0.5)" : "rgba(219, 39, 119, 0.55)",
+    headerStripe: isDark ? "rgba(251, 113, 133, 0.5)" : "rgba(225, 29, 72, 0.35)",
+    backBtnBgLight: "rgba(225, 29, 72, 0.08)",
+  };
+}
+
+export function screenBg(isDark: boolean, variant: CompareVariant = "store") {
+  if (isDark) return "#0c0f14";
+  return getCompareVisualTokens(variant, false).screenBgLight;
 }
 
 function buildCompareMetrics(
@@ -145,11 +205,14 @@ export function compareStripCtaStyle(m: CompareMetrics): ViewStyle {
 export function CompareHeaderChrome({
   children,
   isDark,
+  variant = "store",
 }: {
   children: React.ReactNode;
   isDark: boolean;
+  variant?: CompareVariant;
 }) {
   const m = useCompareMetrics();
+  const tokens = getCompareVisualTokens(variant, isDark);
   return (
     <View
       style={[
@@ -162,6 +225,17 @@ export function CompareHeaderChrome({
         },
       ]}
     >
+      <View
+        style={{
+          position: "absolute",
+          left: m.screenPaddingH,
+          right: m.screenPaddingH,
+          bottom: 0,
+          height: 3,
+          borderRadius: 2,
+          backgroundColor: tokens.headerStripe,
+        }}
+      />
       {children}
     </View>
   );
@@ -182,8 +256,9 @@ export function CompareGoldAccentBar() {
   );
 }
 
-export function useCompareCardShell(isDark: boolean): ViewStyle {
+export function useCompareCardShell(isDark: boolean, variant: CompareVariant = "store"): ViewStyle {
   const m = useCompareMetrics();
+  const tokens = getCompareVisualTokens(variant, isDark);
   return useMemo(
     () => ({
       flex: 1,
@@ -191,19 +266,16 @@ export function useCompareCardShell(isDark: boolean): ViewStyle {
       padding: m.cardPad + 2,
       backgroundColor: isDark ? "rgba(255,255,255,0.05)" : "rgba(255, 255, 255, 0.97)",
       borderWidth: 1,
-      borderColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(148, 163, 184, 0.22)",
-      shadowColor: isDark ? "#000" : "#64748b",
+      borderColor: isDark ? "rgba(255,255,255,0.08)" : tokens.accentBorder,
+      shadowColor: isDark ? "#000" : variant === "store" ? "#64748b" : "#fda4af",
       shadowOffset: { width: 0, height: 2 },
       shadowOpacity: isDark ? 0.28 : 0.06,
       shadowRadius: isDark ? 8 : 14,
       elevation: isDark ? 0 : 3,
     }),
-    [isDark, m],
+    [isDark, m, tokens.accentBorder, variant],
   );
 }
-
-const DUEL_WIN = "#2dd4bf";
-const DUEL_LOSE = "#fb7185";
 
 export type CompareWinner = "left" | "right" | "tie" | "skip";
 
@@ -217,28 +289,30 @@ function sideResult(
   return side === "right" ? "win" : "lose";
 }
 
-export function VsPill() {
+export function VsPill({ variant = "store" }: { variant?: CompareVariant }) {
   const m = useCompareMetrics();
+  const { isDark } = useTheme();
+  const tokens = getCompareVisualTokens(variant, isDark);
   return (
     <MotiView
       from={{ scale: 0.3, opacity: 0 }}
       animate={{ scale: 1, opacity: 1 }}
       transition={{ type: "spring", damping: 11, stiffness: 200, delay: 180 }}
       style={{
-        paddingHorizontal: m.vsPillPadH,
+        paddingHorizontal: m.vsPillPadH + (variant === "freeBarber" ? 4 : 0),
         paddingVertical: m.vsPillPadV,
-        borderRadius: m.vsPillRadius,
-        backgroundColor: CMP_GOLD,
+        borderRadius: variant === "freeBarber" ? 999 : m.vsPillRadius,
+        backgroundColor: tokens.vsPillBg,
         alignItems: "center",
         justifyContent: "center",
-        shadowColor: "#FACC15",
+        shadowColor: tokens.vsPillBg,
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.35,
         shadowRadius: 6,
         elevation: 4,
       }}
     >
-      <Text style={{ fontFamily: "CenturyGothic-Bold", fontSize: m.vsFont, color: "#1f2937" }}>
+      <Text style={{ fontFamily: "CenturyGothic-Bold", fontSize: m.vsFont, color: tokens.vsPillText }}>
         VS
       </Text>
     </MotiView>
@@ -250,32 +324,36 @@ export function CompareDuelRow({
   left,
   right,
   winner,
+  variant = "store",
 }: {
   label: string;
   left: ReactNode;
   right: ReactNode;
   winner: CompareWinner;
+  variant?: CompareVariant;
 }) {
   const { colors, isDark } = useTheme();
   const m = useCompareMetrics();
+  const tokens = getCompareVisualTokens(variant, isDark);
   const l = sideResult(winner, "left");
   const r = sideResult(winner, "right");
   const showL = l === "win" || l === "lose";
   const showR = r === "win" || r === "lose";
-  const lColor = l === "win" ? DUEL_WIN : l === "lose" ? DUEL_LOSE : colors.textSecondary;
-  const rColor = r === "win" ? DUEL_WIN : r === "lose" ? DUEL_LOSE : colors.textSecondary;
-  const lBg = l === "win" ? "rgba(45, 212, 191, 0.08)" : "transparent";
-  const rBg = r === "win" ? "rgba(96, 165, 250, 0.08)" : "transparent";
+  const lColor = l === "win" ? tokens.winLeft : l === "lose" ? tokens.lose : colors.textSecondary;
+  const rColor = r === "win" ? tokens.winRight : r === "lose" ? tokens.lose : colors.textSecondary;
+  const lBg = l === "win" ? tokens.winLeftBg : "transparent";
+  const rBg = r === "win" ? tokens.winRightBg : "transparent";
+  const blockRadius = variant === "freeBarber" ? 999 : m.duelBlockRadius;
   return (
     <View
       style={{
         marginBottom: m.rowMb,
-        borderRadius: m.duelBlockRadius,
+        borderRadius: blockRadius,
         paddingVertical: m.duelBlockPad,
         paddingHorizontal: m.duelBlockPad,
-        backgroundColor: isDark ? "rgba(255,255,255,0.04)" : "rgba(248, 250, 252, 0.9)",
+        backgroundColor: isDark ? "rgba(255,255,255,0.04)" : variant === "freeBarber" ? "rgba(255,255,255,0.95)" : "rgba(248, 250, 252, 0.9)",
         borderWidth: 1,
-        borderColor: isDark ? "rgba(255,255,255,0.06)" : "rgba(148, 163, 184, 0.16)",
+        borderColor: isDark ? "rgba(255,255,255,0.06)" : tokens.accentBorder,
       }}
     >
       <Text
@@ -347,6 +425,7 @@ export function CompareAdvantageBar({
   leftWins,
   rightWins,
   summaryLine,
+  variant = "store",
 }: {
   leftName: string;
   rightName: string;
@@ -354,9 +433,11 @@ export function CompareAdvantageBar({
   leftWins: number;
   rightWins: number;
   summaryLine: string;
+  variant?: CompareVariant;
 }) {
   const { colors, isDark } = useTheme();
   const m = useCompareMetrics();
+  const tokens = getCompareVisualTokens(variant, isDark);
   const w = Math.max(0, Math.min(1, leftPct / 100));
   const leftW = `${(w * 100).toFixed(2)}%` as DimensionValue;
   return (
@@ -365,13 +446,13 @@ export function CompareAdvantageBar({
       animate={{ opacity: 1 }}
       transition={{ type: "timing", duration: 400 }}
       style={{
-        borderRadius: m.cardRadius + 2,
+        borderRadius: variant === "freeBarber" ? m.cardRadius + 8 : m.cardRadius + 2,
         padding: m.cardPad + 4,
         marginTop: m.footerNoteMt + 4,
-        backgroundColor: isDark ? "rgba(45, 212, 191, 0.06)" : "rgba(255, 255, 255, 0.98)",
+        backgroundColor: isDark ? tokens.accentSoft : "rgba(255, 255, 255, 0.98)",
         borderWidth: 1,
-        borderColor: isDark ? "rgba(45, 212, 191, 0.12)" : "rgba(148, 163, 184, 0.2)",
-        shadowColor: isDark ? "#000" : "#94a3b8",
+        borderColor: isDark ? tokens.accentBorder : tokens.accentBorder,
+        shadowColor: isDark ? "#000" : variant === "store" ? "#94a3b8" : "#fda4af",
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: isDark ? 0.2 : 0.04,
         shadowRadius: 12,
@@ -400,7 +481,7 @@ export function CompareAdvantageBar({
           <Text
             style={{
               fontSize: m.rowFont,
-              color: isDark ? "rgba(45, 212, 191, 0.88)" : "rgba(13, 148, 136, 0.8)",
+              color: tokens.winLeft,
               marginTop: 3,
             }}
           >
@@ -417,7 +498,7 @@ export function CompareAdvantageBar({
           <Text
             style={{
               fontSize: m.rowFont,
-              color: isDark ? "rgba(96, 165, 250, 0.92)" : "rgba(37, 99, 235, 0.75)",
+              color: tokens.winRight,
               marginTop: 3,
             }}
           >
@@ -438,13 +519,13 @@ export function CompareAdvantageBar({
           from={{ opacity: 0.8 }}
           animate={{ opacity: 1 }}
           transition={{ type: "spring", damping: 18, stiffness: 200 }}
-          style={{ width: leftW, height: "100%", backgroundColor: CMP_ADV_LEFT_SOFT, alignItems: "center", justifyContent: "center" }}
+          style={{ width: leftW, height: "100%", backgroundColor: tokens.advLeftSoft, alignItems: "center", justifyContent: "center" }}
         >
           <Text style={{ fontFamily: "CenturyGothic-Bold", fontSize: 10, color: "rgba(255,255,255,0.95)" }}>
             {Math.round(leftPct)}%
           </Text>
         </MotiView>
-        <View style={{ flex: 1, minWidth: 0, height: "100%", backgroundColor: CMP_ADV_RIGHT_SOFT, alignItems: "center", justifyContent: "center" }}>
+        <View style={{ flex: 1, minWidth: 0, height: "100%", backgroundColor: tokens.advRightSoft, alignItems: "center", justifyContent: "center" }}>
           <Text style={{ fontFamily: "CenturyGothic-Bold", fontSize: 10, color: "rgba(255,255,255,0.95)" }}>
             {100 - Math.round(leftPct)}%
           </Text>
@@ -527,11 +608,16 @@ export function CompareOwnerRow({
   );
 }
 
-export function compareBackButtonSurface(isDark: boolean, m: CompareMetrics): ViewStyle {
+export function compareBackButtonSurface(
+  isDark: boolean,
+  m: CompareMetrics,
+  variant: CompareVariant = "store",
+): ViewStyle {
+  const tokens = getCompareVisualTokens(variant, isDark);
   return {
     padding: m.backBtnPad,
     borderRadius: m.pickTabRadius,
-    backgroundColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(99, 102, 241, 0.1)",
+    backgroundColor: isDark ? "rgba(255,255,255,0.08)" : tokens.backBtnBgLight,
   };
 }
 

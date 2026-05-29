@@ -19,6 +19,8 @@ import {
 import { useTheme } from "../../hook/useTheme";
 import { useLanguage } from "../../hook/useLanguage";
 import { parseTR, trMoneyRegex } from "../../utils/form/money-helper";
+import { isMonetaryWithinLimit, MAX_MONETARY_TRY_DISPLAY } from "../../constants/priceLimits";
+import { v4 as uuid } from "uuid";
 
 const ACCENT = "#c2a523";
 const MAX_PACKAGES = 20;
@@ -67,6 +69,8 @@ function validatePackage(
     const n = parseTR(pkg.totalPrice);
     if (n === undefined || n <= 0) {
       errors.totalPrice = t("servicePackage.errPricePositive");
+    } else if (!isMonetaryWithinLimit(n)) {
+      errors.totalPrice = t("form.priceExceedsPlatformMax", { max: MAX_MONETARY_TRY_DISPLAY });
     }
   }
   if (!pkg.serviceOfferingIds || pkg.serviceOfferingIds.length === 0) {
@@ -336,6 +340,8 @@ const PackageFormModal = ({
     [touched, localPkg, t],
   );
 
+  const isEditing = editingPkg != null;
+
   const toggleService = useCallback((id: string) => {
     setSelectedServiceIds((prev) =>
       prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
@@ -394,7 +400,7 @@ const PackageFormModal = ({
                     color: colors.sectionHeaderText,
                   }}
                 >
-                  {editingPkg?.id
+                  {isEditing
                     ? t("servicePackage.editModalTitle")
                     : t("servicePackage.newModalTitle")}
                 </Text>
@@ -600,7 +606,7 @@ const PackageFormModal = ({
                 }}
               >
                 <Icon
-                  source={editingPkg?.id ? "content-save-edit" : "plus-circle"}
+                  source={isEditing ? "content-save-edit" : "plus-circle"}
                   size={20}
                   color="#fff"
                 />
@@ -611,7 +617,7 @@ const PackageFormModal = ({
                     fontSize: 15,
                   }}
                 >
-                  {editingPkg?.id
+                  {isEditing
                     ? t("servicePackage.save")
                     : t("servicePackage.add")}
                 </Text>
@@ -659,7 +665,7 @@ export const ServicePackageStep: React.FC<ServicePackageStepProps> = ({
         // Yeni paket
         onPackagesChange([
           ...packages,
-          { ...saved, localId: saved.localId || Date.now().toString() },
+          { ...saved, localId: saved.localId || uuid() },
         ]);
       } else {
         // Güncelleme
@@ -792,7 +798,7 @@ export const ServicePackageStep: React.FC<ServicePackageStepProps> = ({
       {/* Packages List */}
       {packages.map((pkg, index) => (
         <PackageCard
-          key={pkg.localId}
+          key={pkg.localId || pkg.id || `pkg-${index}`}
           pkg={pkg}
           index={index}
           serviceOptions={serviceOptions}

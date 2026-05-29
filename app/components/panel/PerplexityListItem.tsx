@@ -15,5 +15,9 @@ type Props = {
 };
 
 export function PerplexityListItem({ children }: Props) {
-  return <View>{children}</View>;
+  // FlatList cell wrap View'inde `width: '100%'` ve `alignItems: 'center'` olmazsa,
+  // bazı RN sürümlerinde ilk render'da çocuğun (kart) genişliği 0 ölçülüp sonradan
+  // düzeltiliyor → kullanıcının raporladığı "kart ilk render'da bozuk, scroll edince
+  // düzeliyor" semptomunu üretir. Sabit %100 width + center align ile bu giderildi.
+  return <View style={{ width: "100%", alignItems: "center" }}>{children}</View>;
 }
