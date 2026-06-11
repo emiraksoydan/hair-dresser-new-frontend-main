@@ -61,8 +61,8 @@ import { DEFAULT_DISTANCE_PRESET_ID } from "../../constants/filterDefaults";
 import { PANEL_FLAT_LIST_PERF } from "../../constants/panelFlatListPerf";
 import { useAuth } from "../../hook/useAuth";
 import { UserType } from "../../types";
+import { COLORS } from "../../constants/colors";
 import { useActionGuard } from "../../hook/useActionGuard";
-import { useSubscriptionGuard } from "../../hook/useSubscriptionGuard";
 import { StoreMarker } from "../../components/common/StoreMarker";
 import { DeferredRender } from "../../components/common/deferredrender";
 import { isOtherUsersStore } from "../../utils/compare-eligibility";
@@ -77,10 +77,9 @@ const Index = () => {
   const insets = useSafeAreaInsets();
   const { colors, isDark } = useTheme();
   const dispatch = useAppDispatch();
-  const { t } = useLanguage();
+  const { t, currentLanguage } = useLanguage();
   const router = useSafeNavigation();
   const guard = useActionGuard();
-  const { withSubscription } = useSubscriptionGuard();
   const freeBarberPanelSheet = useFreeBarberPanelSheet();
   const { userType } = useAuth();
   const isFreeBarber = userType === UserType.FreeBarber;
@@ -386,10 +385,8 @@ const Index = () => {
   );
 
   const handleViewMyPanelPress = useCallback(() => {
-    withSubscription(() => {
-      router.push("/(screens)/profile/free-barber-panel");
-    });
-  }, [router, withSubscription]);
+    router.push("/(screens)/profile/free-barber-panel");
+  }, [router]);
 
   // Filter fonksiyonları - filters are applied instantly, no apply button needed
   const handleClearFilters = useCallback(() => {
@@ -724,27 +721,36 @@ const Index = () => {
           />
           </View>
           {isFreeBarber && (
-            <TouchableOpacity
-              activeOpacity={0.7}
-              onPress={handleViewMyPanelPress}
-              style={{
-                flexDirection: "row",
-                alignItems: "center",
-                minHeight: 44,
-                paddingHorizontal: 12,
-                paddingVertical: 9,
-                borderTopWidth: StyleSheet.hairlineWidth,
-                borderTopColor: colors.borderColor2,
-              }}
-            >
-              <Text
-                numberOfLines={2}
-                style={{ flex: 1, fontSize: 15, lineHeight: 22, color: colors.textSecondary, fontFamily: "CenturyGothic-Bold" }}
+            <View style={{
+              paddingHorizontal: 10,
+              paddingTop: 6,
+              paddingBottom: 10,
+              borderTopWidth: StyleSheet.hairlineWidth,
+              borderTopColor: colors.borderColor2,
+            }}>
+              <TouchableOpacity
+                activeOpacity={0.75}
+                onPress={handleViewMyPanelPress}
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  backgroundColor: COLORS.PROFILE.NAVY,
+                  borderRadius: 10,
+                  paddingHorizontal: 14,
+                  paddingVertical: 10,
+                  gap: 10,
+                }}
               >
-                {t("panel.viewMyPanel")}
-              </Text>
-              <Icon source="chevron-right" size={18} color={colors.textTertiary} />
-            </TouchableOpacity>
+                <Icon source="view-dashboard-outline" size={20} color={COLORS.UI.ACCENT_GOLD} />
+                <Text
+                  numberOfLines={1}
+                  style={{ flex: 1, fontSize: 13, color: '#fff', fontFamily: "CenturyGothic-Bold", letterSpacing: 0.4 }}
+                >
+                  {t("panel.viewMyPanel").toLocaleUpperCase(currentLanguage)}
+                </Text>
+                <Icon source="chevron-right" size={18} color="rgba(255,255,255,0.7)" />
+              </TouchableOpacity>
+            </View>
           )}
           {savedFilters.length > 0 && (
             <View
@@ -874,11 +880,7 @@ const Index = () => {
                       title={t("empty.addPanelToSeeNearbyStores")}
                       subtitle={t("panel.emptyStateHintFreeBarber")}
                       buttonLabel={t("common.add")}
-                      onPress={() =>
-                        withSubscription(() =>
-                          freeBarberPanelSheet?.openPanel?.(null),
-                        )
-                      }
+                      onPress={() => freeBarberPanelSheet?.openPanel?.(null)}
                     />
                   </View>
                 );

@@ -1219,6 +1219,43 @@ export const api = createApi({
             },
             invalidatesTags: [],
         }),
+        deleteChatMessageForEveryone: builder.mutation<ApiResponse<boolean>, { messageId: string; threadId: string }>({
+            query: ({ messageId }) => ({
+                url: `Chat/message/${messageId}/everyone`,
+                method: 'DELETE',
+            }),
+            async onQueryStarted({ messageId, threadId }, { dispatch, queryFulfilled }) {
+                let lastRemaining: ChatMessageItemDto | undefined;
+                const patchMessages = dispatch(
+                    api.util.updateQueryData("getChatMessagesByThread", { threadId }, (draft) => {
+                        const idx = draft.findIndex((m) => m.messageId === messageId);
+                        if (idx !== -1) draft.splice(idx, 1);
+                        lastRemaining = draft.length ? plainMessageSnapshot(draft[draft.length - 1]) : undefined;
+                    }),
+                );
+                const patchThreads = dispatch(
+                    api.util.updateQueryData("getChatThreads", undefined, (threads) => {
+                        if (!threads) return;
+                        const thread = threads.find((t) => t.threadId === threadId);
+                        if (!thread) return;
+                        if (!lastRemaining) {
+                            thread.lastMessagePreview = "";
+                            thread.lastMessageAt = null;
+                        } else {
+                            thread.lastMessagePreview = lastMessagePreviewFromChatMessage(lastRemaining);
+                            thread.lastMessageAt = lastRemaining.createdAt;
+                        }
+                    }),
+                );
+                try {
+                    await queryFulfilled;
+                } catch {
+                    patchMessages.undo();
+                    patchThreads.undo();
+                }
+            },
+            invalidatesTags: [],
+        }),
         updateChatMessage: builder.mutation<ApiResponse<boolean>, { messageId: string; threadId: string; text: string }>({
             query: ({ messageId, text }) => ({
                 url: `Chat/message/${messageId}`,
@@ -1262,6 +1299,30 @@ export const api = createApi({
         deleteChatThread: builder.mutation<ApiResponse<boolean>, { threadId: string }>({
             query: ({ threadId }) => ({
                 url: `Chat/thread/${threadId}`,
+                method: 'DELETE',
+            }),
+            async onQueryStarted({ threadId }, { dispatch, queryFulfilled }) {
+                const patch = dispatch(
+                    api.util.updateQueryData("getChatMessagesByThread", { threadId }, (draft) => {
+                        if (!draft) return;
+                        draft.splice(0, draft.length);
+                    }),
+                );
+                try {
+                    await queryFulfilled;
+                } catch {
+                    patch.undo();
+                }
+            },
+            invalidatesTags: (result, error, arg) => [
+                { type: 'Chat' as const, id: 'LIST' },
+                { type: 'Chat' as const, id: 'MESSAGES' },
+                { type: 'Chat' as const, id: `MESSAGES_THREAD_${arg.threadId}` },
+            ],
+        }),
+        deleteChatThreadForEveryone: builder.mutation<ApiResponse<boolean>, { threadId: string }>({
+            query: ({ threadId }) => ({
+                url: `Chat/thread/${threadId}/everyone`,
                 method: 'DELETE',
             }),
             async onQueryStarted({ threadId }, { dispatch, queryFulfilled }) {
@@ -2373,15 +2434,14 @@ export const api = createApi({
         getSubscriptionStatus: builder.query<{
             success: boolean;
             data: {
-                status: 'Trial' | 'Active' | 'Expired' | 'Banned';
-                trialEndDate: string;
+                status: 'Active' | 'Expired' | 'Banned';
                 subscriptionEndDate: string | null;
                 isBanned: boolean;
                 banReason: string | null;
                 autoRenew: boolean;
                 cancelAtPeriodEnd: boolean;
-                trialDaysLeft: number;
                 subscriptionDaysLeft: number;
+                gateEnabled: boolean;
             };
         }, void>({
             query: () => 'Subscription/status',
@@ -2389,17 +2449,20 @@ export const api = createApi({
             keepUnusedDataFor: CACHE_DURATIONS.USER_DATA,
         }),
 
-        cancelSubscription: builder.mutation<ApiResponse<boolean>, void>({
-            query: () => ({
-                url: 'Subscription/cancel',
+        verifyAppleIap: builder.mutation<ApiResponse<{ subscriptionEndDate: string }>, { transactionId: string }>({
+            query: (body) => ({
+                url: 'Subscription/iap/apple',
                 method: 'POST',
+                body,
             }),
             invalidatesTags: ['Subscription'],
         }),
-        reactivateSubscription: builder.mutation<ApiResponse<boolean>, void>({
-            query: () => ({
-                url: 'Subscription/reactivate',
+
+        verifyGoogleIap: builder.mutation<ApiResponse<{ subscriptionEndDate: string }>, { productId: string; purchaseToken: string }>({
+            query: (body) => ({
+                url: 'Subscription/iap/google',
                 method: 'POST',
+                body,
             }),
             invalidatesTags: ['Subscription'],
         }),
@@ -2557,8 +2620,10 @@ export const {
     useSendChatMessageByThreadMutation,
     useSendChatMediaMessageMutation,
     useDeleteChatMessageMutation,
+    useDeleteChatMessageForEveryoneMutation,
     useUpdateChatMessageMutation,
     useDeleteChatThreadMutation,
+    useDeleteChatThreadForEveryoneMutation,
     useMarkChatThreadReadMutation,
     useMarkChatThreadReadByThreadMutation,
     useNotifyTypingMutation,
@@ -2571,8 +2636,8 @@ export const {
     useIsFavoriteQuery,
     useGetMyFavoritesQuery,
     useRemoveFavoriteMutation,
-    useCancelSubscriptionMutation,
-    useReactivateSubscriptionMutation,
+    useVerifyAppleIapMutation,
+    useVerifyGoogleIapMutation,
     useGetAllCategoriesQuery,
     useGetParentCategoriesQuery,
     useLazyGetChildCategoriesQuery,

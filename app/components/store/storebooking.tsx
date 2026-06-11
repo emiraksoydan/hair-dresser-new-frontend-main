@@ -2,6 +2,7 @@ import { useLocalSearchParams } from "expo-router";
 import { useNavigation } from "@react-navigation/native";
 import { useSafeNavigation } from "../../hook/useSafeNavigation";
 import { useActionGuard } from "../../hook/useActionGuard";
+import { useSubscriptionGuard } from "../../hook/useSubscriptionGuard";
 import React, { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import {
   FlatList,
@@ -115,6 +116,7 @@ const StoreBookingContent = ({
   const router = useSafeNavigation();
   const navigation = useNavigation();
   const guard = useActionGuard();
+  const { withSubscription } = useSubscriptionGuard();
   const { t } = useLanguage();
   const { alert, alertSuccess, alertError } = useAlert();
   const dispatch = useAppDispatch();
@@ -1047,7 +1049,7 @@ const StoreBookingContent = ({
               { elevation: 0, shadowOpacity: 0 },
               canSubmit ? { backgroundColor: GOLD } : undefined,
             ]}
-            onPress={() => guard(async () => {
+            onPress={() => withSubscription(() => guard(async () => {
               try {
                 // Error kontrolü: Sunucu çalışmıyorsa işlem yapılamaz
                 if (!checkCanPerformAction()) {
@@ -1249,7 +1251,7 @@ const StoreBookingContent = ({
                   alertError(t("common.error"), errorMessage);
                 }
               }
-            })}
+            }))}
           >
             {isCreatingCustomer ||
               isCreatingFreeBarber ||

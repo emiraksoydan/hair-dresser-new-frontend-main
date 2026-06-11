@@ -44,6 +44,7 @@ import {
   findSavedAccountByPhoneAndUserType,
 } from "../lib/multiAccountStorage";
 import { useMultiAccount } from "../context/MultiAccountContext";
+import { isExpired } from "../store/baseQuery";
 import { useTheme } from "../hook/useTheme";
 import { useLanguage } from "../hook/useLanguage";
 import { LanguageSelector } from "../components/common/LanguageSelector";
@@ -335,8 +336,12 @@ const Index = () => {
             nativeRouter.back();
             return;
           }
-          await switchAccount(matched);
-          return;
+          // Token süresi dolmuş veya reauth gerekiyorsa kısayolu atla, OTP akışına düş
+          const tokenExpired = matched.needsReauth || isExpired(matched.accessToken);
+          if (!tokenExpired) {
+            await switchAccount(matched);
+            return;
+          }
         }
       }
 

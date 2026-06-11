@@ -22,6 +22,7 @@ import {
   StyleSheet,
   Text as RNText,
   InteractionManager,
+  Alert,
 } from "react-native";
 import * as Clipboard from "expo-clipboard";
 import { BlurView } from "expo-blur";
@@ -32,6 +33,7 @@ import { KeyboardDismissExclusionView } from "../common/KeyboardDismissExclusion
 import { ChatBubbleAudio } from "./ChatBubbleAudio";
 import { useSafeNavigation } from "../../hook/useSafeNavigation";
 import { useActionGuard } from "../../hook/useActionGuard";
+import { useSubscriptionGuard } from "../../hook/useSubscriptionGuard";
 
 import {
   BottomSheetModal,
@@ -45,8 +47,10 @@ import {
   useSendChatMessageByThreadMutation,
   useSendChatMediaMessageMutation,
   useDeleteChatMessageMutation,
+  useDeleteChatMessageForEveryoneMutation,
   useUpdateChatMessageMutation,
   useDeleteChatThreadMutation,
+  useDeleteChatThreadForEveryoneMutation,
   useMarkChatThreadReadMutation,
   useGetChatThreadsQuery,
   useNotifyTypingMutation,
@@ -686,12 +690,15 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({
   }, [currentThread, isConnected, isRestrictedThread]);
 
   const guard = useActionGuard();
+  const { withSubscription } = useSubscriptionGuard();
   const [sendMessageByAppointment, { isLoading: isSendingByAppt }] = useSendChatMessageMutation();
   const [sendMessageByThread, { isLoading: isSendingByThread }] = useSendChatMessageByThreadMutation();
   const [sendChatMedia] = useSendChatMediaMessageMutation();
   const [deleteChatMessage] = useDeleteChatMessageMutation();
+  const [deleteChatMessageForEveryone] = useDeleteChatMessageForEveryoneMutation();
   const [updateChatMessage] = useUpdateChatMessageMutation();
   const [deleteChatThread] = useDeleteChatThreadMutation();
+  const [deleteChatThreadForEveryone] = useDeleteChatThreadForEveryoneMutation();
   const [showHeaderMenu, setShowHeaderMenu] = useState(false);
   const isSending = isSendingByAppt || isSendingByThread;
 
@@ -882,7 +889,7 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({
     }
   }, [threadId, notifyTyping]);
 
-  const handleSend = useCallback(() => guard(async () => {
+  const handleSend = useCallback(() => withSubscription(() => guard(async () => {
     setShowAttachMenu(false);
     if (!canSendMessage) {
       if (!isConnected) {
@@ -1021,8 +1028,8 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({
     // NOT: Başarı durumunda refetch çağrılmıyor; RTK Query `sendChatMessage*` mutation'ı
     // kendi `onQueryStarted` bloğunda mesajı cache'e yazıyor, ek olarak SignalR `chat.message`
     // eventi tüm istemcileri (sender dahil) canlı olarak güncelliyor. Gereksiz tam liste çağrısı.
-  }), [
-    guard, messageText, pendingPaste, threadId, isSending, canSendMessage, isConnected, currentUserId, token,
+  })), [
+    guard, withSubscription, messageText, pendingPaste, threadId, isSending, canSendMessage, isConnected, currentUserId, token,
     currentThread, replyingTo, sendMessageByThread, sendMessageByAppointment,
     sendChatMedia, stopTyping, t, alertError,
   ]);
@@ -1364,6 +1371,26 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({
     );
   }, [contextMenuMessage, threadId, hideContextMenu, deleteChatMessage, confirm, t]);
 
+  // Herkesten sil — yalnızca kendi mesajın
+  const deleteForEveryoneAvailable = !!contextMenuMessage
+    && contextMenuMessage.senderUserId === currentUserId;
+
+  const handleDeleteForEveryoneFromMenu = useCallback(() => {
+    if (!contextMenuMessage) return;
+    hideContextMenu();
+    const msgId = contextMenuMessage.messageId;
+    confirm(
+      t("chat.deleteForEveryone", { defaultValue: "Herkesten Sil" }),
+      t("chat.deleteForEveryoneConfirm", { defaultValue: "Bu mesaj sohbetteki herkesten silinsin mi? Bu işlem geri alınamaz." }),
+      async () => {
+        await deleteChatMessageForEveryone({ messageId: msgId, threadId });
+      },
+      undefined,
+      t("common.delete"),
+      t("common.cancel"),
+    );
+  }, [contextMenuMessage, threadId, hideContextMenu, deleteChatMessageForEveryone, confirm, t]);
+
   const handleCopyFromMenu = useCallback(async () => {
     if (!contextMenuMessage) return;
     hideContextMenu();
@@ -1424,18 +1451,31 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({
 
   const handleDeleteThread = useCallback(() => {
     setShowHeaderMenu(false);
-    confirm(
+    // Benden sil / Herkesten sil / Vazgeç
+    Alert.alert(
       t("chat.deleteThread"),
-      t("chat.deleteThreadConfirm"),
-      async () => {
-        await deleteChatThread({ threadId });
-        router.back();
-      },
-      undefined,
-      t("common.delete"),
-      t("common.cancel"),
+      t("chat.deleteThreadChoice", { defaultValue: "Sohbeti nasıl silmek istersiniz?" }),
+      [
+        {
+          text: t("chat.deleteForMe", { defaultValue: "Benden Sil" }),
+          onPress: async () => {
+            await deleteChatThread({ threadId });
+            router.back();
+          },
+        },
+        {
+          text: t("chat.deleteForEveryone", { defaultValue: "Herkesten Sil" }),
+          style: "destructive",
+          onPress: async () => {
+            await deleteChatThreadForEveryone({ threadId });
+            router.back();
+          },
+        },
+        { text: t("common.cancel"), style: "cancel" },
+      ],
+      { cancelable: true },
     );
-  }, [threadId, deleteChatThread, confirm, router, t]);
+  }, [threadId, deleteChatThread, deleteChatThreadForEveryone, router, t]);
 
   // --- Formatting ---
   const formatMessageTime = (dateStr: string) => {
@@ -2560,7 +2600,7 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({
                   </TouchableOpacity>
                 )}
 
-                {/* Delete */}
+                {/* Benden Sil (per-user gizleme) */}
                 <TouchableOpacity
                   onPress={handleDeleteFromMenu}
                   activeOpacity={0.72}
@@ -2569,14 +2609,40 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({
                     alignItems: "center",
                     paddingHorizontal: 12,
                     paddingVertical: 9,
+                    borderBottomWidth: deleteForEveryoneAvailable ? 0.5 : 0,
+                    borderBottomColor: isDark ? "rgba(148,163,184,0.14)" : "rgba(226,232,240,0.85)",
                     gap: 10,
                   }}
                 >
                   <View style={{ width: 26, height: 26, borderRadius: 8, backgroundColor: "rgba(239,68,68,0.1)", alignItems: "center", justifyContent: "center" }}>
                     <Icon source="delete-outline" size={15} color="#ef4444" />
                   </View>
-                  <Text className="text-sm font-century-gothic-sans-medium" style={{ color: "#ef4444", flex: 1 }}>{t("chat.delete")}</Text>
+                  <Text className="text-sm font-century-gothic-sans-medium" style={{ color: "#ef4444", flex: 1 }}>
+                    {deleteForEveryoneAvailable ? t("chat.deleteForMe", { defaultValue: "Benden Sil" }) : t("chat.delete")}
+                  </Text>
                 </TouchableOpacity>
+
+                {/* Herkesten Sil — yalnızca kendi mesajın */}
+                {deleteForEveryoneAvailable && (
+                  <TouchableOpacity
+                    onPress={handleDeleteForEveryoneFromMenu}
+                    activeOpacity={0.72}
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      paddingHorizontal: 12,
+                      paddingVertical: 9,
+                      gap: 10,
+                    }}
+                  >
+                    <View style={{ width: 26, height: 26, borderRadius: 8, backgroundColor: "rgba(239,68,68,0.1)", alignItems: "center", justifyContent: "center" }}>
+                      <Icon source="delete-sweep-outline" size={15} color="#ef4444" />
+                    </View>
+                    <Text className="text-sm font-century-gothic-sans-medium" style={{ color: "#ef4444", flex: 1 }}>
+                      {t("chat.deleteForEveryone", { defaultValue: "Herkesten Sil" })}
+                    </Text>
+                  </TouchableOpacity>
+                )}
               </Animated.View>
             </Animated.View>
           </Pressable>

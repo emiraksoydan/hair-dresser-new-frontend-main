@@ -21,6 +21,7 @@ import { toggleExpand } from "../../utils/common/expand-toggle";
 import { SkeletonComponent } from "../../components/common/skeleton";
 import { FreeBarGetDto, UserType } from "../../types";
 import { useAuth } from "../../hook/useAuth";
+import { COLORS } from "../../constants/colors";
 import {
   useGetMineStoresQuery,
   useGetSettingQuery,
@@ -53,7 +54,6 @@ import { useLanguage } from "../../hook/useLanguage";
 import { UnifiedStateWrapper } from "../../components/common/UnifiedStateManager";
 import { useTheme } from "../../hook/useTheme";
 import { useActionGuard } from "../../hook/useActionGuard";
-import { useSubscriptionGuard } from "../../hook/useSubscriptionGuard";
 import { useSafeNavigation } from "../../hook/useSafeNavigation";
 import { isOtherUsersFreeBarber } from "../../utils/compare-eligibility";
 import { PanelCollapsibleTop } from "../../components/panel/PanelCollapsibleTop";
@@ -69,9 +69,8 @@ const Index = () => {
   const { colors, isDark } = useTheme();
   const router = useSafeNavigation();
   const dispatch = useAppDispatch();
-  const { t } = useLanguage();
+  const { t, currentLanguage } = useLanguage();
   const guard = useActionGuard();
-  const { withSubscription } = useSubscriptionGuard();
   const barberStoreSheet = useBarberStoreSheet();
   const isFocused = useIsFocused();
 
@@ -340,10 +339,8 @@ const Index = () => {
   }, [manualFetch]);
 
   const handleViewMyBusinessesPress = useCallback(() => {
-    withSubscription(() => {
-      router.push("/(screens)/profile/barber-store-businesses");
-    });
-  }, [router, withSubscription]);
+    router.push("/(screens)/profile/barber-store-businesses");
+  }, [router]);
 
   const renderFreeBarberItem = useCallback(
     ({ item }: { item: FreeBarGetDto }) => (
@@ -596,27 +593,36 @@ const Index = () => {
             />
             </View>
             {isBarberStore && (
-              <TouchableOpacity
-                activeOpacity={0.7}
-                onPress={handleViewMyBusinessesPress}
-                style={{
-                  flexDirection: "row",
-                  alignItems: "center",
-                  minHeight: 44,
-                  paddingHorizontal: 12,
-                  paddingVertical: 9,
-                  borderTopWidth: StyleSheet.hairlineWidth,
-                  borderTopColor: colors.borderColor2,
-                }}
-              >
-                <Text
-                  numberOfLines={2}
-                  style={{ flex: 1, fontSize: 15, lineHeight: 22, color: colors.textSecondary, fontFamily: "CenturyGothic-Bold" }}
+              <View style={{
+                paddingHorizontal: 10,
+                paddingTop: 6,
+                paddingBottom: 10,
+                borderTopWidth: StyleSheet.hairlineWidth,
+                borderTopColor: colors.borderColor2,
+              }}>
+                <TouchableOpacity
+                  activeOpacity={0.75}
+                  onPress={handleViewMyBusinessesPress}
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    backgroundColor: COLORS.PROFILE.NAVY,
+                    borderRadius: 10,
+                    paddingHorizontal: 14,
+                    paddingVertical: 10,
+                    gap: 10,
+                  }}
                 >
-                  {t("panel.viewMyBusinesses")}
-                </Text>
-                <Icon source="chevron-right" size={18} color={colors.textTertiary} />
-              </TouchableOpacity>
+                  <Icon source="store-outline" size={20} color={COLORS.UI.ACCENT_GOLD} />
+                  <Text
+                    numberOfLines={1}
+                    style={{ flex: 1, fontSize: 13, color: '#fff', fontFamily: "CenturyGothic-Bold", letterSpacing: 0.4 }}
+                  >
+                    {t("panel.viewMyBusinesses").toLocaleUpperCase(currentLanguage)}
+                  </Text>
+                  <Icon source="chevron-right" size={18} color="rgba(255,255,255,0.7)" />
+                </TouchableOpacity>
+              </View>
             )}
             {savedFilters.length > 0 && (
               <View
@@ -741,9 +747,7 @@ const Index = () => {
                       title={t("empty.addStoreToSeeNearbyFreeBarbers")}
                       subtitle={t("panel.emptyStateHintStore")}
                       buttonLabel={t("navigation.addStore")}
-                      onPress={() =>
-                        withSubscription(() => barberStoreSheet?.openAddStore?.())
-                      }
+                      onPress={() => barberStoreSheet?.openAddStore?.()}
                     />
                   </View>
                 );

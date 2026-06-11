@@ -22,6 +22,7 @@ import { useAlert } from "../../hook/useAlert";
 import { useTheme } from "../../hook/useTheme";
 import { PanelImageOverflowMenu } from "../panel/PanelImageOverflowMenu";
 import { useActionGuard } from "../../hook/useActionGuard";
+import { useSubscriptionGuard } from "../../hook/useSubscriptionGuard";
 import { useAppDispatch } from "../../store/hook";
 import { requestAppointmentListTab } from "../../store/appointmentUiSlice";
 import { AppointmentFilter } from "../../types/appointment";
@@ -88,6 +89,7 @@ const FreeBarberCard: React.FC<Props> = ({
   const { alertSuccess, alertError, confirm } = useAlert();
   const dispatch = useAppDispatch();
   const guard = useActionGuard();
+  const { withSubscription } = useSubscriptionGuard();
   const { getAllServicesForType } = useCategoryHierarchy({});
   const hasBeautySalonCertificate = Boolean(
     freeBarber.type === 2 || freeBarber.beautySalonCertificateImageId,
@@ -227,15 +229,16 @@ const FreeBarberCard: React.FC<Props> = ({
     confirm(
       t("booking.callBarber"),
       t("card.callBarberConfirm", { name: freeBarber.fullName }),
-      () => guard(async () => {
+      () => withSubscription(() => guard(async () => {
         await doCallFreeBarber(targetStoreId);
-      }),
+      })),
       undefined,
       t("booking.callBarber"),
       t("common.cancel"),
     );
   }, [
     guard,
+    withSubscription,
     effectiveStores,
     storeId,
     freeBarber.fullName,

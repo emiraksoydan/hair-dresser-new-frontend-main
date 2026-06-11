@@ -21,6 +21,7 @@ import { useLanguage } from "../../hook/useLanguage";
 import { useAlert } from "../../hook/useAlert";
 import { useTheme } from "../../hook/useTheme";
 import { useActionGuard } from "../../hook/useActionGuard";
+import { useSubscriptionGuard } from "../../hook/useSubscriptionGuard";
 
 import {
   COLORS,
@@ -60,6 +61,7 @@ export const RatingBottomSheet: React.FC<RatingBottomSheetProps> = ({
   const commentInputRef = useRef<TextInput>(null);
   const [createRating, { isLoading }] = useCreateRatingMutation();
   const guard = useActionGuard();
+  const { withSubscription } = useSubscriptionGuard();
   const { t } = useLanguage();
   const { alert, alertSuccess, alertError } = useAlert();
   const { colors, isDark } = useTheme();
@@ -105,7 +107,7 @@ export const RatingBottomSheet: React.FC<RatingBottomSheetProps> = ({
 
   const handleSubmit = useCallback(
     () =>
-      guard(async () => {
+      withSubscription(() => guard(async () => {
         if (rating === 0) {
           alert(t("booking.warning"), t("rating.selectRating"), undefined, "warning");
           return;
@@ -144,7 +146,7 @@ export const RatingBottomSheet: React.FC<RatingBottomSheetProps> = ({
         alertSuccess(t("common.success"), t("rating.ratingSaved"));
         onSuccess?.();
         onClose();
-      }),
+      })),
     [
       rating,
       comment,
@@ -158,6 +160,7 @@ export const RatingBottomSheet: React.FC<RatingBottomSheetProps> = ({
       alertSuccess,
       alertError,
       guard,
+      withSubscription,
     ],
   );
 

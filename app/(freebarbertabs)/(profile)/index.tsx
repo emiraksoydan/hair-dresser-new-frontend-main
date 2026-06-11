@@ -832,10 +832,24 @@ const Index = () => {
                         onPress={() => router.push('/(screens)/profile/requests')}
                         activeOpacity={0.7}
                         className='flex-row items-center justify-between p-4'
+                        style={{ borderBottomColor: colors.borderColor, borderBottomWidth: 1 }}
                     >
                         <View className='flex-row items-center'>
                             <Icon source="message-text-outline" size={24} color="#10B981" />
                             <Text className='text-base ml-3' style={{ color: colors.sectionHeaderText }}>{t('profile.myRequests')}</Text>
+                        </View>
+                        <Icon source="chevron-right" size={24} color="#6b7280" />
+                    </TouchableOpacity>
+
+                    {/* Yardım & Destek */}
+                    <TouchableOpacity
+                        onPress={() => router.push('/(screens)/help-support')}
+                        activeOpacity={0.7}
+                        className='flex-row items-center justify-between p-4'
+                    >
+                        <View className='flex-row items-center'>
+                            <Icon source="email-outline" size={24} color="#D4AF37" />
+                            <Text className='text-base ml-3' style={{ color: colors.sectionHeaderText }}>Yardım & Destek</Text>
                         </View>
                         <Icon source="chevron-right" size={24} color="#6b7280" />
                     </TouchableOpacity>
@@ -976,21 +990,51 @@ const Index = () => {
                         <TouchableOpacity
                             onPress={() => router.push('/(screens)/subscription')}
                             activeOpacity={0.7}
-                            className='rounded-xl p-4 flex-row items-center justify-between'
-                            style={{ backgroundColor: colors.cardBg }}
+                            className='rounded-xl p-4'
+                            style={{
+                                backgroundColor: colors.cardBg,
+                                borderWidth: 1.5,
+                                borderColor: subscriptionData.data.status === 'Active'
+                                    ? COLORS.PROFILE.ACCENT + '55'
+                                    : subscriptionData.data.status === 'Banned'
+                                        ? '#ef444455'
+                                        : '#f59e0b55',
+                            }}
                         >
-                            <View className='flex-row items-center flex-1'>
-                                <Icon source="crown-outline" size={22} color={COLORS.PROFILE.ACCENT} />
-                                <View className='ml-3 flex-1'>
-                                    <Text className='text-base font-century-gothic-bold' style={{ color: colors.sectionHeaderText }}>
-                                        {t(`subscription.status${subscriptionData.data.status}`)}
-                                    </Text>
-                                    <Text className='text-xs mt-1' style={{ color: colors.textSecondary }} numberOfLines={3}>
-                                        {t('subscription.processLaterShort')}
-                                    </Text>
+                            <View className='flex-row items-center justify-between'>
+                                <View className='flex-row items-center flex-1'>
+                                    <View style={{
+                                        width: 40, height: 40, borderRadius: 20,
+                                        backgroundColor: subscriptionData.data.status === 'Active'
+                                            ? COLORS.PROFILE.ACCENT + '22'
+                                            : subscriptionData.data.status === 'Banned'
+                                                ? '#ef444422'
+                                                : '#f59e0b22',
+                                        alignItems: 'center', justifyContent: 'center',
+                                    }}>
+                                        <Icon
+                                            source={subscriptionData.data.status === 'Active' ? 'crown' : subscriptionData.data.status === 'Banned' ? 'account-cancel' : 'crown-outline'}
+                                            size={20}
+                                            color={subscriptionData.data.status === 'Active' ? COLORS.PROFILE.ACCENT : subscriptionData.data.status === 'Banned' ? '#ef4444' : '#f59e0b'}
+                                        />
+                                    </View>
+                                    <View className='ml-3 flex-1'>
+                                        <Text className='text-base font-century-gothic-bold' style={{ color: colors.sectionHeaderText }}>
+                                            {t(`subscription.status${subscriptionData.data.status}`)}
+                                        </Text>
+                                        <Text className='text-xs mt-1' style={{ color: colors.textSecondary }}>
+                                            {subscriptionData.data.status === 'Banned'
+                                                ? t('subscription.bannedInfo')
+                                                : subscriptionData.data.status === 'Expired'
+                                                    ? t('subscription.expiredStatusDesc')
+                                                    : subscriptionData.data.subscriptionDaysLeft > 0
+                                                        ? t('subscription.activeStatusDesc').replace('{{days}}', String(subscriptionData.data.subscriptionDaysLeft))
+                                                        : ''}
+                                        </Text>
+                                    </View>
                                 </View>
+                                <Icon source="chevron-right" size={22} color="#6b7280" />
                             </View>
-                            <Icon source="chevron-right" size={22} color="#6b7280" />
                         </TouchableOpacity>
                     </View>
                 )}

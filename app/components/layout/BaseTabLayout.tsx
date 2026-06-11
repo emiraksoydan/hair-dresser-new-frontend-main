@@ -36,6 +36,7 @@ import { useGetBadgeCountsQuery } from "../../store/api";
 import { UserType } from "../../types";
 import { useMultiAccount } from "../../context/MultiAccountContext";
 import { useNotificationOpener } from "../../context/NotificationOpenerContext";
+import { useSubscriptionGuard } from "../../hook/useSubscriptionGuard";
 import { AccountSwitcherSheet } from "../common/AccountSwitcherSheet";
 
 export interface TabConfig {
@@ -135,6 +136,7 @@ export const BaseTabLayout: React.FC<BaseTabLayoutProps> = ({
   const [headerDeleteAction, setHeaderDeleteAction] = useState<HeaderDeleteAction>(null);
   const dispatch = useAppDispatch();
   const { userName, isAuthenticated } = useAuth();
+  const { withSubscription } = useSubscriptionGuard();
   const router = useSafeNavigation();
   const subscriptionExpired = useAppSelector(
     (state) => state.subscription.expired,
@@ -224,9 +226,11 @@ export const BaseTabLayout: React.FC<BaseTabLayoutProps> = ({
   }, [router]);
 
   const handleAIAssistantPress = useCallback(() => {
-    setAiSheetOpen(true);
-    aiSheetRef.current?.present();
-  }, []);
+    withSubscription(() => {
+      setAiSheetOpen(true);
+      aiSheetRef.current?.present();
+    });
+  }, [withSubscription]);
 
   const noopShopping = useCallback(() => {}, []);
 
@@ -360,7 +364,9 @@ export const BaseTabLayout: React.FC<BaseTabLayoutProps> = ({
         backgroundColor: colors.headerBg,
         height: tab.hideHeaderTitle
           ? Math.max(52, 44 + insets.top)
-          : Math.max(80, 56 + insets.top),
+          : tab.name === "(profile)"
+            ? Math.max(80, 60 + insets.top)
+            : Math.max(80, 56 + insets.top),
       },
       headerTitleAlign: (tab.headerTitleAlign || "center") as "left" | "center",
       showHeaderLeft: tab.showHeaderLeft,
@@ -495,20 +501,32 @@ export const BaseTabLayout: React.FC<BaseTabLayoutProps> = ({
                 tabOpt.hideHeaderTitle ? (
                   <View style={{ flex: 1 }} />
                 ) : tabOpt.name === "(profile)" ? (
-                  <View style={{ alignItems: "center", justifyContent: "center" }}>
-                    <TouchableOpacity
-                      onPress={() => {
-                        void openAccountSwitcherSheet();
-                      }}
-                      activeOpacity={0.7}
-                      style={{ flexDirection: "row", alignItems: "center", gap: 4 }}
-                    >
-                      <Text className="text-2xl" style={{ color: colors.headerText }}>
-                        {tabOpt.headerTitle}
+                  <TouchableOpacity
+                    onPress={() => { void openAccountSwitcherSheet(); }}
+                    activeOpacity={0.75}
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      backgroundColor: COLORS.PROFILE.NAVY,
+                      borderRadius: 22,
+                      paddingHorizontal: 14,
+                      paddingVertical: 7,
+                      gap: 6,
+                    }}
+                  >
+                    <View style={{ minWidth: 0 }}>
+                      <Text
+                        numberOfLines={1}
+                        style={{ color: '#fff', fontSize: 14, fontFamily: 'CenturyGothic-Bold', lineHeight: 17 }}
+                      >
+                        {userName || tabOpt.headerTitle}
                       </Text>
-                      <Icon source="chevron-down" size={22} color={colors.headerText} />
-                    </TouchableOpacity>
-                  </View>
+                      <Text style={{ color: 'rgba(255,255,255,0.6)', fontSize: 10, lineHeight: 13 }}>
+                        {t("accounts.hub")}
+                      </Text>
+                    </View>
+                    <Icon source="chevron-down" size={16} color="rgba(255,255,255,0.65)" />
+                  </TouchableOpacity>
                 ) : tabOpt.name === "(panel)" && userName != null && userName !== "" ? (
                   <View
                     style={{

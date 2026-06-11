@@ -26,6 +26,7 @@ import { Text } from "../common/Text";
 import { useNavigation } from "@react-navigation/native";
 import { useSafeNavigation } from "../../hook/useSafeNavigation";
 import { useActionGuard } from "../../hook/useActionGuard";
+import { useSubscriptionGuard } from "../../hook/useSubscriptionGuard";
 import { Icon, IconButton } from "react-native-paper";
 import {
   useGetFreeBarberForUsersQuery,
@@ -152,6 +153,7 @@ const FreeBarberBookingContent = ({
   const router = useSafeNavigation();
   const navigation = useNavigation();
   const guard = useActionGuard();
+  const { withSubscription } = useSubscriptionGuard();
   const insets = useSafeAreaInsets();
   // Mod (harita ↔ liste) geçişinde scroll position reset için ref.
   /** RNGH FlatList: Android’de yatay dükkan şeridi ile dikey jest çakışmasını azaltır */
@@ -720,7 +722,7 @@ const FreeBarberBookingContent = ({
                     backgroundColor: canSendStoreCall ? GOLD : '#4b5563',
                     opacity: canSendStoreCall ? 1 : 0.7,
                   }}
-                  onPress={() => guard(async () => {
+                  onPress={() => withSubscription(() => guard(async () => {
                     try {
                       let targetStoreId = selectedMyStoreId || storeId;
                       if (!targetStoreId) {
@@ -743,7 +745,7 @@ const FreeBarberBookingContent = ({
                       const errorMsg = getErrorMessage(error);
                       if (errorMsg) alertError(t("common.error"), errorMsg);
                     }
-                  })}
+                  }))}
                 >
                   {isCallingFreeBarber ? (
                     <ActivityIndicator color={getTextOnGold(isDark)} />

@@ -801,10 +801,24 @@ const Index = () => {
                         onPress={() => router.push('/(screens)/profile/requests')}
                         activeOpacity={0.7}
                         className='flex-row items-center justify-between p-4'
+                        style={{ borderBottomColor: colors.borderColor, borderBottomWidth: 1 }}
                     >
                         <View className='flex-row items-center'>
                             <Icon source="message-text-outline" size={24} color="#10B981" />
                             <Text className='text-base ml-3' style={{ color: colors.sectionHeaderText }}>{t('profile.myRequests')}</Text>
+                        </View>
+                        <Icon source="chevron-right" size={24} color="#6b7280" />
+                    </TouchableOpacity>
+
+                    {/* Yardım & Destek */}
+                    <TouchableOpacity
+                        onPress={() => router.push('/(screens)/help-support')}
+                        activeOpacity={0.7}
+                        className='flex-row items-center justify-between p-4'
+                    >
+                        <View className='flex-row items-center'>
+                            <Icon source="email-outline" size={24} color="#D4AF37" />
+                            <Text className='text-base ml-3' style={{ color: colors.sectionHeaderText }}>Yardım & Destek</Text>
                         </View>
                         <Icon source="chevron-right" size={24} color="#6b7280" />
                     </TouchableOpacity>
