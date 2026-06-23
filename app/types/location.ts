@@ -32,6 +32,8 @@ export type UseNearbyControlParams = {
   onFetch: (lat: number, lon: number) => Promise<void>;
   /** Arka plan konum takibini başlatır. Sadece useTrackFreeBarberLocation'da true olmalı. */
   enableBackgroundTracking?: boolean;
+  /** false → yalnızca arka plan task (ön plan watchPosition yok). */
+  foregroundTracking?: boolean;
   /** Tab remount'larında fetchedOnce bayrağını korumak için benzersiz anahtar. */
   persistKey?: string;
 };

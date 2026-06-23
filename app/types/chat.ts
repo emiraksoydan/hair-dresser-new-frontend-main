@@ -10,6 +10,9 @@ export type ChatThreadListItemDto = {
   appointmentId?: string | null; // Nullable: favori thread'lerde null
   status?: AppointmentStatus | null; // Nullable: favori thread'lerde null
   isFavoriteThread: boolean;
+  isSocialThread?: boolean;
+  /** Sosyal DM: mevcut kullanıcının bu thread'deki profil kimliği */
+  viewerSocialProfileId?: string | null;
   title: string;
   lastMessagePreview?: string | null;
   lastMessageAt?: string | null;
@@ -32,6 +35,8 @@ export type ChatThreadParticipantDto = {
   imageUrl?: string | null;
   userType: UserType;
   barberType?: BarberType | null; // Store veya FreeBarber için
+  /** Sosyal DM thread'lerinde karşı tarafın sosyal profil kimliği */
+  socialProfileId?: string | null;
 };
 
 export enum ChatMessageType {

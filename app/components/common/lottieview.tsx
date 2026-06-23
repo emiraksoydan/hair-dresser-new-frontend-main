@@ -16,6 +16,10 @@ type EmptyStateProps = {
   showRetryButton?: boolean;
   /** Stable key to prevent animation reset on re-renders */
   animationKey?: string;
+  /** Boş durum metin rengi (varsayılan: tema) */
+  messageColor?: string;
+  autoPlay?: boolean;
+  loop?: boolean;
 };
 
 export const LottieViewComponent: React.FC<EmptyStateProps> = ({
@@ -26,6 +30,9 @@ export const LottieViewComponent: React.FC<EmptyStateProps> = ({
   onRetry,
   showRetryButton = false,
   animationKey,
+  messageColor,
+  autoPlay = true,
+  loop = true,
 }) => {
   const { t } = useLanguage();
   const { colors } = useTheme();
@@ -41,8 +48,8 @@ export const LottieViewComponent: React.FC<EmptyStateProps> = ({
       <LottieView
         key={stableKey}
         source={animationSource}
-        autoPlay
-        loop
+        autoPlay={autoPlay}
+        loop={loop}
         style={{ width: animationSize, height: animationSize }}
       />
       <MotiText
@@ -57,7 +64,7 @@ export const LottieViewComponent: React.FC<EmptyStateProps> = ({
           repeatReverse: true,
         }}
         className="mt-2 text-base text-center px-4"
-        style={{ fontFamily: 'CenturyGothic', color: colors.sectionHeaderText }}
+        style={{ fontFamily: 'CenturyGothic', color: messageColor ?? colors.sectionHeaderText }}
         numberOfLines={3}
       >
         {defaultMessage}

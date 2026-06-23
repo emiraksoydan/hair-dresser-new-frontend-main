@@ -50,10 +50,18 @@ export const useSafeNavigation = () => {
         [router],
     );
 
+    const goBack = useCallback(() => {
+        router.back();
+    }, [router]);
+
     return {
         ...router,
         push: safePush,
         replace: safeReplace,
         replaceImmediate,
-    } as ReturnType<typeof useRouter> & { replaceImmediate: typeof replaceImmediate };
+        goBack,
+    } as ReturnType<typeof useRouter> & {
+        replaceImmediate: typeof replaceImmediate;
+        goBack: typeof goBack;
+    };
 };

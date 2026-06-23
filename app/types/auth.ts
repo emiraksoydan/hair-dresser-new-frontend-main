@@ -77,14 +77,24 @@ export interface SettingGetDto {
   showImageAnimation: boolean;
   showPriceAnimation: boolean;
   enableNotificationSound: boolean;
+  socialNotifyPostEngagement?: boolean;
+  socialNotifyComments?: boolean;
+  socialNotifyFollowers?: boolean;
+  socialNotifyMentions?: boolean;
+  socialNotifyStoryEngagement?: boolean;
   notificationSoundUrl?: string;
 }
 
 export interface SettingUpdateDto {
-  showImageAnimation: boolean;
+  showImageAnimation?: boolean;
   /** Backend: null/omit = mevcut değeri koru; biz her zaman gönderiyoruz. */
   showPriceAnimation?: boolean;
   enableNotificationSound?: boolean;
+  socialNotifyPostEngagement?: boolean;
+  socialNotifyComments?: boolean;
+  socialNotifyFollowers?: boolean;
+  socialNotifyMentions?: boolean;
+  socialNotifyStoryEngagement?: boolean;
   // notificationSoundUrl kaldırıldı - kullanıcı ayarlardan seçemez, backend'deki varsayılan ses kullanılır
 }
 

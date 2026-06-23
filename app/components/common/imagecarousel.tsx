@@ -1,9 +1,9 @@
 import React, { useState, useMemo } from 'react';
 import { View, Image, Dimensions, StyleProp, ViewStyle } from 'react-native';
 import Carousel from 'react-native-reanimated-carousel';
-import { useTheme } from '../../hook/useTheme';
 import { ImageGetDto } from '../../types/common';
 import { RetryableImage } from './RetryableImage';
+import { CarouselPaginationDots } from './CarouselPaginationDots';
 
 interface ImageCarouselProps {
   images: ImageGetDto[];
@@ -26,14 +26,15 @@ export const ImageCarousel: React.FC<ImageCarouselProps> = React.memo(({
   width: widthProp,
   height = 250,
   autoPlay = true,
-  autoPlayInterval = 3000,
+  // 3000 → 5000: listede onlarca carousel aynı anda animasyon yaptığında
+  // JS/UI thread yükünü düşürmek için kaydırma sıklığı azaltıldı.
+  autoPlayInterval = 5000,
   borderRadiusClass = '',
   containerStyle,
   showPagination = true,
   mode,
   enableSwipe = true,
 }) => {
-  const { isDark } = useTheme();
   const width = widthProp ?? Dimensions.get('window').width;
   const [activeIndex, setActiveIndex] = useState(0);
 
@@ -93,7 +94,7 @@ export const ImageCarousel: React.FC<ImageCarouselProps> = React.memo(({
         autoPlay={imageData.length === 1 ? false : autoPlay}
         autoPlayInterval={imageData.length === 1 ? 0 : autoPlayInterval}
         data={imageData}
-        scrollAnimationDuration={800}
+        scrollAnimationDuration={600}
         onSnapToItem={(index) => setActiveIndex(index)}
         {...(mode && mode !== 'default' ? { mode } : {})}
         renderItem={({ item }) => (
@@ -121,21 +122,8 @@ export const ImageCarousel: React.FC<ImageCarouselProps> = React.memo(({
 
       {/* Pagination Dots — state-based, no shared value read during render */}
       {showPagination && imageData.length > 1 && (
-        <View style={{ position: 'absolute', bottom: 12, left: 0, right: 0, flexDirection: 'row', justifyContent: 'center', paddingVertical: 4 }}>
-          {imageData.map((_, index) => (
-            <View
-              key={index}
-              style={{
-                width: 10,
-                height: 10,
-                borderRadius: 5,
-                backgroundColor: index === activeIndex
-                  ? '#f05e23'
-                  : (isDark ? 'rgba(255, 255, 255, 0.3)' : 'rgba(0, 0, 0, 0.2)'),
-                marginHorizontal: 4,
-              }}
-            />
-          ))}
+        <View className="absolute bottom-3 left-0 right-0">
+          <CarouselPaginationDots count={imageData.length} activeIndex={activeIndex} />
         </View>
       )}
     </View>

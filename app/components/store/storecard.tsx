@@ -120,6 +120,8 @@ const StoreCard: React.FC<Props> = ({ store, isList, expanded, cardWidthStore, i
                                     images={store.imageList}
                                     panelCompare={panelCompare ?? undefined}
                                     galleryTitle={store.storeName}
+                                    socialOwnerType={2}
+                                    socialOwnerId={store.id}
                                 />
                             )}
                             {isList && (

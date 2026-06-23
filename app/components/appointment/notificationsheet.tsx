@@ -34,6 +34,8 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Text } from "../common/Text";
 
 import { NotificationItemOptimized } from "./NotificationItemOptimized";
+import { SocialNotificationCard } from "../social/SocialNotificationCard";
+import { isSocialNotificationType } from "../../types/notification";
 import { useSafeNavigation } from "../../hook/useSafeNavigation";
 import { useAlert } from "../../hook/useAlert";
 import { useActionGuard } from "../../hook/useActionGuard";
@@ -657,6 +659,18 @@ export function NotificationsSheet({
       if (isSubscriptionNotif) {
         return (
           <SubscriptionNotificationCard
+            item={item}
+            onMarkRead={handleMarkRead}
+            onDelete={handleDelete}
+            isDeleting={deletingNotificationId === item.id && isDeletingNotification}
+            onCloseSheet={onClose}
+          />
+        );
+      }
+
+      if (isSocialNotificationType(item.type)) {
+        return (
+          <SocialNotificationCard
             item={item}
             onMarkRead={handleMarkRead}
             onDelete={handleDelete}

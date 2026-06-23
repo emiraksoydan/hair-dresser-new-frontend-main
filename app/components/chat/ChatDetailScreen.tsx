@@ -6,6 +6,7 @@ import React, {
   useCallback,
   useMemo,
 } from "react";
+import { skipToken } from "@reduxjs/toolkit/query";
 import {
   View,
   FlatList,
@@ -31,6 +32,8 @@ import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { Text } from "../common/Text";
 import { KeyboardDismissExclusionView } from "../common/KeyboardDismissExclusionView";
 import { ChatBubbleAudio } from "./ChatBubbleAudio";
+import { SocialShareBubble } from "../social/SocialShareBubble";
+import { parseSocialShareMessage, socialShareVisibleLine } from "../../utils/social/socialShareMessage";
 import { useSafeNavigation } from "../../hook/useSafeNavigation";
 import { useActionGuard } from "../../hook/useActionGuard";
 import { useSubscriptionGuard } from "../../hook/useSubscriptionGuard";
@@ -53,6 +56,9 @@ import {
   useDeleteChatThreadForEveryoneMutation,
   useMarkChatThreadReadMutation,
   useGetChatThreadsQuery,
+  useLazyGetChatThreadsQuery,
+  useGetSocialChatThreadsQuery,
+  useLazyGetSocialChatThreadsQuery,
   useNotifyTypingMutation,
   useToggleFavoriteMutation,
 } from "../../store/api";
@@ -96,6 +102,22 @@ import {
   softCancelSurface,
   SOFT_CANCEL_TEXT,
 } from "../../theme/confirmDialogStyles";
+import { ChatActiveThreadStrip } from "./ChatActiveThreadStrip";
+import {
+  getChatAccent,
+  getChatBubblePalette,
+  getChatHeaderSurface,
+  CHAT_SOFT_RADIUS,
+} from "../../constants/chatTheme";
+import {
+  mergeChatThreadsForStrip,
+  CHAT_THREADS_QUERY,
+  CHAT_THREADS_PAGE_SIZE,
+  buildSocialChatThreadsQuery,
+  SOCIAL_CHAT_THREADS_PAGE_SIZE,
+  filterThreadsForDetailStrip,
+} from "../../utils/chat/chatThreadStrip";
+import { useActiveSocialProfile } from "../../hook/useActiveSocialProfile";
 
 /** Sohbette karşı tarafta profil fotoğrafı yokken */
 const CHAT_AVATAR_PLACEHOLDER = require("../../../assets/images/profileempty.webp");
@@ -135,6 +157,7 @@ const VOICE_RECORD_OPTIONS: Audio.RecordingOptions = {
 
 interface ChatDetailScreenProps {
   threadId: string;
+  source?: "social" | "main";
 }
 
 /** API base sonuna tek slash ile birleştirir (api + AI/transcribe). */
@@ -467,19 +490,23 @@ TypingIndicatorBar.displayName = "TypingIndicatorBar";
 
 export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({
   threadId,
+  source = "main",
 }) => {
   const { colors, isDark } = useTheme();
-  const brandColor = "#f05e23";
+  const isSocialContext = source === "social";
+  const brandColor = getChatAccent(isSocialContext);
+  const bubblePalette = getChatBubblePalette(isDark, brandColor);
+  const headerSurface = getChatHeaderSurface(isDark);
   const mutedTextColor = isDark ? "#94a3b8" : "#64748b";
-  const softBrandBg = isDark ? "rgba(240,94,35,0.18)" : "rgba(240,94,35,0.10)";
+  const softBrandBg = bubblePalette.softAccentBg;
   /** Ses kaydı modalı: tema ile aynı renk kart üstünde kaybolabiliyor; sabit kontrast */
   const voiceModalTitleColor = isDark ? "#f8fafc" : "#0f172a";
   const voiceModalBodyColor = isDark ? "#94a3b8" : "#475569";
   const voiceModalCaptionOrange = brandColor;
   const voiceModalCaptionIndigo = isDark ? "#a5b4fc" : "#4338ca";
-  const bubbleMeBg = isDark ? "rgba(240,94,35,0.52)" : "rgba(251, 146, 60, 0.78)";
-  const bubbleOtherBg = isDark ? "rgba(71,85,105,0.48)" : "rgba(241, 245, 249, 0.94)";
-  const bubbleOtherBorder = isDark ? "rgba(148,163,184,0.22)" : "rgba(148,163,184,0.38)";
+  const bubbleMeBg = bubblePalette.meBg;
+  const bubbleOtherBg = bubblePalette.otherBg;
+  const bubbleOtherBorder = bubblePalette.otherBorder;
   const replyBg = isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)";
   const confirmDialogPrimary = primaryConfirmButtonColors(isDark);
   const cancelDialogSurface = softCancelSurface(isDark);
@@ -556,16 +583,125 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({
 
   const { isConnected, connectionRef } = useSignalRV2();
 
+  const { activeProfileId } = useActiveSocialProfile();
+  const socialThreadsQuery = useMemo(
+    () => (activeProfileId ? buildSocialChatThreadsQuery(activeProfileId) : skipToken),
+    [activeProfileId],
+  );
+
   const {
     data: threads,
     isLoading: isLoadingThreads,
     refetch: refetchThreads,
-  } = useGetChatThreadsQuery(undefined, { skip: !token });
+  } = useGetChatThreadsQuery(CHAT_THREADS_QUERY, { skip: !token });
+  const {
+    data: socialThreads,
+    refetch: refetchSocialThreads,
+    isFetching: isFetchingSocialThreads,
+  } = useGetSocialChatThreadsQuery(socialThreadsQuery, { skip: !token });
+  const [fetchMoreSocialThreads, { isFetching: isFetchingMoreSocialThreads }] =
+    useLazyGetSocialChatThreadsQuery();
+  const [fetchMoreMainThreads, { isFetching: isFetchingMoreMainThreads }] =
+    useLazyGetChatThreadsQuery();
+  const loadingMoreSocialStripRef = useRef(false);
+  const loadingMoreMainStripRef = useRef(false);
   const currentThread = useMemo(() => {
-    return threads?.find((t) => t.threadId === threadId);
-  }, [threads, threadId]);
+    return (
+      threads?.find((t) => t.threadId === threadId) ??
+      socialThreads?.find((t) => t.threadId === threadId)
+    );
+  }, [threads, socialThreads, threadId]);
+
+  const resolvedSocialContext = isSocialContext || !!currentThread?.isSocialThread;
+
+  const stripThreads = useMemo(() => {
+    const merged = resolvedSocialContext
+      ? mergeChatThreadsForStrip([], socialThreads)
+      : mergeChatThreadsForStrip(threads, []);
+    return filterThreadsForDetailStrip(merged, resolvedSocialContext);
+  }, [resolvedSocialContext, threads, socialThreads]);
+
+  const handleSelectStripThread = useCallback(
+    (nextThreadId: string, isSocialThread?: boolean) => {
+      if (nextThreadId === threadId) return;
+      router.replace({
+        pathname: "/(screens)/chat/[threadId]",
+        params: {
+          threadId: nextThreadId,
+          ...(isSocialThread || resolvedSocialContext ? { source: "social" } : {}),
+        },
+      } as any);
+    },
+    [router, threadId, resolvedSocialContext],
+  );
+
+  const handleLoadMoreStripThreads = useCallback(async () => {
+    if (resolvedSocialContext) {
+      if (loadingMoreSocialStripRef.current || isFetchingMoreSocialThreads) return;
+      const source = socialThreads ?? [];
+      if (source.length === 0 || source.length % SOCIAL_CHAT_THREADS_PAGE_SIZE !== 0 || !activeProfileId) return;
+      const last = source[source.length - 1];
+      if (!last?.lastMessageAt) return;
+      loadingMoreSocialStripRef.current = true;
+      try {
+        await fetchMoreSocialThreads({
+          profileId: activeProfileId,
+          before: last.lastMessageAt,
+          beforeId: last.threadId,
+          limit: SOCIAL_CHAT_THREADS_PAGE_SIZE,
+        }).unwrap();
+      } catch {
+        /* ignore */
+      } finally {
+        loadingMoreSocialStripRef.current = false;
+      }
+      return;
+    }
+
+    if (loadingMoreMainStripRef.current || isFetchingMoreMainThreads) return;
+    const source = threads ?? [];
+    if (source.length === 0 || source.length % CHAT_THREADS_PAGE_SIZE !== 0) return;
+    const withTs = source.filter((t) => !!t.lastMessageAt);
+    const last = withTs[withTs.length - 1];
+    if (!last?.lastMessageAt) return;
+    loadingMoreMainStripRef.current = true;
+    try {
+      await fetchMoreMainThreads({
+        before: last.lastMessageAt,
+        beforeId: last.threadId,
+        limit: CHAT_THREADS_PAGE_SIZE,
+      }).unwrap();
+    } catch {
+      /* ignore */
+    } finally {
+      loadingMoreMainStripRef.current = false;
+    }
+  }, [
+    resolvedSocialContext,
+    socialThreads,
+    threads,
+    activeProfileId,
+    fetchMoreSocialThreads,
+    fetchMoreMainThreads,
+    isFetchingMoreSocialThreads,
+    isFetchingMoreMainThreads,
+  ]);
 
   const participants = currentThread?.participants ?? [];
+
+  const peerSocialProfileId = useMemo(() => {
+    if (!resolvedSocialContext) return null;
+    const peer = participants.find((p) => p.userId !== currentUserId) ?? participants[0];
+    return peer?.socialProfileId ?? null;
+  }, [resolvedSocialContext, participants, currentUserId]);
+
+  const openPeerSocialProfile = useCallback(() => {
+    if (!peerSocialProfileId) return;
+    router.push({
+      pathname: '/(screens)/social/profile-view',
+      params: { profileId: peerSocialProfileId },
+    } as any);
+  }, [peerSocialProfileId, router]);
 
   // Kısıtlı thread: bu kullanıcı karşı tarafı favoriye almamışsa erişim kısıtlı
   const isRestrictedThread = !!currentThread?.isRestrictedForCurrentUser;
@@ -574,10 +710,13 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({
   const skipChatMessages = !threadId;
 
   useEffect(() => {
-    if (!isLoadingThreads && threads && !currentThread && threadId) {
-      setTimeout(() => { refetchThreads(); }, 1000);
+    if (!isLoadingThreads && threads && socialThreads && !currentThread && threadId) {
+      setTimeout(() => {
+        refetchThreads();
+        refetchSocialThreads();
+      }, 1000);
     }
-  }, [isLoadingThreads, threads, currentThread, threadId, refetchThreads]);
+  }, [isLoadingThreads, threads, socialThreads, currentThread, threadId, refetchThreads, refetchSocialThreads]);
 
   const MESSAGES_PAGE_SIZE = 30;
   /** RN `onEndReached` (özellikle inverted) ilk layout'ta yanlış tetiklenebilir — footer spinner flash'ını önler. */
@@ -588,12 +727,26 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({
   }, []);
   const {
     data: messages,
-    isLoading,
+    isLoading: isMessagesLoading,
+    isFetching: isMessagesFetching,
+    isError: isMessagesError,
     refetch,
   } = useGetChatMessagesByThreadQuery(
     { threadId, limit: MESSAGES_PAGE_SIZE },
     { skip: skipChatMessages },
   );
+
+  const [messagesBootstrapTimedOut, setMessagesBootstrapTimedOut] = useState(false);
+  const messagesLoaded = messages !== undefined;
+  const messagesBootstrapPending =
+    !messagesLoaded && (isMessagesLoading || isMessagesFetching) && !isMessagesError;
+
+  useEffect(() => {
+    setMessagesBootstrapTimedOut(false);
+    if (!messagesBootstrapPending) return;
+    const timeoutId = setTimeout(() => setMessagesBootstrapTimedOut(true), 12_000);
+    return () => clearTimeout(timeoutId);
+  }, [threadId, messagesBootstrapPending]);
 
   const [messagesRefreshing, setMessagesRefreshing] = useState(false);
   const onMessagesRefresh = useCallback(async () => {
@@ -1609,8 +1762,7 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({
     prevOptimisticLenRef.current = n;
   }, [optimisticMessages]);
 
-  const hasLoadedMessages = Array.isArray(messages) && messages.length > 0;
-  if (isLoading && !hasLoadedMessages) {
+  if (messagesBootstrapPending && !messagesBootstrapTimedOut) {
     return (
       <View className="flex-1 items-center justify-center" style={{ backgroundColor: colors.screenBg }}>
         <ActivityIndicator size="large" color={brandColor} />
@@ -1625,17 +1777,33 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({
       style={{ backgroundColor: colors.screenBg }}
     >
       {/* Header */}
-      <SafeAreaView style={{ backgroundColor: colors.headerBg }}>
-        <View className="px-4 py-3 flex-row items-center" style={{ borderBottomWidth: 1, borderBottomColor: colors.borderColor }}>
+      <SafeAreaView style={{ backgroundColor: headerSurface.backgroundColor }}>
+        <View
+          className="px-4 py-3 flex-row items-center"
+          style={{ borderBottomWidth: 1, borderBottomColor: headerSurface.borderBottomColor }}
+        >
           <TouchableOpacity
             onPress={() => router.back()}
             className="mr-0 flex-row items-center"
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            style={{
+              width: 40,
+              height: 40,
+              borderRadius: CHAT_SOFT_RADIUS.headerButton,
+              alignItems: "center",
+              justifyContent: "center",
+              backgroundColor: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)",
+            }}
           >
-            <Icon source="chevron-left" size={28} color={colors.sectionHeaderText} />
+            <Icon source="chevron-left" size={26} color={colors.sectionHeaderText} />
           </TouchableOpacity>
           {participants.length > 0 ? (
-            <View className="flex-1 ml-2 flex-row items-center" pointerEvents="box-none">
+            <TouchableOpacity
+              className="flex-1 ml-2 flex-row items-center"
+              activeOpacity={peerSocialProfileId ? 0.75 : 1}
+              onPress={peerSocialProfileId ? openPeerSocialProfile : undefined}
+              disabled={!peerSocialProfileId}
+            >
               <View className="flex-row items-center" style={{ flexShrink: 0 }}>
                 {participants.slice(0, 2).map((participant, idx) => (
                   <View
@@ -1647,6 +1815,7 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({
                       ownerId={participant.userId}
                       ownerType={ImageOwnerType.User}
                       fallbackUrl={participant.imageUrl}
+                      skipOwnerImageFetch={resolvedSocialContext}
                       placeholderAsset={CHAT_AVATAR_PLACEHOLDER}
                       imageClassName="w-full h-full"
                       iconSource={participant.userType === UserType.BarberStore ? "store" : participant.userType === UserType.FreeBarber ? "account-supervisor" : "account"}
@@ -1682,7 +1851,7 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({
                   </View>
                 )}
               </View>
-            </View>
+            </TouchableOpacity>
           ) : (
             <View className="flex-1 ml-2 justify-center">
               <Text className="text-base font-century-gothic" numberOfLines={1} style={{ color: colors.sectionHeaderText }}>
@@ -1695,13 +1864,14 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({
             disabled={messagesRefreshing}
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             className="ml-1 w-9 h-9 items-center justify-center rounded-full"
+            style={{ backgroundColor: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)" }}
             accessibilityRole="button"
             accessibilityLabel={t("common.refresh")}
           >
             {messagesRefreshing ? (
               <ActivityIndicator size="small" color={brandColor} />
             ) : (
-              <Icon source="refresh" size={22} color={brandColor} />
+              <Icon source="refresh" size={20} color={brandColor} />
             )}
           </TouchableOpacity>
           {/* Three-dot header menu */}
@@ -1709,10 +1879,24 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({
             onPress={() => setShowHeaderMenu(true)}
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             className="ml-1 w-9 h-9 items-center justify-center rounded-full"
+            style={{ backgroundColor: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)" }}
           >
-            <Icon source="dots-vertical" size={22} color={colors.textSecondary} />
+            <Icon source="dots-vertical" size={20} color={colors.textSecondary} />
           </TouchableOpacity>
         </View>
+        <ChatActiveThreadStrip
+          threads={stripThreads}
+          activeThreadId={threadId}
+          accentColor={brandColor}
+          onSelectThread={handleSelectStripThread}
+          onLoadMore={handleLoadMoreStripThreads}
+          socialAvatars={resolvedSocialContext}
+          loadingMore={
+            resolvedSocialContext
+              ? isFetchingMoreSocialThreads
+              : isFetchingMoreMainThreads
+          }
+        />
       </SafeAreaView>
 
       {/* Header dropdown menu */}
@@ -1806,6 +1990,8 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({
           const isMe = message.senderUserId === currentUserId;
           const isPending = (message as OptimisticMessage).isPending === true;
           const msgType = (message.messageType ?? ChatMessageType.Text) as ChatMessageType;
+          const socialShare =
+            msgType === ChatMessageType.Text ? parseSocialShareMessage(message.text) : null;
 
           let senderParticipant: ChatThreadParticipantDto | null = null;
           if (message.senderUserId) {
@@ -1840,6 +2026,7 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({
                       ownerId={displayInfo.userId}
                       ownerType={ImageOwnerType.User}
                       fallbackUrl={displayInfo.imageUrl}
+                      skipOwnerImageFetch={resolvedSocialContext}
                       placeholderAsset={CHAT_AVATAR_PLACEHOLDER}
                       imageClassName="w-full h-full"
                       iconSource={displayInfo.userType === UserType.BarberStore ? "store" : displayInfo.userType === UserType.FreeBarber ? "account-supervisor" : "account"}
@@ -1859,9 +2046,12 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({
                   }}
                 >
                   <View
-                    className={`rounded-2xl ${msgType === ChatMessageType.Audio ? "px-3 py-2" : msgType === ChatMessageType.File ? "px-3 py-1.5" : "px-4 py-2.5"} ${isMe ? "rounded-tr-sm" : "rounded-tl-sm"}`}
+                    className={`${msgType === ChatMessageType.Audio ? "px-3 py-2" : msgType === ChatMessageType.File ? "px-3 py-1.5" : "px-4 py-2.5"}`}
                     style={[{
                       flexShrink: 1,
+                      borderRadius: CHAT_SOFT_RADIUS.bubble,
+                      borderTopRightRadius: isMe ? 6 : CHAT_SOFT_RADIUS.bubble,
+                      borderTopLeftRadius: isMe ? CHAT_SOFT_RADIUS.bubble : 6,
                       backgroundColor: isMe ? bubbleMeBg : bubbleOtherBg,
                       borderWidth: isMe
                         ? (msgType === ChatMessageType.Audio ? 1 : 0)
@@ -2052,6 +2242,7 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({
                               ownerId={isMe ? (currentUserId ?? "") : displayInfo.userId}
                               ownerType={ImageOwnerType.User}
                               fallbackUrl={isMe ? currentThread?.currentUserImageUrl : displayInfo.imageUrl}
+                              skipOwnerImageFetch={resolvedSocialContext}
                               placeholderAsset={CHAT_AVATAR_PLACEHOLDER}
                               imageClassName="w-full h-full"
                               iconSource={
@@ -2067,6 +2258,12 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({
                             />
                           </View>
                         }
+                      />
+                    ) : socialShare ? (
+                      <SocialShareBubble
+                        payload={socialShare}
+                        visibleLine={socialShareVisibleLine(message.text)}
+                        isMe={isMe}
                       />
                     ) : (
                       /* Text message */
@@ -2108,6 +2305,7 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({
                       ownerId={currentUserId}
                       ownerType={ImageOwnerType.User}
                       fallbackUrl={currentThread?.currentUserImageUrl}
+                      skipOwnerImageFetch={resolvedSocialContext}
                       placeholderAsset={CHAT_AVATAR_PLACEHOLDER}
                       imageClassName="w-full h-full"
                       iconSource={currentUserType === UserType.BarberStore ? "store" : currentUserType === UserType.FreeBarber ? "account-supervisor" : "account"}
@@ -2280,16 +2478,17 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({
           <Pressable
             onLongPress={handleInputLongPress}
             delayLongPress={500}
-            className="flex-1 flex-row items-end rounded-3xl px-4 py-1"
+            className="flex-1 flex-row items-end px-4 py-1"
             style={{
-              backgroundColor: colors.cardBg2,
+              backgroundColor: bubblePalette.inputBg,
               borderWidth: 1.5,
               borderColor: messageText.trim() ? brandColor : colors.borderColor,
               minHeight: 44,
+              borderRadius: CHAT_SOFT_RADIUS.input,
               shadowColor: messageText.trim() ? brandColor : "transparent",
-              shadowOffset: { width: 0, height: 0 },
-              shadowOpacity: 0.3,
-              shadowRadius: 4,
+              shadowOffset: { width: 0, height: 4 },
+              shadowOpacity: 0.18,
+              shadowRadius: 8,
               elevation: messageText.trim() ? 2 : 0,
             }}
           >
@@ -3036,6 +3235,7 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({
                     ownerId={participant.userId}
                     ownerType={ImageOwnerType.User}
                     fallbackUrl={participant.imageUrl}
+                    skipOwnerImageFetch={resolvedSocialContext}
                     placeholderAsset={CHAT_AVATAR_PLACEHOLDER}
                     imageClassName="w-full h-full"
                     iconSource={participant.userType === UserType.BarberStore ? "store" : participant.userType === UserType.FreeBarber ? "account-supervisor" : "account"}

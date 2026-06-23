@@ -32,8 +32,8 @@ import { api } from '../store/api';
 import { clearRefreshLock, isExpired } from '../store/baseQuery';
 import { useAppDispatch } from '../store/hook';
 import { JwtPayload } from '../types';
-import { pathByUserType } from '../utils/auth/redirect-by-user-type';
-import { useRouter } from 'expo-router';
+import { pathAfterAccountSwitch } from '../utils/social/exitSocialMode';
+import { useRouter, useSegments } from 'expo-router';
 import { API_CONFIG } from '../constants/api';
 
 const NAME_ID_CLAIM =
@@ -135,6 +135,7 @@ export const MultiAccountProvider: React.FC<{ children: React.ReactNode }> = ({
   const [accountBadges, setAccountBadges] = useState<Record<string, number>>({});
   const accountBadgesFetchedAtRef = useRef<Record<string, number>>({});
   const router = useRouter();
+  const segments = useSegments();
   const dispatch = useAppDispatch();
   const openSwitcherRef = useRef<(() => void) | null>(null);
   /** Aynı anda iki kez switchAccount (çift dokunuş / yarış) token ve navigasyonu bozar. */
@@ -415,8 +416,8 @@ export const MultiAccountProvider: React.FC<{ children: React.ReactNode }> = ({
           refreshToken: finalRefreshToken,
         });
 
-        // 5. Cache'i temizle ve navigate et — kritik yol.
-        const path = pathByUserType(String(target.userType));
+        // 5. Cache'i temizle ve navigate et — bulunulan modda kal (normal ↔ sosyal).
+        const path = pathAfterAccountSwitch(target.userType, segments as string[]);
         dispatch(api.util.resetApiState());
         router.replace(path as any);
 
@@ -446,7 +447,7 @@ export const MultiAccountProvider: React.FC<{ children: React.ReactNode }> = ({
         accountSwitchLockRef.current = false;
       }
     },
-    [currentUserId, dispatch, refreshAccounts, router]
+    [currentUserId, dispatch, refreshAccounts, router, segments]
   );
 
   const registerOpenAccountSwitcher = useCallback((fn: () => void) => {

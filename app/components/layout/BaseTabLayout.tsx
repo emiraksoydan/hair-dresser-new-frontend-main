@@ -335,6 +335,19 @@ export const BaseTabLayout: React.FC<BaseTabLayoutProps> = ({
             <Icon source="alert-circle-outline" size={22} color="#c2a523" />
           </TouchableOpacity>
         )}
+        <TouchableOpacity
+          onPress={() => router.navigate('/(social)/(feed)' as any)}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 4 }}
+          style={{
+            width: 34,
+            height: 34,
+            borderRadius: 17,
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <Icon source="instagram" size={22} color={colors.headerText} />
+        </TouchableOpacity>
         <BadgeIconButton
           icon="bell-outline"
           iconColor={colors.headerText}
@@ -353,6 +366,7 @@ export const BaseTabLayout: React.FC<BaseTabLayoutProps> = ({
       tabs,
       activeTabIndex,
       hasPermissionIssue,
+      router,
     ],
   );
 

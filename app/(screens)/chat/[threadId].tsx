@@ -8,14 +8,18 @@ import { ChatDetailScreen } from '../../components/chat/ChatDetailScreen';
  * Accessible via route: /chat/[threadId]
  */
 const ChatDetailPage = () => {
-    const { threadId } = useLocalSearchParams<{ threadId: string }>();
+    const { threadId, source } = useLocalSearchParams<{ threadId: string; source?: 'social' | 'main' }>();
 
     if (!threadId) {
         return null;
     }
 
-    return <ChatDetailScreen threadId={threadId} />;
+    return (
+        <ChatDetailScreen
+            threadId={threadId}
+            source={source === 'social' ? 'social' : 'main'}
+        />
+    );
 };
 
 export default ChatDetailPage;
-

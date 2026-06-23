@@ -23,7 +23,17 @@ import type {
   AppointmentGetDto,
   ChatMessagesReadEvent,
 } from "../types";
-import { lastMessagePreviewFromChatMessage, plainMessageSnapshot } from "../utils/chat/lastMessagePreview";
+import {
+  patchSocialThreadPreviewInDraft,
+  removeSocialThreadInDraft,
+  upsertSocialThreadInDraft,
+  patchSocialCachesForThread,
+  patchSocialCacheForProfile,
+} from "../utils/chat/chatThreadCacheSync";
+import {
+  lastMessagePreviewFromChatMessage,
+  plainMessageSnapshot,
+} from "../utils/chat/lastMessagePreview";
 import { AppointmentStatus, AppointmentFilter } from "../types/appointment";
 import { API_CONFIG } from "../constants/api";
 import { useAuth } from "./useAuth";
@@ -330,26 +340,36 @@ export const useSignalRV2 = () => {
         api.util.updateQueryData("getChatThreads", undefined, (draft) => {
           if (!draft) return;
           const thread = draft.find((t) => t.threadId === dto.threadId);
-          if (thread) {
-            suppressIncomingForRestrictedFavorite =
-              !!thread.isFavoriteThread &&
-              !!thread.isRestrictedForCurrentUser &&
-              !isOwnMessage;
-            if (suppressIncomingForRestrictedFavorite) {
-              thread.lastMessageAt = dto.createdAt;
-            } else {
-              const raw = dto.text ?? "";
-              thread.lastMessagePreview = raw.length > 60 ? raw.substring(0, 60) : raw;
-              thread.lastMessageAt = dto.createdAt;
-            }
-            // NOT: Thread'un unreadCount'unu optimistic update yapmıyoruz
-            // Backend'den chat.threadUpdated event'i ile authoritative unreadCount gelecek
-            // Bu sayede çakışma (race condition) sorunu önlenir
-            // Eğer chat.threadUpdated event'i gecikirse, kullanıcı kısa bir süre yanlış count görebilir
-            // ama bu, çift artırma veya yanlış count gösterme sorunundan daha iyidir
+          if (!thread || thread.isSocialThread) return;
+          suppressIncomingForRestrictedFavorite =
+            !!thread.isFavoriteThread &&
+            !!thread.isRestrictedForCurrentUser &&
+            !isOwnMessage;
+          if (suppressIncomingForRestrictedFavorite) {
+            thread.lastMessageAt = dto.createdAt;
+          } else {
+            const raw = dto.text ?? "";
+            thread.lastMessagePreview = raw.length > 60 ? raw.substring(0, 60) : raw;
+            thread.lastMessageAt = dto.createdAt;
           }
         }),
       );
+
+      patchSocialCachesForThread(reduxStore.getState, dispatch, dto.threadId, (draft) => {
+        const thread = draft.find((t) => t.threadId === dto.threadId);
+        if (!thread) return;
+        if (
+          thread.isFavoriteThread &&
+          thread.isRestrictedForCurrentUser &&
+          !isOwnMessage
+        ) {
+          patchSocialThreadPreviewInDraft(draft, dto.threadId, thread.lastMessagePreview ?? "", dto.createdAt);
+          return;
+        }
+        const raw = dto.text ?? "";
+        const preview = raw.length > 60 ? raw.substring(0, 60) : raw;
+        patchSocialThreadPreviewInDraft(draft, dto.threadId, preview, dto.createdAt);
+      });
 
       // NOT: Ana mesaj ikonundaki badge count'u optimistic update yapmıyoruz
       // Backend'den badge.updated event'i ile authoritative count gelecek
@@ -405,6 +425,22 @@ export const useSignalRV2 = () => {
           }
         }),
       );
+      patchSocialCachesForThread(reduxStore.getState, dispatch, data.threadId, (draft) => {
+        const thread = draft.find((t) => t.threadId === data.threadId);
+        if (!thread) return;
+        if (!lastRemaining) {
+          thread.lastMessagePreview = "";
+          thread.lastMessageAt = null;
+        } else {
+          thread.lastMessagePreview = lastMessagePreviewFromChatMessage(lastRemaining);
+          thread.lastMessageAt = lastRemaining.createdAt;
+        }
+        draft.sort((a, b) => {
+          const aTs = a.lastMessageAt ? Date.parse(a.lastMessageAt) : 0;
+          const bTs = b.lastMessageAt ? Date.parse(b.lastMessageAt) : 0;
+          return bTs - aTs;
+        });
+      });
     });
 
     conn.on("chat.messageEdited", (data: { threadId: string; messageId: string; newText: string }) => {
@@ -436,31 +472,61 @@ export const useSignalRV2 = () => {
     });
 
     conn.on("chat.threadCreated", (dto: ChatThreadListItemDto) => {
-      dispatch(
-        api.util.updateQueryData("getChatThreads", undefined, (draft) => {
-          if (!draft) return;
-          if (!draft.find((t) => t.threadId === dto.threadId)) {
-            draft.unshift(dto);
-          }
-        }),
-      );
+      if (!dto.isSocialThread) {
+        dispatch(
+          api.util.updateQueryData("getChatThreads", undefined, (draft) => {
+            if (!draft) return;
+            if (!draft.find((t) => t.threadId === dto.threadId)) {
+              draft.unshift(dto);
+            }
+          }),
+        );
+      } else {
+        dispatch(
+          api.util.updateQueryData("getChatThreads", undefined, (draft) => {
+            if (!draft) return;
+            const index = draft.findIndex((t) => t.threadId === dto.threadId);
+            if (index >= 0) draft.splice(index, 1);
+          }),
+        );
+      }
+      if (dto.isSocialThread) {
+        patchSocialCacheForProfile(dispatch, dto.viewerSocialProfileId, (draft) => {
+          upsertSocialThreadInDraft(draft, dto);
+        });
+      }
     });
 
     conn.on("chat.threadUpdated", (dto: ChatThreadListItemDto) => {
-      dispatch(
-        api.util.updateQueryData("getChatThreads", undefined, (draft) => {
-          if (!draft) return;
-          const index = draft.findIndex((t) => t.threadId === dto.threadId);
-          const shouldBeVisible = dto.isFavoriteThread || dto.status === AppointmentStatus.Pending || dto.status === AppointmentStatus.Approved;
+      if (!dto.isSocialThread) {
+        dispatch(
+          api.util.updateQueryData("getChatThreads", undefined, (draft) => {
+            if (!draft) return;
+            const index = draft.findIndex((t) => t.threadId === dto.threadId);
+            const shouldBeVisible = dto.isFavoriteThread || dto.status === AppointmentStatus.Pending || dto.status === AppointmentStatus.Approved;
 
-          if (shouldBeVisible) {
-            if (index >= 0) draft[index] = dto;
-            else draft.unshift(dto);
-          } else if (index >= 0) {
-            draft.splice(index, 1);
-          }
-        }),
-      );
+            if (shouldBeVisible) {
+              if (index >= 0) draft[index] = dto;
+              else draft.unshift(dto);
+            } else if (index >= 0) {
+              draft.splice(index, 1);
+            }
+          }),
+        );
+      } else {
+        dispatch(
+          api.util.updateQueryData("getChatThreads", undefined, (draft) => {
+            if (!draft) return;
+            const index = draft.findIndex((t) => t.threadId === dto.threadId);
+            if (index >= 0) draft.splice(index, 1);
+          }),
+        );
+      }
+      if (dto.isSocialThread) {
+        patchSocialCacheForProfile(dispatch, dto.viewerSocialProfileId, (draft) => {
+          upsertSocialThreadInDraft(draft, dto);
+        });
+      }
     });
 
     conn.on("chat.threadRemoved", (threadId: string | null | undefined) => {
@@ -472,6 +538,9 @@ export const useSignalRV2 = () => {
           if (index >= 0) draft.splice(index, 1);
         }),
       );
+      patchSocialCachesForThread(reduxStore.getState, dispatch, threadId, (draft) => {
+        removeSocialThreadInDraft(draft, threadId);
+      });
     });
 
     conn.on("chat.messagesRead", (data: ChatMessagesReadEvent) => {
@@ -632,14 +701,23 @@ export const useSignalRV2 = () => {
       });
     });
 
-    conn.on("badge.updated", (counts?: { notificationUnreadCount?: number; chatUnreadCount?: number; threadUnreadCounts?: Record<string, number> }) => {
-      if (counts && (counts.notificationUnreadCount !== undefined || counts.chatUnreadCount !== undefined || counts.threadUnreadCounts !== undefined)) {
+    conn.on("badge.updated", (counts?: { notificationUnreadCount?: number; chatUnreadCount?: number; socialChatUnreadCount?: number; threadUnreadCounts?: Record<string, number> }) => {
+      if (counts && (counts.notificationUnreadCount !== undefined || counts.chatUnreadCount !== undefined || counts.socialChatUnreadCount !== undefined || counts.threadUnreadCounts !== undefined)) {
         let osBadgeTotal: number | null = null;
         const badgePatch = dispatch(
           api.util.updateQueryData("getBadgeCounts", undefined, (draft) => {
             if (!draft?.data) return;
             if (counts.notificationUnreadCount !== undefined) draft.data.notificationUnreadCount = counts.notificationUnreadCount;
             if (counts.chatUnreadCount !== undefined) draft.data.chatUnreadCount = counts.chatUnreadCount;
+            if (counts.socialChatUnreadCount !== undefined) draft.data.socialChatUnreadCount = counts.socialChatUnreadCount;
+            if (counts.socialChatUnreadCount !== undefined) {
+              void dispatch(
+                api.endpoints.getBadgeCounts.initiate(undefined, {
+                  subscribe: false,
+                  forceRefetch: true,
+                }),
+              );
+            }
             if (counts.threadUnreadCounts !== undefined) {
               // Thread unread counts'u merge et (yeni değerlerle güncelle)
               draft.data.threadUnreadCounts = {
@@ -652,7 +730,9 @@ export const useSignalRV2 = () => {
             // mutasyon sonrası draft'tan al ki "yarım resim" badge'i bozmasın.
             osBadgeTotal = Math.max(
               0,
-              (draft.data.notificationUnreadCount ?? 0) + (draft.data.chatUnreadCount ?? 0),
+              (draft.data.notificationUnreadCount ?? 0) +
+                (draft.data.chatUnreadCount ?? 0) +
+                (draft.data.socialChatUnreadCount ?? 0),
             );
           }),
         );

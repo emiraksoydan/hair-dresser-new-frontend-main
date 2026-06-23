@@ -326,6 +326,8 @@ const FreeBarberCard: React.FC<Props> = ({
                   images={freeBarber.imageList}
                   panelCompare={panelCompare ?? undefined}
                   galleryTitle={freeBarber.fullName}
+                  socialOwnerType={1}
+                  socialOwnerId={freeBarber.id}
                 />
               )}
               {isList && (

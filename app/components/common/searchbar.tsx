@@ -12,6 +12,8 @@ interface ExtendedSearchBarProps extends SearchBarProps {
     setIsList?: (val: boolean) => void;
     onFilterPress?: () => void;
     showButtons?: boolean;
+    /** Varsayılan: common.searchPlaceholder */
+    placeholder?: string;
     /** Her zaman bu renkte border göster (focus durumuna bakılmaksızın) */
     forceBorderColor?: string;
     /** Arka plan ve border'ı kaldırır — bir container içinde kullanım için */
@@ -27,6 +29,7 @@ const SearchBar: React.FC<ExtendedSearchBarProps> = ({
     setIsList,
     onFilterPress,
     showButtons = true,
+    placeholder,
     forceBorderColor,
     transparent = false,
     compact = false,
@@ -56,7 +59,7 @@ const SearchBar: React.FC<ExtendedSearchBarProps> = ({
             <Icon source="magnify" size={iconSz} color="#9aa1ae" />
 
             <TextInput
-                placeholder={t('common.searchPlaceholder')}
+                placeholder={placeholder ?? t('common.searchPlaceholder')}
                 placeholderTextColor="#474b5a"
                 onChangeText={setSearchQuery}
                 value={searchQuery}

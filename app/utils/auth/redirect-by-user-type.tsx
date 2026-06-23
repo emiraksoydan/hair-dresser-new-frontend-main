@@ -11,13 +11,13 @@ export function pathByUserType(userType?: string | null) {
     switch (normalized) {
         case 'customer':
         case '0':
-            return '/(customertabs)';
+            return '/(customertabs)/(panel)';
         case 'freebarber':
         case '1':
-            return '/(freebarbertabs)';
+            return '/(freebarbertabs)/(panel)';
         case 'barberstore':
         case '2':
-            return '/(barberstoretabs)';
+            return '/(barberstoretabs)/(panel)';
         default:
             return '/(auth)';
     }

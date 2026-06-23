@@ -85,6 +85,8 @@ const StoreMineCard: React.FC<Props> = ({ store, isList, expanded, cardWidthStor
                                 images={store.imageList}
                                 panelCompare={panelCompare ?? undefined}
                                 galleryTitle={store.storeName}
+                                socialOwnerType={2}
+                                socialOwnerId={store.id}
                             />
                         )}
                         {isList && (

@@ -18,8 +18,13 @@ import {
 } from "./mergeDiscoveryFavoritesFromRtk";
 
 const DEFAULT_MOVE_THRESHOLD_M = 150;
-const DEFAULT_STALE_MS = 15_000;
-const DEFAULT_HARD_REFRESH_MS = 15_000;
+/**
+ * 15 sn → 45/60 sn: kullanıcı panelde dururken 15 sn'de bir POST + tam liste
+ * re-render'ı cihazı yoruyordu. Hareket (150 m) ve foreground dönüşü zaten
+ * anında yenileme tetikliyor; sabit dururken bu aralıklar yeterli.
+ */
+const DEFAULT_STALE_MS = 45_000;
+const DEFAULT_HARD_REFRESH_MS = 60_000;
 const DEFAULT_PAGE_SIZE = 20;
 /** İlk layout'ta `onEndReached` → loadMore yanlış tetiklenmesin diye kısa süre. */
 const LOAD_MORE_GRACE_MS = 450;

@@ -27,6 +27,14 @@ export enum NotificationType {
   SubscriptionExpiringSoon = 16,       // 7 gün kala
   SubscriptionExpiringTomorrow = 17,   // 1 gün kala
   SubscriptionExpired = 18,            // Bittiğinde
+  AdminAnnouncement = 19,
+  SocialPostLiked = 20,
+  SocialPostCommented = 21,
+  SocialCommentReplied = 22,
+  SocialNewFollower = 23,
+  SocialMentioned = 24,
+  SocialStoryLiked = 25,
+  SocialStoryReplied = 26,
 }
 
 export type NotificationDto = {
@@ -125,6 +133,40 @@ export interface NotificationPayload {
   isCustomerInFavorites?: boolean; // Store veya FreeBarber için müşteri favorilerinde mi?
   isFreeBarberInFavorites?: boolean; // Store için freeBarber favorilerinde mi?
   isStoreInFavorites?: boolean; // FreeBarber için store favorilerinde mi?
+}
+
+export interface SocialNotificationPayload {
+  kind: 'post_liked' | 'post_commented' | 'comment_replied' | 'new_follower' | 'mentioned' | 'story_liked' | 'story_replied' | string;
+  postId?: string | null;
+  storyId?: string | null;
+  commentId?: string | null;
+  parentCommentId?: string | null;
+  actorProfileId: string;
+  actorUsername: string;
+  actorAvatarUrl?: string | null;
+  targetProfileId?: string | null;
+}
+
+export const SOCIAL_NOTIFICATION_TYPES = new Set<NotificationType>([
+  NotificationType.SocialPostLiked,
+  NotificationType.SocialPostCommented,
+  NotificationType.SocialCommentReplied,
+  NotificationType.SocialNewFollower,
+  NotificationType.SocialMentioned,
+  NotificationType.SocialStoryLiked,
+  NotificationType.SocialStoryReplied,
+]);
+
+export function isSocialNotificationType(type: NotificationType): boolean {
+  return SOCIAL_NOTIFICATION_TYPES.has(type);
+}
+
+export function parseSocialNotificationPayload(json: string): SocialNotificationPayload | null {
+  try {
+    return JSON.parse(json) as SocialNotificationPayload;
+  } catch {
+    return null;
+  }
 }
 
 

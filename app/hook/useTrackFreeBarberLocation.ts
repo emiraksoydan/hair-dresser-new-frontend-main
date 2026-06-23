@@ -19,7 +19,7 @@ export function useTrackFreeBarberLocation(enabled: boolean, barberId: string | 
         moveThresholdM: 100,
         staleMs: 15 * 1000,
         hardRefreshMs: 30 * 1000,
-        enableBackgroundTracking: true,
+        enableBackgroundTracking: false,
         onFetch,
     });
 

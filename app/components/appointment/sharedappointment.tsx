@@ -50,10 +50,15 @@ import { useLanguage } from "../../hook/useLanguage";
 import { useAlert } from "../../hook/useAlert";
 import { useTheme } from "../../hook/useTheme";
 import { useActionGuard } from "../../hook/useActionGuard";
+import { useAppointmentShareStatus } from "../../hook/useAppointmentShareStatus";
 import { useFabOverlayWhenSheetOpen } from "../../hook/usePanelMoreFab";
 import { useDeferredSheetPresent } from "../../hook/useDeferredSheetPresent";
 import { MoreFabPanelContext } from "../layout/MoreFabContext";
 import { getErrorMessage } from "../../utils/errorHandler";
+import {
+  shouldShowAppointmentShareButton,
+  requestAppointmentSharePrompt,
+} from "../../utils/social/social-appointment-share-prompt";
 import {
   COLORS,
   getTextOnGold,
@@ -286,6 +291,16 @@ export default function SharedAppointmentScreen() {
 
     return items;
   }, [appointments, activeFilter]);
+
+  const completedAppointmentIdsForShare = useMemo(
+    () =>
+      activeFilter === AppointmentFilter.Completed
+        ? filteredAppointments.map((a) => a.id)
+        : [],
+    [activeFilter, filteredAppointments],
+  );
+  const { ready: appointmentShareReady, isAppointmentShared } =
+    useAppointmentShareStatus(completedAppointmentIdsForShare);
 
   const [cancelAppointment, { isLoading: isCancelling, reset: resetCancelAppointment }] =
     useCancelAppointmentMutation();
@@ -724,6 +739,10 @@ export default function SharedAppointmentScreen() {
         try {
           await runWithTimeout(completeAppointment(id).unwrap(), "COMPLETE");
           dispatch(showSnack({ message: t("appointment.alerts.completed"), isError: false }));
+          const item = filteredAppointments.find((a) => a.id === id);
+          if (item && !isAppointmentShared(item.id)) {
+            requestAppointmentSharePrompt({ ...item, status: AppointmentStatus.Completed });
+          }
         } catch (err: any) {
           const errorMessage =
             err?.message === "COMPLETE_TIMEOUT"
@@ -1053,6 +1072,11 @@ export default function SharedAppointmentScreen() {
       activeFilter === AppointmentFilter.Completed ||
       activeFilter === AppointmentFilter.Cancelled;
 
+    const showSocialShareButton =
+      appointmentShareReady &&
+      !isAppointmentShared(item.id) &&
+      shouldShowAppointmentShareButton(item, userId);
+
     // Durum badge'i için
     const statusColor = getAppointmentStatusColor(item.status);
     const statusText = getAppointmentStatusText(item.status);
@@ -1371,6 +1395,25 @@ export default function SharedAppointmentScreen() {
                       </TouchableOpacity>
                     )}
                   </View>
+                )}
+                {showSocialShareButton && (
+                  <TouchableOpacity
+                    onPress={() => requestAppointmentSharePrompt(item)}
+                    className="py-2.5 rounded-xl flex-row items-center justify-center mt-1.5"
+                    style={{
+                      backgroundColor: isDark ? "rgba(250,204,21,0.12)" : "rgba(250,204,21,0.22)",
+                      borderWidth: 1,
+                      borderColor: isDark ? "rgba(250,204,21,0.35)" : "rgba(202,138,4,0.28)",
+                    }}
+                  >
+                    <Icon source="share-variant" size={16} color={isDark ? "#facc15" : "#a16207"} />
+                    <Text
+                      className="text-sm font-semibold ml-2"
+                      style={{ color: isDark ? "#fde047" : "#854d0e", fontFamily: "CenturyGothic-Bold" }}
+                    >
+                      {t("social.appointmentShareCardAction")}
+                    </Text>
+                  </TouchableOpacity>
                 )}
               </View>
 

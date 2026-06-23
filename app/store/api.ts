@@ -18,12 +18,49 @@ import {
     RequestGetDto, CreateRequestDto,
     BlockedGetDto, CreateBlockedDto, UnblockDto, BlockStatusDto,
     CategoryHierarchyDto, EarningsDto, AIAssistantResponseDto,
-    ServicePackageCreateDto, ServicePackageUpdateDto, ServicePackageGetDto, AppointmentServicePackageDto
+    ServicePackageCreateDto, ServicePackageUpdateDto,     ServicePackageGetDto, AppointmentServicePackageDto,
+    SocialProfileDto, SocialProfileSearchResultDto, SocialPostDto, SocialCommentDto, SocialFollowListItemDto, SocialPostType, SocialStoryGroupDto, SocialLimitsDto, SocialFreeTierUsageDto, SocialArchivedKind, SocialArchivedContentDto, SocialRestoreArchivedRequest,
+    SocialStoryDto, SocialStoryHighlightDto, SocialStoryHighlightDetailDto, SocialStoryViewerDto,
 } from '../types';
 import { FilterRequestDto, SavedFilterGetDto, SavedFilterCreateDto, SavedFilterUpdateDto, DiscoveryFilteredResponseDto } from '../types/filter';
 import { transformArrayResponse, transformObjectResponse, transformBooleanResponse, transformApiResponse } from '../utils/api/transform-response';
-import { mergeNotificationsCachePages } from '../utils/notifications/notification-list-cache';
-import { mergeAppointmentFilterCachePages } from '../utils/appointments/appointment-list-cache';
+import { normalizeSocialPostList, normalizeSocialPostDto } from '../utils/social/normalizeSocialPost';
+import { normalizeSocialProfileList, normalizeSocialProfileDto } from '../utils/social/normalizeSocialProfile';
+import { type SocialChatThreadsQueryArgs } from '../utils/chat/chatThreadCacheSync';
+import {
+    mergeNotificationsCachePages,
+    requestNotificationsFullCacheReplace,
+} from '../utils/notifications/notification-list-cache';
+import {
+    mergeAppointmentFilterCachePages,
+    requestAllAppointmentsFiltersFullCacheReplace,
+} from '../utils/appointments/appointment-list-cache';
+import {
+    mergeSocialFeedCachePages,
+    mergeSocialReelsCachePages,
+    requestSocialFeedFullCacheReplace,
+    requestSocialReelsFullCacheReplace,
+    socialPostListCursorForceRefetch,
+} from '../utils/social/social-feed-list-cache';
+import {
+    mergeSocialFollowListCachePages,
+    mergeSocialMutualListCachePages,
+    requestSocialFollowListFullCacheReplace,
+    serializeSocialFollowListArgs,
+    serializeSocialMutualListArgs,
+} from '../utils/social/social-follow-list-cache';
+import {
+    applyOptimisticSocialCommentAdded,
+    applyOptimisticSocialCommentLike,
+    applyOptimisticSocialFollow,
+    applyOptimisticSocialPostLike,
+    applyOptimisticSocialPostSave,
+    replaceOptimisticSocialComment,
+    undoAll,
+} from '../utils/social/social-optimistic-cache';
+
+export { requestSocialFeedFullCacheReplace, requestSocialReelsFullCacheReplace } from '../utils/social/social-feed-list-cache';
+export { requestSocialFollowListFullCacheReplace } from '../utils/social/social-follow-list-cache';
 
 export { requestNotificationsFullCacheReplace } from '../utils/notifications/notification-list-cache';
 export {
@@ -183,6 +220,68 @@ function resolveRtkQueryArgs(queryState: { originalArgs?: unknown; queryCacheKey
         }
     }
     return queryArgs;
+}
+
+type CachePatch = { undo: () => void };
+
+function patchAllNotificationListCaches(
+    dispatch: (action: unknown) => CachePatch,
+    getState: () => unknown,
+    updater: (draft: NotificationDto[]) => void,
+): CachePatch[] {
+    const patches: CachePatch[] = [];
+    const apiState = (getState() as { api?: { queries?: Record<string, any> } })?.api;
+    if (!apiState?.queries) return patches;
+
+    for (const queryKey of Object.keys(apiState.queries)) {
+        const qs = apiState.queries[queryKey];
+        if (qs?.endpointName !== 'getAllNotifications' || !Array.isArray(qs.data)) continue;
+        const argsForUpdate = resolveRtkQueryArgs(qs);
+        if (argsForUpdate === undefined || argsForUpdate === null) continue;
+        patches.push(
+            dispatch(
+                api.util.updateQueryData(
+                    'getAllNotifications',
+                    argsForUpdate as { before?: string; beforeId?: string; limit?: number } | void,
+                    updater,
+                ),
+            ) as CachePatch,
+        );
+    }
+    return patches;
+}
+
+function patchAllAppointmentFilterCaches(
+    dispatch: (action: unknown) => CachePatch,
+    getState: () => unknown,
+    updater: (draft: AppointmentGetDto[]) => void,
+): CachePatch[] {
+    const patches: CachePatch[] = [];
+    const apiState = (getState() as { api?: { queries?: Record<string, any> } })?.api;
+    if (!apiState?.queries) return patches;
+
+    for (const queryKey of Object.keys(apiState.queries)) {
+        const qs = apiState.queries[queryKey];
+        if (qs?.endpointName !== 'getAllAppointmentByFilter' || !Array.isArray(qs.data)) continue;
+        const argsForUpdate = resolveRtkQueryArgs(qs);
+        if (argsForUpdate === undefined || argsForUpdate === null) continue;
+        patches.push(
+            dispatch(
+                api.util.updateQueryData(
+                    'getAllAppointmentByFilter',
+                    argsForUpdate as { filter: AppointmentFilter; before?: string; beforeId?: string; limit?: number },
+                    updater,
+                ),
+            ) as CachePatch,
+        );
+    }
+    return patches;
+}
+
+function undoCachePatches(patches: CachePatch[]): void {
+    for (const patch of patches) {
+        patch.undo();
+    }
 }
 
 const OPTIMISTIC_FAV_ID_PREFIX = 'optimistic-fav-';
@@ -390,7 +489,7 @@ function favoriteRowAlreadyInList(draft: FavoriteGetDto[] | undefined, targetId:
 export const api = createApi({
     reducerPath: 'api',
     baseQuery: baseQueryWithReauth,
-    tagTypes: ['MineStores', 'GetStoreById', "MineFreeBarberPanel", "Notification", "Chat", "Appointment", "Favorite", "IsFavorite", "StoreForUsers", "FreeBarberForUsers", "UserProfile", "Setting", "HelpGuide", "Complaint", "Request", "Blocked", "Rating", "Subscription", "SavedFilter", "ServicePackage"],
+    tagTypes: ['MineStores', 'GetStoreById', "MineFreeBarberPanel", "Notification", "Chat", "Appointment", "Favorite", "IsFavorite", "StoreForUsers", "FreeBarberForUsers", "UserProfile", "Setting", "HelpGuide", "Complaint", "Request", "Blocked", "Rating", "Subscription", "SavedFilter", "ServicePackage", "SocialProfile", "SocialProfilePosts", "SocialFeed", "SocialReels", "SocialStory", "SocialHighlight", "SocialComments", "SocialFollowList", "SocialArchive", "SocialSaved", "AppointmentSocialShare"],
     // Only refetch on reconnect for critical data (Notification)
     // refetchOnFocus is disabled to prevent unnecessary requests
     refetchOnReconnect: false,
@@ -421,6 +520,7 @@ export const api = createApi({
                     ? []
                     : [
                         'MineStores',
+                        'SocialProfile',
                         { type: 'MineStores', id: 'LIST' },
                         { type: 'ServicePackage' as const, id: 'LIST' },
                         ...(result?.data
@@ -493,6 +593,7 @@ export const api = createApi({
                     ? []
                     : [
                         'MineFreeBarberPanel',
+                        'SocialProfile',
                         { type: 'ServicePackage' as const, id: 'LIST' },
                         ...(result?.data
                             ? [{ type: 'ServicePackage' as const, id: result.data }]
@@ -807,31 +908,15 @@ export const api = createApi({
         deleteAppointment: builder.mutation<ApiResponse<boolean>, string>({
             query: (id) => ({ url: `Appointment/${id}`, method: 'DELETE' }),
             async onQueryStarted(id, { dispatch, queryFulfilled, getState }) {
+                const patches = patchAllAppointmentFilterCaches(dispatch, getState, (draft) => {
+                    if (!Array.isArray(draft)) return;
+                    const idx = draft.findIndex((a) => a.id === id);
+                    if (idx !== -1) draft.splice(idx, 1);
+                });
                 try {
                     await queryFulfilled;
-                    const apiState = (getState() as { api?: { queries?: Record<string, any> } })?.api;
-                    if (!apiState?.queries) return;
-                    for (const key of Object.keys(apiState.queries)) {
-                        const qs = apiState.queries[key];
-                        if (qs?.endpointName !== 'getAllAppointmentByFilter' || !Array.isArray(qs.data)) {
-                            continue;
-                        }
-                        const argsForUpdate = resolveRtkQueryArgs(qs);
-                        if (argsForUpdate === undefined || argsForUpdate === null) continue;
-                        dispatch(
-                            api.util.updateQueryData(
-                                'getAllAppointmentByFilter',
-                                argsForUpdate as { filter: AppointmentFilter },
-                                (draft: AppointmentGetDto[]) => {
-                                    if (!Array.isArray(draft)) return;
-                                    const idx = draft.findIndex((a) => a.id === id);
-                                    if (idx !== -1) draft.splice(idx, 1);
-                                },
-                            ),
-                        );
-                    }
                 } catch {
-                    /* invalidate refetch sunucu durumunu getirir */
+                    undoCachePatches(patches);
                 }
             },
             invalidatesTags: (result, error, id) =>
@@ -844,6 +929,18 @@ export const api = createApi({
         }),
         deleteAllAppointments: builder.mutation<ApiResponse<boolean>, void>({
             query: () => ({ url: 'Appointment/all', method: 'DELETE' }),
+            async onQueryStarted(_arg, { dispatch, queryFulfilled, getState }) {
+                requestAllAppointmentsFiltersFullCacheReplace();
+                const patches = patchAllAppointmentFilterCaches(dispatch, getState, (draft) => {
+                    draft.length = 0;
+                });
+                try {
+                    await queryFulfilled;
+                    requestAllAppointmentsFiltersFullCacheReplace();
+                } catch {
+                    undoCachePatches(patches);
+                }
+            },
             invalidatesTags: (result, error) =>
                 error ? [] : [{ type: 'Appointment' as const, id: 'LIST' }],
         }),
@@ -909,23 +1006,15 @@ export const api = createApi({
         deleteNotification: builder.mutation<ApiResponse<boolean>, string>({
             query: (id) => ({ url: `Notification/${id}`, method: 'DELETE' }),
             async onQueryStarted(id, { dispatch, queryFulfilled, getState }) {
+                const patches = patchAllNotificationListCaches(dispatch, getState, (draft) => {
+                    if (!Array.isArray(draft)) return;
+                    const idx = draft.findIndex((n) => n.id === id);
+                    if (idx !== -1) draft.splice(idx, 1);
+                });
                 try {
                     await queryFulfilled;
-                    const queries = api.util.selectInvalidatedBy(getState(), [
-                        { type: 'Notification' as const, id: 'LIST' },
-                    ]);
-                    for (const q of queries ?? []) {
-                        if (q.endpointName !== 'getAllNotifications') continue;
-                        dispatch(
-                            api.util.updateQueryData('getAllNotifications', q.originalArgs as any, (draft: any) => {
-                                if (!Array.isArray(draft)) return;
-                                const idx = draft.findIndex((n: { id?: string }) => n.id === id);
-                                if (idx !== -1) draft.splice(idx, 1);
-                            }),
-                        );
-                    }
                 } catch {
-                    /* invalidate refetch sunucu durumunu getirir */
+                    undoCachePatches(patches);
                 }
             },
             invalidatesTags: (result, error, id) =>
@@ -938,6 +1027,18 @@ export const api = createApi({
         }),
         deleteAllNotifications: builder.mutation<ApiResponse<boolean>, void>({
             query: () => ({ url: 'Notification/all', method: 'DELETE' }),
+            async onQueryStarted(_arg, { dispatch, queryFulfilled, getState }) {
+                requestNotificationsFullCacheReplace();
+                const patches = patchAllNotificationListCaches(dispatch, getState, (draft) => {
+                    draft.length = 0;
+                });
+                try {
+                    await queryFulfilled;
+                    requestNotificationsFullCacheReplace();
+                } catch {
+                    undoCachePatches(patches);
+                }
+            },
             invalidatesTags: (result, error) =>
                 error ? [] : [{ type: 'Notification' as const, id: 'LIST' }],
         }),
@@ -959,10 +1060,11 @@ export const api = createApi({
             }),
             serializeQueryArgs: () => ({}),
             merge: (currentCache, newItems, { arg }) => {
+                const sanitized = newItems.filter((t) => !t.isSocialThread);
                 const before = (arg as any)?.before as string | undefined;
-                if (!before) return newItems;
+                if (!before) return sanitized;
                 const seen = new Set(currentCache.map((t) => t.threadId));
-                const deduped = newItems.filter((t) => !seen.has(t.threadId));
+                const deduped = sanitized.filter((t) => !seen.has(t.threadId));
                 return [...currentCache, ...deduped];
             },
             forceRefetch: ({ currentArg, previousArg }) => {
@@ -981,6 +1083,80 @@ export const api = createApi({
                     ]
                     : [{ type: 'Chat' as const, id: 'LIST' }],
             keepUnusedDataFor: CACHE_DURATIONS.LIST,
+        }),
+        getSocialChatThreads: builder.query<ChatThreadListItemDto[], SocialChatThreadsQueryArgs>({
+            query: (arg) => ({
+                url: 'Chat/social/threads',
+                params: {
+                    profileId: arg.profileId,
+                    ...(arg.before ? { before: arg.before } : {}),
+                    ...(arg.beforeId ? { beforeId: arg.beforeId } : {}),
+                    ...(arg.limit ? { limit: arg.limit } : {}),
+                },
+            }),
+            serializeQueryArgs: ({ queryArgs }) => queryArgs.profileId,
+            merge: (currentCache, newItems, { arg }) => {
+                const before = arg?.before;
+                if (!before) return newItems;
+                const seen = new Set(currentCache.map((t) => t.threadId));
+                const deduped = newItems.filter((t) => !seen.has(t.threadId));
+                return [...currentCache, ...deduped];
+            },
+            forceRefetch: ({ currentArg, previousArg }) => {
+                const cTs = currentArg?.before ?? null;
+                const pTs = previousArg?.before ?? null;
+                const cId = currentArg?.beforeId ?? null;
+                const pId = previousArg?.beforeId ?? null;
+                return cTs !== pTs || cId !== pId;
+            },
+            transformResponse: transformArrayResponse<ChatThreadListItemDto>,
+            providesTags: [{ type: 'Chat' as const, id: 'SOCIAL_LIST' }],
+            keepUnusedDataFor: CACHE_DURATIONS.LIST,
+        }),
+        getDeletedSocialChatThreads: builder.query<ChatThreadListItemDto[], SocialChatThreadsQueryArgs>({
+            query: (arg) => ({
+                url: 'Chat/social/threads/deleted',
+                params: {
+                    profileId: arg.profileId,
+                    ...(arg.before ? { before: arg.before } : {}),
+                    ...(arg.beforeId ? { beforeId: arg.beforeId } : {}),
+                    ...(arg.limit ? { limit: arg.limit } : {}),
+                },
+            }),
+            serializeQueryArgs: ({ queryArgs }) => `deleted-${queryArgs.profileId}`,
+            merge: (currentCache, newItems, { arg }) => {
+                const before = arg?.before;
+                if (!before) return newItems;
+                const seen = new Set(currentCache.map((t) => t.threadId));
+                const deduped = newItems.filter((t) => !seen.has(t.threadId));
+                return [...currentCache, ...deduped];
+            },
+            forceRefetch: ({ currentArg, previousArg }) => {
+                const cTs = currentArg?.before ?? null;
+                const pTs = previousArg?.before ?? null;
+                const cId = currentArg?.beforeId ?? null;
+                const pId = previousArg?.beforeId ?? null;
+                return cTs !== pTs || cId !== pId;
+            },
+            transformResponse: transformArrayResponse<ChatThreadListItemDto>,
+            providesTags: [{ type: 'Chat' as const, id: 'SOCIAL_DELETED' }],
+            keepUnusedDataFor: CACHE_DURATIONS.LIST,
+        }),
+        restoreSocialChatThread: builder.mutation<ApiResponse<boolean>, { threadId: string }>({
+            query: ({ threadId }) => ({
+                url: `Chat/social/thread/${threadId}/restore`,
+                method: 'POST',
+            }),
+            invalidatesTags: [
+                { type: 'Chat' as const, id: 'SOCIAL_LIST' },
+                { type: 'Chat' as const, id: 'SOCIAL_DELETED' },
+            ],
+            transformResponse: (response: unknown) => transformApiResponse<boolean>(response),
+        }),
+        ensureSocialChatThread: builder.mutation<ApiResponse<string>, { fromProfileId: string; toProfileId: string }>({
+            query: (body) => ({ url: 'Chat/social/thread', method: 'POST', body }),
+            invalidatesTags: [{ type: 'Chat' as const, id: 'SOCIAL_LIST' }],
+            transformResponse: (response: unknown) => transformApiResponse<string>(response),
         }),
         // Chat mesajları — INFINITE SCROLL (cursor-based).
         //
@@ -1302,7 +1478,7 @@ export const api = createApi({
                 method: 'DELETE',
             }),
             async onQueryStarted({ threadId }, { dispatch, queryFulfilled }) {
-                const patch = dispatch(
+                const patchMessages = dispatch(
                     api.util.updateQueryData("getChatMessagesByThread", { threadId }, (draft) => {
                         if (!draft) return;
                         draft.splice(0, draft.length);
@@ -1311,11 +1487,13 @@ export const api = createApi({
                 try {
                     await queryFulfilled;
                 } catch {
-                    patch.undo();
+                    patchMessages.undo();
                 }
             },
             invalidatesTags: (result, error, arg) => [
                 { type: 'Chat' as const, id: 'LIST' },
+                { type: 'Chat' as const, id: 'SOCIAL_LIST' },
+                { type: 'Chat' as const, id: 'SOCIAL_DELETED' },
                 { type: 'Chat' as const, id: 'MESSAGES' },
                 { type: 'Chat' as const, id: `MESSAGES_THREAD_${arg.threadId}` },
             ],
@@ -1340,6 +1518,8 @@ export const api = createApi({
             },
             invalidatesTags: (result, error, arg) => [
                 { type: 'Chat' as const, id: 'LIST' },
+                { type: 'Chat' as const, id: 'SOCIAL_LIST' },
+                { type: 'Chat' as const, id: 'SOCIAL_DELETED' },
                 { type: 'Chat' as const, id: 'MESSAGES' },
                 { type: 'Chat' as const, id: `MESSAGES_THREAD_${arg.threadId}` },
             ],
@@ -1349,7 +1529,7 @@ export const api = createApi({
                 url: `Chat/thread/${threadId}/read`,
                 method: 'POST',
             }),
-            async onQueryStarted(threadId, { dispatch, queryFulfilled }) {
+            async onQueryStarted(threadId, { dispatch, queryFulfilled, getState }) {
                 const patchThreads = dispatch(
                     api.util.updateQueryData("getChatThreads", undefined, (draft) => {
                         if (!Array.isArray(draft)) return;
@@ -1358,17 +1538,37 @@ export const api = createApi({
                         row.unreadCount = 0;
                     }),
                 );
+                const socialPatches: { undo: () => void }[] = [];
+                const queries = (getState() as { api?: { queries?: Record<string, { endpointName?: string; originalArgs?: unknown; data?: unknown }> } }).api?.queries ?? {};
+                Object.values(queries).forEach((q) => {
+                    if (q?.endpointName !== 'getSocialChatThreads' || !Array.isArray(q.data)) return;
+                    try {
+                        const patch = dispatch(
+                            api.util.updateQueryData('getSocialChatThreads', q.originalArgs as SocialChatThreadsQueryArgs, (draft) => {
+                                const row = draft.find((t) => t.threadId === threadId);
+                                if (row) row.unreadCount = 0;
+                            }),
+                        );
+                        if (patch && typeof (patch as { undo?: () => void }).undo === 'function') {
+                            socialPatches.push(patch as { undo: () => void });
+                        }
+                    } catch {
+                        /* ignore */
+                    }
+                });
                 try {
                     await queryFulfilled;
                 } catch {
                     patchThreads.undo();
+                    socialPatches.forEach((p) => p.undo());
                 }
             },
             // Invalidate both Chat thread and Badge count
             invalidatesTags: (result, error, threadId) => [
                 { type: 'Chat' as const, id: threadId },
                 { type: 'Chat' as const, id: 'LIST' },
-                { type: 'Notification' as const, id: 'LIST' }, // Badge count refetch
+                { type: 'Chat' as const, id: 'SOCIAL_LIST' },
+                { type: 'Notification' as const, id: 'LIST' },
             ],
         }),
         markChatThreadReadByAppointment: builder.mutation<ApiResponse<boolean>, string>({
@@ -2276,12 +2476,29 @@ export const api = createApi({
                 const patch = dispatch(
                     api.util.updateQueryData('getSetting', undefined, (draft) => {
                         if (!draft?.data) return;
-                        draft.data.showImageAnimation = arg.showImageAnimation;
+                        if (typeof arg.showImageAnimation === 'boolean') {
+                            draft.data.showImageAnimation = arg.showImageAnimation;
+                        }
                         if (typeof arg.showPriceAnimation === 'boolean') {
                             draft.data.showPriceAnimation = arg.showPriceAnimation;
                         }
                         if (typeof arg.enableNotificationSound === 'boolean') {
                             draft.data.enableNotificationSound = arg.enableNotificationSound;
+                        }
+                        if (typeof arg.socialNotifyPostEngagement === 'boolean') {
+                            draft.data.socialNotifyPostEngagement = arg.socialNotifyPostEngagement;
+                        }
+                        if (typeof arg.socialNotifyComments === 'boolean') {
+                            draft.data.socialNotifyComments = arg.socialNotifyComments;
+                        }
+                        if (typeof arg.socialNotifyFollowers === 'boolean') {
+                            draft.data.socialNotifyFollowers = arg.socialNotifyFollowers;
+                        }
+                        if (typeof arg.socialNotifyMentions === 'boolean') {
+                            draft.data.socialNotifyMentions = arg.socialNotifyMentions;
+                        }
+                        if (typeof arg.socialNotifyStoryEngagement === 'boolean') {
+                            draft.data.socialNotifyStoryEngagement = arg.socialNotifyStoryEngagement;
                         }
                     }),
                 );
@@ -2328,23 +2545,26 @@ export const api = createApi({
         }),
 
         // --- BADGE API ---
-        getBadgeCounts: builder.query<ApiResponse<{ notificationUnreadCount: number; chatUnreadCount: number; threadUnreadCounts: Record<string, number> }>, void>({
+        getBadgeCounts: builder.query<ApiResponse<{ notificationUnreadCount: number; chatUnreadCount: number; socialChatUnreadCount: number; threadUnreadCounts: Record<string, number>; socialThreadUnreadCounts?: Record<string, number>; socialProfileUnreadCounts?: Record<string, number> }>, void>({
             query: () => 'Badge',
             providesTags: [
                 { type: 'Notification' as const, id: 'LIST' },
                 { type: 'Chat' as const, id: 'LIST' },
             ],
             keepUnusedDataFor: CACHE_DURATIONS.REAL_TIME,
-            transformResponse: (response: unknown): ApiResponse<{ notificationUnreadCount: number; chatUnreadCount: number; threadUnreadCounts: Record<string, number> }> => {
-                const transformed = transformApiResponse<{ notificationUnreadCount: number; chatUnreadCount: number; threadUnreadCounts: Record<string, number> }>(response);
+            transformResponse: (response: unknown): ApiResponse<{ notificationUnreadCount: number; chatUnreadCount: number; socialChatUnreadCount: number; threadUnreadCounts: Record<string, number>; socialThreadUnreadCounts?: Record<string, number>; socialProfileUnreadCounts?: Record<string, number> }> => {
+                const transformed = transformApiResponse<{ notificationUnreadCount: number; chatUnreadCount: number; socialChatUnreadCount: number; threadUnreadCounts: Record<string, number>; socialThreadUnreadCounts?: Record<string, number>; socialProfileUnreadCounts?: Record<string, number> }>(response);
                 if (transformed) {
                     return {
                         success: transformed.success,
                         message: transformed.message,
-                        data: transformed.data,
+                        data: {
+                            ...transformed.data,
+                            socialChatUnreadCount: transformed.data?.socialChatUnreadCount ?? 0,
+                        },
                     };
                 }
-                return response as ApiResponse<{ notificationUnreadCount: number; chatUnreadCount: number; threadUnreadCounts: Record<string, number> }>;
+                return response as ApiResponse<{ notificationUnreadCount: number; chatUnreadCount: number; socialChatUnreadCount: number; threadUnreadCounts: Record<string, number>; socialThreadUnreadCounts?: Record<string, number>; socialProfileUnreadCounts?: Record<string, number> }>;
             },
         }),
 
@@ -2560,6 +2780,753 @@ export const api = createApi({
             transformResponse: transformArrayResponse<AppointmentServicePackageDto>,
         }),
 
+        // ── Sosyal medya ──
+        getSocialLimits: builder.query<SocialLimitsDto, void>({
+            query: () => 'social/config/limits',
+            keepUnusedDataFor: CACHE_DURATIONS.STATIC,
+            transformResponse: transformObjectResponse<SocialLimitsDto>,
+        }),
+        getSocialFreeTierUsage: builder.query<SocialFreeTierUsageDto, void>({
+            query: () => 'social/config/usage',
+            keepUnusedDataFor: CACHE_DURATIONS.USER_DATA,
+            transformResponse: transformObjectResponse<SocialFreeTierUsageDto>,
+        }),
+        getSocialMyProfiles: builder.query<SocialProfileDto[], void>({
+            query: () => 'social/profile/me',
+            keepUnusedDataFor: CACHE_DURATIONS.USER_DATA,
+            transformResponse: (response: unknown) =>
+                normalizeSocialProfileList(transformArrayResponse<SocialProfileDto>(response)),
+            providesTags: ['SocialProfile'],
+        }),
+        getSocialProfile: builder.query<
+            SocialProfileDto,
+            string | { profileId: string; latitude?: number; longitude?: number }
+        >({
+            query: (arg) => {
+                const profileId = typeof arg === 'string' ? arg : arg.profileId;
+                const qs = new URLSearchParams();
+                if (typeof arg !== 'string') {
+                    if (arg.latitude != null) qs.set('latitude', String(arg.latitude));
+                    if (arg.longitude != null) qs.set('longitude', String(arg.longitude));
+                }
+                const q = qs.toString();
+                return `social/profile/${profileId}${q ? `?${q}` : ''}`;
+            },
+            keepUnusedDataFor: CACHE_DURATIONS.DYNAMIC,
+            transformResponse: (response: unknown) => {
+                const raw = transformObjectResponse<SocialProfileDto>(response);
+                return normalizeSocialProfileDto(raw) ?? raw;
+            },
+            providesTags: (_r, _e, arg) => [{ type: 'SocialProfile', id: typeof arg === 'string' ? arg : arg.profileId }],
+        }),
+        updateSocialProfile: builder.mutation<
+            { message: string; success: boolean },
+            {
+                profileId: string;
+                username?: string;
+                bio?: string;
+                externalUrl?: string | null;
+                dmPolicy?: number;
+                latitude?: number;
+                longitude?: number;
+            }
+        >({
+            query: ({ profileId, ...body }) => ({
+                url: `social/profile/${profileId}`,
+                method: 'PUT',
+                body,
+            }),
+            invalidatesTags: ['SocialProfile'],
+        }),
+        uploadSocialProfileAvatar: builder.mutation<
+            ApiResponse<SocialProfileDto>,
+            { profileId: string; file: { uri: string; name: string; type: string } }
+        >({
+            query: ({ profileId, file }) => {
+                const form = new FormData();
+                form.append('file', {
+                    uri: file.uri,
+                    name: file.name,
+                    type: file.type,
+                } as unknown as Blob);
+                return { url: `social/profile/${profileId}/avatar`, method: 'POST', body: form };
+            },
+            invalidatesTags: ['SocialProfile'],
+            transformResponse: (response: unknown) => transformApiResponse<SocialProfileDto>(response),
+        }),
+        uploadSocialProfileCover: builder.mutation<
+            ApiResponse<SocialProfileDto>,
+            { profileId: string; file: { uri: string; name: string; type: string } }
+        >({
+            query: ({ profileId, file }) => {
+                const form = new FormData();
+                form.append('file', {
+                    uri: file.uri,
+                    name: file.name,
+                    type: file.type,
+                } as unknown as Blob);
+                return { url: `social/profile/${profileId}/cover`, method: 'POST', body: form };
+            },
+            invalidatesTags: ['SocialProfile'],
+            transformResponse: (response: unknown) => transformApiResponse<SocialProfileDto>(response),
+        }),
+        getSocialFeed: builder.query<SocialPostDto[], { before?: string; beforeId?: string; limit?: number } | void>({
+            query: (params) => {
+                const p = params ?? {};
+                const qs = new URLSearchParams();
+                if (p.before) qs.set('before', p.before);
+                if (p.beforeId) qs.set('beforeId', p.beforeId);
+                if (p.limit) qs.set('limit', String(p.limit));
+                const q = qs.toString();
+                return `social/post/feed${q ? `?${q}` : ''}`;
+            },
+            serializeQueryArgs: () => ({}),
+            merge: (currentCache, newItems, { arg }) =>
+                mergeSocialFeedCachePages(currentCache, newItems, arg),
+            forceRefetch: socialPostListCursorForceRefetch,
+            keepUnusedDataFor: CACHE_DURATIONS.LIST,
+            transformResponse: (response: unknown) =>
+                normalizeSocialPostList(transformArrayResponse<SocialPostDto>(response)),
+            providesTags: ['SocialFeed'],
+        }),
+        getSocialReelsFeed: builder.query<
+            SocialPostDto[],
+            {
+                before?: string;
+                beforeId?: string;
+                limit?: number;
+                latitude?: number;
+                longitude?: number;
+                radiusKm?: number;
+            } | void
+        >({
+            query: (params) => {
+                const p = params ?? {};
+                const qs = new URLSearchParams();
+                if (p.before) qs.set('before', p.before);
+                if (p.beforeId) qs.set('beforeId', p.beforeId);
+                if (p.limit) qs.set('limit', String(p.limit));
+                if (p.latitude != null) qs.set('latitude', String(p.latitude));
+                if (p.longitude != null) qs.set('longitude', String(p.longitude));
+                if (p.radiusKm != null) qs.set('radiusKm', String(p.radiusKm));
+                const q = qs.toString();
+                return `social/post/reels${q ? `?${q}` : ''}`;
+            },
+            serializeQueryArgs: () => ({}),
+            merge: (currentCache, newItems, { arg }) =>
+                mergeSocialReelsCachePages(currentCache, newItems, arg),
+            forceRefetch: socialPostListCursorForceRefetch,
+            keepUnusedDataFor: CACHE_DURATIONS.LIST,
+            transformResponse: (response: unknown) =>
+                normalizeSocialPostList(transformArrayResponse<SocialPostDto>(response)),
+            providesTags: ['SocialReels'],
+        }),
+        getSocialPost: builder.query<SocialPostDto, string>({
+            query: (postId) => `social/post/${postId}`,
+            keepUnusedDataFor: CACHE_DURATIONS.DYNAMIC,
+            transformResponse: (response: unknown) => {
+                const raw = transformObjectResponse<SocialPostDto>(response);
+                return normalizeSocialPostDto(raw) ?? raw;
+            },
+            providesTags: (_r, _e, id) => [{ type: 'SocialFeed', id }],
+        }),
+        recordSocialPostView: builder.mutation<{ message: string; success: boolean }, { postId: string; profileId: string }>({
+            query: ({ postId, profileId }) => ({
+                url: `social/post/${postId}/view`,
+                method: 'POST',
+                body: { profileId },
+            }),
+        }),
+        getSocialProfileByOwner: builder.query<
+            SocialProfileDto,
+            { ownerType: number; ownerId: string; latitude?: number; longitude?: number }
+        >({
+            query: ({ ownerType, ownerId, latitude, longitude }) => {
+                const qs = new URLSearchParams();
+                if (latitude != null) qs.set('latitude', String(latitude));
+                if (longitude != null) qs.set('longitude', String(longitude));
+                const q = qs.toString();
+                return `social/profile/owner/${ownerType}/${ownerId}${q ? `?${q}` : ''}`;
+            },
+            keepUnusedDataFor: CACHE_DURATIONS.DYNAMIC,
+            transformResponse: (response: unknown) => {
+                const raw = transformObjectResponse<SocialProfileDto>(response);
+                return normalizeSocialProfileDto(raw) ?? raw;
+            },
+            providesTags: (_r, _e, arg) => [{ type: 'SocialProfile', id: `owner-${arg.ownerType}-${arg.ownerId}` }],
+        }),
+        getSocialProfileByUsername: builder.query<SocialProfileDto, string>({
+            query: (username) => `social/profile/username/${encodeURIComponent(username.toLowerCase())}`,
+            keepUnusedDataFor: CACHE_DURATIONS.DYNAMIC,
+            transformResponse: (response: unknown) => {
+                const raw = transformObjectResponse<SocialProfileDto>(response);
+                return normalizeSocialProfileDto(raw) ?? raw;
+            },
+            providesTags: (_r, _e, username) => [{ type: 'SocialProfile', id: `username-${username}` }],
+        }),
+        searchSocialProfiles: builder.query<
+            SocialProfileSearchResultDto[],
+            {
+                q?: string;
+                latitude?: number;
+                longitude?: number;
+                radiusKm?: number;
+                limit?: number;
+                availability?: number;
+                serviceIds?: string[];
+            }
+        >({
+            query: (params) => {
+                const qs = new URLSearchParams();
+                if (params.q) qs.set('q', params.q);
+                if (params.latitude != null) qs.set('latitude', String(params.latitude));
+                if (params.longitude != null) qs.set('longitude', String(params.longitude));
+                if (params.radiusKm != null) qs.set('radiusKm', String(params.radiusKm));
+                if (params.limit != null) qs.set('limit', String(params.limit));
+                if (params.availability != null) qs.set('availability', String(params.availability));
+                params.serviceIds?.forEach((id) => qs.append('serviceIds', id));
+                const q = qs.toString();
+                return `social/profile/search${q ? `?${q}` : ''}`;
+            },
+            keepUnusedDataFor: CACHE_DURATIONS.LIST,
+            transformResponse: transformArrayResponse<SocialProfileSearchResultDto>,
+        }),
+        discoverSocialPosts: builder.query<
+            SocialPostDto[],
+            {
+                q?: string;
+                latitude?: number;
+                longitude?: number;
+                radiusKm?: number;
+                profileId?: string;
+                before?: string;
+                beforeId?: string;
+                limit?: number;
+                availability?: number;
+                serviceIds?: string[];
+            }
+        >({
+            query: (params) => {
+                const qs = new URLSearchParams();
+                if (params.q) qs.set('q', params.q);
+                if (params.latitude != null) qs.set('latitude', String(params.latitude));
+                if (params.longitude != null) qs.set('longitude', String(params.longitude));
+                if (params.radiusKm != null) qs.set('radiusKm', String(params.radiusKm));
+                if (params.profileId) qs.set('profileId', params.profileId);
+                if (params.before) qs.set('before', params.before);
+                if (params.beforeId) qs.set('beforeId', params.beforeId);
+                if (params.limit != null) qs.set('limit', String(params.limit));
+                if (params.availability != null) qs.set('availability', String(params.availability));
+                params.serviceIds?.forEach((id) => qs.append('serviceIds', id));
+                const q = qs.toString();
+                return `social/post/discover${q ? `?${q}` : ''}`;
+            },
+            keepUnusedDataFor: CACHE_DURATIONS.LIST,
+            transformResponse: transformArrayResponse<SocialPostDto>,
+        }),
+        getSocialProfilePosts: builder.query<
+            SocialPostDto[],
+            { profileId: string; type?: SocialPostType; before?: string; beforeId?: string; limit?: number }
+        >({
+            query: ({ profileId, type, before, beforeId, limit }) => {
+                const qs = new URLSearchParams();
+                if (type !== undefined) qs.set('type', String(type));
+                if (before) qs.set('before', before);
+                if (beforeId) qs.set('beforeId', beforeId);
+                if (limit) qs.set('limit', String(limit));
+                const q = qs.toString();
+                return `social/post/profile/${profileId}${q ? `?${q}` : ''}`;
+            },
+            serializeQueryArgs: ({ queryArgs }) => queryArgs.profileId,
+            merge: (currentCache, newItems, { arg }) => {
+                if (!arg.before) return newItems;
+                const seen = new Set((currentCache ?? []).map((p) => p.id));
+                return [...(currentCache ?? []), ...newItems.filter((p) => !seen.has(p.id))];
+            },
+            forceRefetch: ({ currentArg, previousArg }) =>
+                (currentArg?.before ?? null) !== (previousArg?.before ?? null) ||
+                (currentArg?.beforeId ?? null) !== (previousArg?.beforeId ?? null),
+            keepUnusedDataFor: CACHE_DURATIONS.LIST,
+            transformResponse: (response: unknown) => normalizeSocialPostList(transformArrayResponse<SocialPostDto>(response)),
+            providesTags: (_r, _e, arg) => [{ type: 'SocialProfilePosts', id: arg.profileId }],
+        }),
+        toggleSocialLike: builder.mutation<{ message: string; success: boolean }, { profileId: string; targetType: number; targetId: string }>({
+            query: (body) => ({ url: 'social/interaction/like', method: 'POST', body }),
+            async onQueryStarted({ targetType, targetId }, { dispatch, queryFulfilled, getState }) {
+                const patches =
+                    targetType === 0
+                        ? applyOptimisticSocialPostLike(getState, dispatch, targetId)
+                        : applyOptimisticSocialCommentLike(getState, dispatch, targetId);
+                try {
+                    await queryFulfilled;
+                } catch {
+                    undoAll(patches);
+                }
+            },
+        }),
+        toggleSocialSave: builder.mutation<{ message: string; success: boolean }, { profileId: string; postId: string }>({
+            query: (body) => ({ url: 'social/interaction/save', method: 'POST', body }),
+            async onQueryStarted({ postId }, { dispatch, queryFulfilled, getState }) {
+                const patches = applyOptimisticSocialPostSave(getState, dispatch, postId);
+                try {
+                    await queryFulfilled;
+                } catch {
+                    undoAll(patches);
+                }
+            },
+            invalidatesTags: ['SocialSaved'],
+        }),
+        getSavedSocialPosts: builder.query<
+            SocialPostDto[],
+            { profileId: string; type?: SocialPostType; excludeType?: SocialPostType; before?: string; beforeId?: string; limit?: number }
+        >({
+            query: ({ profileId, type, excludeType, before, beforeId, limit }) => {
+                const qs = new URLSearchParams();
+                if (type !== undefined) qs.set('type', String(type));
+                if (excludeType !== undefined) qs.set('excludeType', String(excludeType));
+                if (before) qs.set('before', before);
+                if (beforeId) qs.set('beforeId', beforeId);
+                if (limit) qs.set('limit', String(limit));
+                const q = qs.toString();
+                return `social/post/saved/${profileId}${q ? `?${q}` : ''}`;
+            },
+            serializeQueryArgs: ({ queryArgs }) =>
+                `${queryArgs.profileId}-${queryArgs.type ?? 'all'}-${queryArgs.excludeType ?? 'none'}`,
+            merge: (currentCache, newItems, { arg }) => {
+                if (!arg.before) return newItems;
+                const seen = new Set((currentCache ?? []).map((p) => p.id));
+                return [...(currentCache ?? []), ...newItems.filter((p) => !seen.has(p.id))];
+            },
+            forceRefetch: ({ currentArg, previousArg }) =>
+                (currentArg?.before ?? null) !== (previousArg?.before ?? null) ||
+                (currentArg?.beforeId ?? null) !== (previousArg?.beforeId ?? null),
+            keepUnusedDataFor: CACHE_DURATIONS.LIST,
+            transformResponse: (response: unknown) => normalizeSocialPostList(transformArrayResponse<SocialPostDto>(response)),
+            providesTags: (_r, _e, arg) => [{ type: 'SocialSaved', id: `${arg.profileId}-${arg.type ?? 'all'}` }],
+        }),
+        getSocialComments: builder.query<
+            SocialCommentDto[],
+            { postId: string; parentCommentId?: string; before?: string; beforeId?: string; limit?: number }
+        >({
+            query: ({ postId, parentCommentId, before, beforeId, limit }) => {
+                const qs = new URLSearchParams();
+                if (parentCommentId) qs.set('parentCommentId', parentCommentId);
+                if (before) qs.set('before', before);
+                if (beforeId) qs.set('beforeId', beforeId);
+                if (limit) qs.set('limit', String(limit));
+                const q = qs.toString();
+                return `social/interaction/comment/${postId}${q ? `?${q}` : ''}`;
+            },
+            serializeQueryArgs: ({ queryArgs }) =>
+                `${queryArgs.postId}:${queryArgs.parentCommentId ?? ''}`,
+            merge: (currentCache, newItems, { arg }) => {
+                if (!arg.before) return newItems;
+                const seen = new Set((currentCache ?? []).map((c) => c.id));
+                return [...(currentCache ?? []), ...newItems.filter((c) => !seen.has(c.id))];
+            },
+            forceRefetch: ({ currentArg, previousArg }) =>
+                (currentArg?.before ?? null) !== (previousArg?.before ?? null) ||
+                (currentArg?.beforeId ?? null) !== (previousArg?.beforeId ?? null),
+            keepUnusedDataFor: CACHE_DURATIONS.LIST,
+            transformResponse: transformArrayResponse<SocialCommentDto>,
+            providesTags: (_r, _e, arg) => [
+                {
+                    type: 'SocialComments',
+                    id: arg.parentCommentId ? `replies-${arg.parentCommentId}` : arg.postId,
+                },
+            ],
+        }),
+        createSocialComment: builder.mutation<
+            ApiResponse<SocialCommentDto>,
+            { profileId: string; postId: string; text: string; parentCommentId?: string }
+        >({
+            query: (body) => ({ url: 'social/interaction/comment', method: 'POST', body }),
+            async onQueryStarted(arg, { dispatch, queryFulfilled, getState }) {
+                const myProfiles = api.endpoints.getSocialMyProfiles.select()(getState() as never)?.data;
+                const profile = myProfiles?.find((p) => p.id === arg.profileId);
+                if (!profile) return;
+
+                const tempId = `optimistic-comment-${Date.now()}`;
+                const patches = applyOptimisticSocialCommentAdded(getState, dispatch, {
+                    postId: arg.postId,
+                    parentCommentId: arg.parentCommentId,
+                    text: arg.text,
+                    profile,
+                    tempId,
+                });
+
+                try {
+                    const { data: result } = await queryFulfilled;
+                    const created = result?.data;
+                    if (created) {
+                        replaceOptimisticSocialComment(
+                            dispatch,
+                            arg.postId,
+                            arg.parentCommentId,
+                            tempId,
+                            created,
+                        );
+                    }
+                } catch {
+                    undoAll(patches);
+                }
+            },
+            transformResponse: (response: unknown) => transformApiResponse<SocialCommentDto>(response),
+        }),
+        updateSocialComment: builder.mutation<
+            ApiResponse<SocialCommentDto>,
+            { commentId: string; profileId: string; text: string; postId: string; parentCommentId?: string | null }
+        >({
+            query: ({ commentId, profileId, text }) => ({
+                url: `social/interaction/comment/${commentId}`,
+                method: 'PUT',
+                body: { profileId, text },
+            }),
+            invalidatesTags: (_r, _e, arg) => [
+                {
+                    type: 'SocialComments',
+                    id: arg.parentCommentId ? `replies-${arg.parentCommentId}` : arg.postId,
+                },
+                'SocialFeed',
+            ],
+            transformResponse: (response: unknown) => transformApiResponse<SocialCommentDto>(response),
+        }),
+        deleteSocialComment: builder.mutation<
+            { message: string; success: boolean },
+            { commentId: string; profileId: string; postId: string; parentCommentId?: string | null }
+        >({
+            query: ({ commentId, profileId }) => ({
+                url: `social/interaction/comment/${commentId}`,
+                method: 'DELETE',
+                body: { profileId },
+            }),
+            invalidatesTags: (_r, _e, arg) => [
+                {
+                    type: 'SocialComments',
+                    id: arg.parentCommentId ? `replies-${arg.parentCommentId}` : arg.postId,
+                },
+                'SocialFeed',
+            ],
+        }),
+        getSocialFollowList: builder.query<
+            SocialFollowListItemDto[],
+            {
+                profileId: string;
+                kind: 'followers' | 'following';
+                before?: string;
+                beforeId?: string;
+                limit?: number;
+            }
+        >({
+            query: ({ profileId, kind, before, beforeId, limit }) => {
+                const qs = new URLSearchParams();
+                if (before) qs.set('before', before);
+                if (beforeId) qs.set('beforeId', beforeId);
+                if (limit) qs.set('limit', String(limit));
+                const q = qs.toString();
+                return `social/interaction/${kind}/${profileId}${q ? `?${q}` : ''}`;
+            },
+            serializeQueryArgs: ({ queryArgs }) => serializeSocialFollowListArgs(queryArgs),
+            merge: (currentCache, newItems, { arg }) => mergeSocialFollowListCachePages(currentCache, newItems, arg),
+            forceRefetch: ({ currentArg, previousArg }) =>
+                (currentArg?.before ?? null) !== (previousArg?.before ?? null) ||
+                (currentArg?.beforeId ?? null) !== (previousArg?.beforeId ?? null),
+            keepUnusedDataFor: CACHE_DURATIONS.LIST,
+            transformResponse: transformArrayResponse<SocialFollowListItemDto>,
+            providesTags: (_r, _e, arg) => [{ type: 'SocialFollowList', id: `${arg.kind}-${arg.profileId}` }],
+        }),
+        followSocialProfile: builder.mutation<{ message: string; success: boolean }, { followerProfileId: string; followingProfileId: string }>({
+            query: (body) => ({ url: 'social/interaction/follow', method: 'POST', body }),
+            async onQueryStarted({ followingProfileId }, { dispatch, queryFulfilled, getState }) {
+                const patches = applyOptimisticSocialFollow(getState, dispatch, followingProfileId, true);
+                try {
+                    await queryFulfilled;
+                } catch {
+                    undoAll(patches);
+                }
+            },
+            invalidatesTags: ['SocialFollowList'],
+        }),
+        unfollowSocialProfile: builder.mutation<{ message: string; success: boolean }, { followerProfileId: string; followingProfileId: string }>({
+            query: (body) => ({ url: 'social/interaction/unfollow', method: 'POST', body }),
+            async onQueryStarted({ followingProfileId }, { dispatch, queryFulfilled, getState }) {
+                const patches = applyOptimisticSocialFollow(getState, dispatch, followingProfileId, false);
+                try {
+                    await queryFulfilled;
+                } catch {
+                    undoAll(patches);
+                }
+            },
+            invalidatesTags: ['SocialFollowList'],
+        }),
+        toggleSocialProfileMute: builder.mutation<
+            { message: string; success: boolean },
+            { mutedByProfileId: string; mutedProfileId: string }
+        >({
+            query: (body) => ({ url: 'social/interaction/mute', method: 'POST', body }),
+            invalidatesTags: (_r, _e, arg) => [{ type: 'SocialProfile', id: arg.mutedProfileId }],
+        }),
+        getSocialMutualFollowers: builder.query<
+            SocialFollowListItemDto[],
+            { profileId: string; before?: string; beforeId?: string; limit?: number }
+        >({
+            query: ({ profileId, before, beforeId, limit }) => {
+                const qs = new URLSearchParams();
+                if (before) qs.set('before', before);
+                if (beforeId) qs.set('beforeId', beforeId);
+                if (limit) qs.set('limit', String(limit));
+                const q = qs.toString();
+                return `social/interaction/mutual/${profileId}${q ? `?${q}` : ''}`;
+            },
+            serializeQueryArgs: ({ queryArgs }) => serializeSocialMutualListArgs(queryArgs),
+            merge: (currentCache, newItems, { arg }) => mergeSocialMutualListCachePages(currentCache, newItems, arg),
+            forceRefetch: ({ currentArg, previousArg }) =>
+                (currentArg?.before ?? null) !== (previousArg?.before ?? null) ||
+                (currentArg?.beforeId ?? null) !== (previousArg?.beforeId ?? null),
+            keepUnusedDataFor: CACHE_DURATIONS.LIST,
+            transformResponse: transformArrayResponse<SocialFollowListItemDto>,
+            providesTags: (_r, _e, arg) => [{ type: 'SocialFollowList', id: `mutual-${arg.profileId}` }],
+        }),
+        getSocialStoryFeed: builder.query<SocialStoryGroupDto[], void>({
+            query: () => 'social/story/feed',
+            keepUnusedDataFor: CACHE_DURATIONS.LIST,
+            transformResponse: transformArrayResponse<SocialStoryGroupDto>,
+            providesTags: ['SocialStory'],
+        }),
+        createSocialStory: builder.mutation<
+            ApiResponse<string>,
+            {
+                profileId: string;
+                file: { uri: string; name: string; type: string };
+                durationSec?: number;
+                appointmentId?: string;
+            }
+        >({
+            query: ({ profileId, file, durationSec, appointmentId }) => {
+                const form = new FormData();
+                form.append('profileId', profileId);
+                if (durationSec != null) form.append('durationSec', String(durationSec));
+                if (appointmentId) form.append('appointmentId', appointmentId);
+                form.append('file', {
+                    uri: file.uri,
+                    name: file.name,
+                    type: file.type,
+                } as unknown as Blob);
+                return { url: 'social/story', method: 'POST', body: form };
+            },
+            invalidatesTags: ['SocialStory', 'AppointmentSocialShare'],
+            transformResponse: (response: unknown) => transformApiResponse<string>(response),
+        }),
+        deleteSocialStory: builder.mutation<{ message: string; success: boolean }, string>({
+            query: (storyId) => ({ url: `social/story/${storyId}`, method: 'DELETE' }),
+            invalidatesTags: ['SocialStory', 'SocialArchive'],
+        }),
+        recordSocialStoryView: builder.mutation<
+            { message: string; success: boolean },
+            { storyId: string; profileId: string }
+        >({
+            query: ({ storyId, profileId }) => ({
+                url: `social/story/${storyId}/view`,
+                method: 'POST',
+                body: { profileId },
+            }),
+        }),
+        getSocialStoryViewers: builder.query<
+            SocialStoryViewerDto[],
+            { storyId: string; before?: string; beforeId?: string; limit?: number }
+        >({
+            query: ({ storyId, before, beforeId, limit }) => {
+                const qs = new URLSearchParams();
+                if (before) qs.set('before', before);
+                if (beforeId) qs.set('beforeId', beforeId);
+                if (limit != null) qs.set('limit', String(limit));
+                const q = qs.toString();
+                return `social/story/${storyId}/viewers${q ? `?${q}` : ''}`;
+            },
+            serializeQueryArgs: ({ queryArgs }) => queryArgs.storyId,
+            merge: (currentCache, newItems, { arg }) => {
+                if (!arg.before) return newItems;
+                const seen = new Set((currentCache ?? []).map((v) => v.viewId));
+                return [...(currentCache ?? []), ...newItems.filter((v) => !seen.has(v.viewId))];
+            },
+            forceRefetch: ({ currentArg, previousArg }) =>
+                (currentArg?.before ?? null) !== (previousArg?.before ?? null) ||
+                (currentArg?.beforeId ?? null) !== (previousArg?.beforeId ?? null),
+            keepUnusedDataFor: CACHE_DURATIONS.DYNAMIC,
+            transformResponse: transformArrayResponse<SocialStoryViewerDto>,
+        }),
+        createSocialStoryReply: builder.mutation<
+            { message: string; success: boolean },
+            { storyId: string; profileId: string; text: string }
+        >({
+            query: ({ storyId, profileId, text }) => ({
+                url: `social/story/${storyId}/reply`,
+                method: 'POST',
+                body: { profileId, text },
+            }),
+            invalidatesTags: ['Chat'],
+        }),
+        getSocialProfileStories: builder.query<SocialStoryDto[], string>({
+            query: (profileId) => `social/story/profile/${profileId}`,
+            keepUnusedDataFor: CACHE_DURATIONS.LIST,
+            transformResponse: transformArrayResponse<SocialStoryDto>,
+            providesTags: (_r, _e, profileId) => [{ type: 'SocialStory', id: profileId }],
+        }),
+        getSocialStoryHighlights: builder.query<SocialStoryHighlightDto[], string>({
+            query: (profileId) => `social/story/highlight/profile/${profileId}`,
+            keepUnusedDataFor: CACHE_DURATIONS.LIST,
+            transformResponse: transformArrayResponse<SocialStoryHighlightDto>,
+            providesTags: (_r, _e, profileId) => [{ type: 'SocialHighlight', id: profileId }],
+        }),
+        getSocialStoryHighlightDetail: builder.query<SocialStoryHighlightDetailDto, string>({
+            query: (highlightId) => `social/story/highlight/${highlightId}`,
+            keepUnusedDataFor: CACHE_DURATIONS.LIST,
+            transformResponse: transformObjectResponse<SocialStoryHighlightDetailDto>,
+            providesTags: (_r, _e, id) => [{ type: 'SocialHighlight', id }],
+        }),
+        createSocialStoryHighlight: builder.mutation<
+            ApiResponse<string>,
+            { profileId: string; title: string; storyIds?: string[] }
+        >({
+            query: (body) => ({ url: 'social/story/highlight', method: 'POST', body }),
+            invalidatesTags: ['SocialHighlight'],
+            transformResponse: (response: unknown) => transformApiResponse<string>(response),
+        }),
+        addStoriesToSocialHighlight: builder.mutation<
+            { message: string; success: boolean },
+            { highlightId: string; storyIds: string[] }
+        >({
+            query: ({ highlightId, storyIds }) => ({
+                url: `social/story/highlight/${highlightId}/items`,
+                method: 'POST',
+                body: { storyIds },
+            }),
+            invalidatesTags: ['SocialHighlight'],
+        }),
+        updateSocialStoryHighlight: builder.mutation<
+            { message: string; success: boolean },
+            { highlightId: string; title?: string; sortOrder?: number }
+        >({
+            query: ({ highlightId, ...body }) => ({
+                url: `social/story/highlight/${highlightId}`,
+                method: 'PUT',
+                body,
+            }),
+            invalidatesTags: ['SocialHighlight', 'SocialArchive'],
+        }),
+        removeSocialStoryHighlightItem: builder.mutation<
+            { message: string; success: boolean },
+            { highlightId: string; itemId: string }
+        >({
+            query: ({ highlightId, itemId }) => ({
+                url: `social/story/highlight/${highlightId}/items/${itemId}`,
+                method: 'DELETE',
+            }),
+            invalidatesTags: ['SocialHighlight', 'SocialArchive'],
+        }),
+        deleteSocialStoryHighlight: builder.mutation<{ message: string; success: boolean }, string>({
+            query: (highlightId) => ({ url: `social/story/highlight/${highlightId}`, method: 'DELETE' }),
+            invalidatesTags: ['SocialHighlight', 'SocialArchive'],
+        }),
+        deleteSocialPost: builder.mutation<{ message: string; success: boolean }, string>({
+            query: (postId) => ({ url: `social/post/${postId}`, method: 'DELETE' }),
+            invalidatesTags: ['SocialFeed', 'SocialReels', 'SocialProfile', 'SocialProfilePosts', 'SocialArchive'],
+        }),
+        updateSocialPost: builder.mutation<
+            ApiResponse<SocialPostDto>,
+            { postId: string; caption?: string }
+        >({
+            query: ({ postId, caption }) => ({
+                url: `social/post/${postId}`,
+                method: 'PUT',
+                body: { caption: caption ?? '' },
+            }),
+            invalidatesTags: ['SocialFeed', 'SocialReels', 'SocialProfile', 'SocialProfilePosts'],
+            async onQueryStarted({ postId, caption }, { dispatch, queryFulfilled }) {
+                const patch = dispatch(
+                    api.util.updateQueryData('getSocialPost', postId, (draft) => {
+                        draft.caption = caption?.trim() ? caption.trim() : undefined;
+                    }),
+                );
+                try {
+                    const { data: res } = await queryFulfilled;
+                    if (res?.success && res.data) {
+                        dispatch(
+                            api.util.updateQueryData('getSocialPost', postId, (draft) => {
+                                Object.assign(draft, res.data);
+                            }),
+                        );
+                    }
+                } catch {
+                    patch.undo();
+                }
+            },
+            transformResponse: (response: unknown) => transformApiResponse<SocialPostDto>(response),
+        }),
+        pinSocialPost: builder.mutation<{ message: string; success: boolean }, string>({
+            query: (postId) => ({ url: `social/post/${postId}/pin`, method: 'POST' }),
+            invalidatesTags: ['SocialFeed', 'SocialProfile'],
+        }),
+        unpinSocialPost: builder.mutation<{ message: string; success: boolean }, string>({
+            query: (postId) => ({ url: `social/post/${postId}/pin`, method: 'DELETE' }),
+            invalidatesTags: ['SocialFeed', 'SocialProfile'],
+        }),
+        getSocialArchivedContent: builder.query<SocialArchivedContentDto, { profileId: string; limit?: number }>({
+            query: ({ profileId, limit }) => {
+                const q = limit != null ? `?limit=${limit}` : '';
+                return `social/archive/profile/${profileId}${q}`;
+            },
+            transformResponse: transformObjectResponse<SocialArchivedContentDto>,
+            providesTags: (_r, _e, { profileId }) => [{ type: 'SocialArchive', id: profileId }],
+        }),
+        restoreSocialArchivedItem: builder.mutation<ApiResponse<boolean>, SocialRestoreArchivedRequest>({
+            query: (body) => ({ url: 'social/archive/restore', method: 'POST', body }),
+            invalidatesTags: ['SocialFeed', 'SocialReels', 'SocialProfile', 'SocialProfilePosts', 'SocialHighlight', 'SocialStory', 'SocialArchive'],
+            transformResponse: (response: unknown) => transformApiResponse<boolean>(response),
+        }),
+        createSocialPost: builder.mutation<
+            ApiResponse<string>,
+            {
+                profileId: string;
+                caption?: string;
+                type: SocialPostType;
+                files: { uri: string; name: string; type: string }[];
+                durationSec?: number;
+                durationSecs?: number[];
+                appointmentId?: string;
+            }
+        >({
+            query: ({ profileId, caption, type, files, durationSec, durationSecs, appointmentId }) => {
+                const form = new FormData();
+                form.append('profileId', profileId);
+                if (caption) form.append('caption', caption);
+                form.append('type', String(type));
+                if (durationSec != null) form.append('durationSec', String(durationSec));
+                durationSecs?.forEach((d) => form.append('durationSecs', String(d)));
+                if (appointmentId) form.append('appointmentId', appointmentId);
+                files.forEach((f) => {
+                    form.append('files', {
+                        uri: f.uri,
+                        name: f.name,
+                        type: f.type,
+                    } as unknown as Blob);
+                });
+                return { url: 'social/post', method: 'POST', body: form };
+            },
+            invalidatesTags: ['SocialFeed', 'SocialReels', 'SocialProfile', 'SocialProfilePosts', 'AppointmentSocialShare'],
+            transformResponse: (response: unknown) => transformApiResponse<string>(response),
+        }),
+        getAppointmentSocialShareStatus: builder.query<string[], { appointmentIds: string[] }>({
+            query: ({ appointmentIds }) => ({
+                url: 'social/appointment-share/status',
+                method: 'POST',
+                body: { appointmentIds },
+            }),
+            serializeQueryArgs: ({ queryArgs }) => queryArgs.appointmentIds.join(','),
+            providesTags: ['AppointmentSocialShare'],
+            transformResponse: transformArrayResponse<string>,
+        }),
+
     }),
 });
 
@@ -2614,6 +3581,13 @@ export const {
     useDeleteAppointmentMutation,
     useDeleteAllAppointmentsMutation,
     useGetChatThreadsQuery,
+    useLazyGetChatThreadsQuery,
+    useGetSocialChatThreadsQuery,
+    useLazyGetSocialChatThreadsQuery,
+    useGetDeletedSocialChatThreadsQuery,
+    useLazyGetDeletedSocialChatThreadsQuery,
+    useRestoreSocialChatThreadMutation,
+    useEnsureSocialChatThreadMutation,
     useGetChatMessagesQuery,
     useGetChatMessagesByThreadQuery,
     useSendChatMessageMutation,
@@ -2702,4 +3676,67 @@ export const {
     useGetServicePackagesByOwnerQuery,
     useLazyGetServicePackagesByOwnerQuery,
     useGetServicePackagesByAppointmentQuery,
+    // Social
+    useGetSocialLimitsQuery,
+    useGetSocialFreeTierUsageQuery,
+    useGetSocialMyProfilesQuery,
+    useGetSocialProfileQuery,
+    useUpdateSocialProfileMutation,
+    useUploadSocialProfileAvatarMutation,
+    useUploadSocialProfileCoverMutation,
+    useGetSocialFeedQuery,
+    useLazyGetSocialFeedQuery,
+    useDeleteSocialPostMutation,
+    useUpdateSocialPostMutation,
+    usePinSocialPostMutation,
+    useUnpinSocialPostMutation,
+    useGetSocialArchivedContentQuery,
+    useRestoreSocialArchivedItemMutation,
+    useDeleteSocialStoryMutation,
+    useRecordSocialStoryViewMutation,
+    useCreateSocialStoryReplyMutation,
+    useGetSocialStoryViewersQuery,
+    useLazyGetSocialStoryViewersQuery,
+    useGetSocialProfileStoriesQuery,
+    useGetSocialStoryHighlightsQuery,
+    useLazyGetSocialStoryHighlightDetailQuery,
+    useCreateSocialStoryHighlightMutation,
+    useUpdateSocialStoryHighlightMutation,
+    useAddStoriesToSocialHighlightMutation,
+    useRemoveSocialStoryHighlightItemMutation,
+    useGetSocialStoryHighlightDetailQuery,
+    useDeleteSocialStoryHighlightMutation,
+    useGetSocialReelsFeedQuery,
+    useLazyGetSocialReelsFeedQuery,
+    useGetSocialPostQuery,
+    useRecordSocialPostViewMutation,
+    useSearchSocialProfilesQuery,
+    useLazySearchSocialProfilesQuery,
+    useDiscoverSocialPostsQuery,
+    useLazyDiscoverSocialPostsQuery,
+    useGetSocialProfileByOwnerQuery,
+    useGetSocialProfileByUsernameQuery,
+    useLazyGetSocialProfileByUsernameQuery,
+    useGetSocialProfilePostsQuery,
+    useLazyGetSocialProfilePostsQuery,
+    useToggleSocialLikeMutation,
+    useToggleSocialSaveMutation,
+    useGetSavedSocialPostsQuery,
+    useLazyGetSavedSocialPostsQuery,
+    useGetSocialCommentsQuery,
+    useLazyGetSocialCommentsQuery,
+    useCreateSocialCommentMutation,
+    useUpdateSocialCommentMutation,
+    useDeleteSocialCommentMutation,
+    useGetSocialFollowListQuery,
+    useLazyGetSocialFollowListQuery,
+    useFollowSocialProfileMutation,
+    useUnfollowSocialProfileMutation,
+    useToggleSocialProfileMuteMutation,
+    useGetSocialMutualFollowersQuery,
+    useLazyGetSocialMutualFollowersQuery,
+    useCreateSocialPostMutation,
+    useGetAppointmentSocialShareStatusQuery,
+    useGetSocialStoryFeedQuery,
+    useCreateSocialStoryMutation,
 } = api;

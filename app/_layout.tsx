@@ -24,9 +24,11 @@ import { useSignalRV2 } from './hook/useSignalRV2';
 import { ErrorBoundary } from './components/common/ErrorBoundary';
 import { useFcmToken } from './hook/useFcmToken';
 import { useFirebaseMessaging } from './hook/useFirebaseMessaging';
+import { useFreeBarberBackgroundBootstrap } from './hook/useFreeBarberBackgroundBootstrap';
 import { GlobalSnackbar } from './hook/useSnackbar';
 import { GlobalAlert } from './components/common/GlobalAlert';
 import { GlobalKeyboardDismisser } from './components/common/GlobalKeyboardDismisser';
+import { SocialAppointmentSharePromptHost } from './components/social/SocialAppointmentSharePromptHost';
 // Background location task'ı kaydet (Expo Go'da çalışmaz)
 import './tasks/backgroundLocation';
 // FCM background message handler (React ağacının DIŞINDA, modül yüklenince çalışır)
@@ -37,6 +39,7 @@ import { ThemeProvider } from './context/ThemeContext';
 import { useTheme } from './hook/useTheme';
 // import { BrandIntro } from './components/splash/BrandIntro';
 import { MultiAccountProvider, useMultiAccount } from './context/MultiAccountContext';
+import { ActiveSocialProfileProvider } from './context/ActiveSocialProfileContext';
 import { NotificationOpenerProvider } from './context/NotificationOpenerContext';
 import { useAppDispatch, useAppSelector } from './store/hook';
 import { resetUserBanned } from './store/bannedSlice';
@@ -70,6 +73,7 @@ function ThemedStack() {
       <Stack.Screen name="(barberstoretabs)" />
       <Stack.Screen name="(freebarbertabs)" />
       <Stack.Screen name="(customertabs)" />
+      <Stack.Screen name="(social)" />
       <Stack.Screen name="(screens)" />
     </Stack>
   );
@@ -149,8 +153,11 @@ const RootLayout = () => {
           <PaperProvider theme={paperTheme}>
             <BottomSheetModalProvider>
               <MultiAccountProvider>
+                <ActiveSocialProfileProvider>
                 <NotificationOpenerProvider>
                 <SignalRBootstrap />
+                <SocialAppointmentSharePromptHost />
+                <FreeBarberBackgroundBootstrap />
                 <FcmTokenBootstrap />
                 <FirebaseMessagingBootstrap />
                 {/* Klavye dışına dokunulduğunda klavye kapanır. Butonlar / input'lar */}
@@ -164,6 +171,7 @@ const RootLayout = () => {
                 <AccountSwitchOverlay />
                 <BanDetector />
                 </NotificationOpenerProvider>
+                </ActiveSocialProfileProvider>
               </MultiAccountProvider>
             </BottomSheetModalProvider>
           </PaperProvider>
@@ -176,6 +184,11 @@ const RootLayout = () => {
 
 function SignalRBootstrap() {
   useSignalRV2();
+  return null;
+}
+
+function FreeBarberBackgroundBootstrap() {
+  useFreeBarberBackgroundBootstrap();
   return null;
 }
 

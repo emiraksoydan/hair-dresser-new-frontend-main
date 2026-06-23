@@ -1,5 +1,5 @@
 import { Icon } from "react-native-paper";
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useMemo, useRef, useState } from "react";
 import {
   Pressable,
   StyleSheet,
@@ -14,6 +14,7 @@ import { ImageGetDto } from "../../types";
 import { useLanguage } from "../../hook/useLanguage";
 import { useTheme } from "../../hook/useTheme";
 import { PanelImageGalleryModal } from "./PanelImageGalleryModal";
+import { useRouter } from "expo-router";
 
 const DROPDOWN_WIDTH = 188;
 
@@ -28,44 +29,55 @@ type Props = {
   panelCompare?: PanelCompareConfig | null;
   /** Galeri modal başlığı (işletme / berber adı) */
   galleryTitle?: string;
+  /** Sosyal profil sahibi (panel kartından profil görüntüleme) */
+  socialOwnerType?: number;
+  socialOwnerId?: string;
 };
 
 /**
  * Liste kartı görseli üzerinde: dikey üç nokta — içinde karşılaştır + fotoğrafları gör.
  */
-export function PanelImageOverflowMenu({ images, panelCompare, galleryTitle }: Props) {
+export function PanelImageOverflowMenu({ images, panelCompare, galleryTitle, socialOwnerType, socialOwnerId }: Props) {
   const { t } = useLanguage();
   const { isDark } = useTheme();
+  const router = useRouter();
   const [menuOpen, setMenuOpen] = useState(false);
   const [galleryOpen, setGalleryOpen] = useState(false);
-  /** Ekran dışına taşmaması için pill’e göre yatay ofset (px) */
-  const [dropdownLeft, setDropdownLeft] = useState(0);
+  const [dropdownLeft, setDropdownLeft] = useState<number | null>(null);
   const anchorRef = useRef<View>(null);
 
-  useEffect(() => {
-    if (!menuOpen) return;
-    const id = requestAnimationFrame(() => {
-      anchorRef.current?.measureInWindow((x, _y, _w, _h) => {
-        const pad = 10;
-        const sw = Dimensions.get("window").width;
-        let left = 0;
-        const screenLeft = x + left;
-        if (screenLeft + DROPDOWN_WIDTH > sw - pad) {
-          left = sw - pad - DROPDOWN_WIDTH - x;
-        }
-        if (x + left < pad) {
-          left = pad - x;
-        }
-        setDropdownLeft(left);
-      });
+  const closeMenu = useCallback(() => {
+    setMenuOpen(false);
+    setDropdownLeft(null);
+  }, []);
+
+  const openMenu = useCallback(() => {
+    anchorRef.current?.measureInWindow((x, _y, _w, _h) => {
+      const pad = 10;
+      const sw = Dimensions.get("window").width;
+      let left = 0;
+      const screenLeft = x + left;
+      if (screenLeft + DROPDOWN_WIDTH > sw - pad) {
+        left = sw - pad - DROPDOWN_WIDTH - x;
+      }
+      if (x + left < pad) {
+        left = pad - x;
+      }
+      setDropdownLeft(left);
+      setMenuOpen(true);
     });
-    return () => cancelAnimationFrame(id);
-  }, [menuOpen]);
+  }, []);
+
+  const toggleMenu = useCallback(() => {
+    if (menuOpen) closeMenu();
+    else openMenu();
+  }, [menuOpen, closeMenu, openMenu]);
 
   const hasPhotos = (images?.length ?? 0) > 0;
   const showCompare = Boolean(panelCompare && !panelCompare.hidden);
 
-  const showButton = showCompare || hasPhotos;
+  const hasSocial = socialOwnerType != null && !!socialOwnerId;
+  const showButton = showCompare || hasPhotos || hasSocial;
   const menuItems = useMemo(() => {
     const items: Array<{ key: string; icon: string; label: string; onPress: () => void }> = [];
     if (showCompare && panelCompare) {
@@ -88,18 +100,31 @@ export function PanelImageOverflowMenu({ images, panelCompare, galleryTitle }: P
         },
       });
     }
+    if (hasSocial) {
+      items.push({
+        key: "social",
+        icon: "instagram",
+        label: t("social.openSocialProfile"),
+        onPress: () => {
+          router.push({
+            pathname: "/(screens)/social/profile-view",
+            params: { ownerType: String(socialOwnerType), ownerId: socialOwnerId },
+          } as any);
+        },
+      });
+    }
     return items;
-  }, [showCompare, hasPhotos, panelCompare, t]);
-
-  const closeMenu = useCallback(() => setMenuOpen(false), []);
+  }, [showCompare, hasPhotos, hasSocial, panelCompare, socialOwnerType, socialOwnerId, router, t]);
 
   if (!showButton || menuItems.length === 0) return null;
+
+  const menuReady = menuOpen && dropdownLeft !== null;
 
   return (
     <>
       <View ref={anchorRef} style={styles.anchor} pointerEvents="box-none" collapsable={false}>
         <TouchableOpacity
-          onPress={() => setMenuOpen((o) => !o)}
+          onPress={toggleMenu}
           activeOpacity={0.85}
           hitSlop={8}
           accessibilityRole="button"
@@ -109,13 +134,10 @@ export function PanelImageOverflowMenu({ images, panelCompare, galleryTitle }: P
           <Icon source="dots-vertical" size={18} color="rgba(255,255,255,0.92)" />
         </TouchableOpacity>
 
+        {menuReady ? (
         <MotiView
           from={{ opacity: 0, scale: 0.94, translateY: -4 }}
-          animate={{
-            opacity: menuOpen ? 1 : 0,
-            scale: menuOpen ? 1 : 0.94,
-            translateY: menuOpen ? 0 : -4,
-          }}
+          animate={{ opacity: 1, scale: 1, translateY: 0 }}
           transition={{ type: "timing", duration: 180 }}
           style={[
             styles.dropdown,
@@ -128,7 +150,6 @@ export function PanelImageOverflowMenu({ images, panelCompare, galleryTitle }: P
               borderColor: "rgba(250, 204, 21, 0.42)",
             },
           ]}
-          pointerEvents={menuOpen ? "auto" : "none"}
         >
           <View style={styles.menuList}>
             {menuItems.map((row) => (
@@ -163,8 +184,9 @@ export function PanelImageOverflowMenu({ images, panelCompare, galleryTitle }: P
             ))}
           </View>
         </MotiView>
+        ) : null}
 
-        {menuOpen && (
+        {menuReady && (
           <Pressable style={styles.backdrop} onPress={closeMenu} accessibilityLabel="Dismiss menu" />
         )}
       </View>

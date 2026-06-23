@@ -37,21 +37,29 @@ const FREE_BARBER_FEATURES: FeatureItem[] = [
     { key: 'feature_free_panel', free: true },
     { key: 'feature_profile_visible', free: true },
     { key: 'feature_discovery', free: true },
+    { key: 'feature_social_stories', free: true },
+    { key: 'feature_social_highlights', free: true },
+    { key: 'feature_social_posts', free: true },
     { key: 'feature_messaging', free: false },
     { key: 'feature_appointments', free: false },
     { key: 'feature_ratings', free: false },
     { key: 'feature_ai_assistant', free: false },
+    { key: 'feature_social_unlimited', free: false },
 ];
 
 const BARBER_STORE_FEATURES: FeatureItem[] = [
     { key: 'feature_free_store', free: true },
     { key: 'feature_profile_visible', free: true },
     { key: 'feature_discovery', free: true },
+    { key: 'feature_social_stories', free: true },
+    { key: 'feature_social_highlights', free: true },
+    { key: 'feature_social_posts', free: true },
     { key: 'feature_extra_stores', free: false },
     { key: 'feature_messaging', free: false },
     { key: 'feature_appointments', free: false },
     { key: 'feature_ratings', free: false },
     { key: 'feature_ai_assistant', free: false },
+    { key: 'feature_social_unlimited', free: false },
 ];
 
 export default function SubscriptionPage() {

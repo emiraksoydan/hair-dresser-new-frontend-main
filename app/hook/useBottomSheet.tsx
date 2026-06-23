@@ -13,7 +13,12 @@ export type UseBottomSheetOptions = {
     pressBehavior?: 'close' | 'collapse' | 'none';
 };
 
-export const useBottomSheet = (options: UseBottomSheetOptions = {}) => {
+export const useBottomSheet = (
+    options: UseBottomSheetOptions | (string | number)[] = {},
+) => {
+    const normalized: UseBottomSheetOptions = Array.isArray(options)
+        ? { snapPoints: options }
+        : options;
     const ref = useRef<BottomSheetModal>(null);
     const [isOpen, setIsOpen] = useState(false);
 
@@ -25,7 +30,7 @@ export const useBottomSheet = (options: UseBottomSheetOptions = {}) => {
         appearsOnIndex = 0,
         disappearsOnIndex = -1,
         pressBehavior = 'close',
-    } = options;
+    } = normalized;
 
     const present = useCallback(() => {
         if (ref.current) {
@@ -74,6 +79,7 @@ export const useBottomSheet = (options: UseBottomSheetOptions = {}) => {
         ref,
         isOpen,
         present,
+        open: present,
         dismiss,
         makeBackdrop,
         handleChange,

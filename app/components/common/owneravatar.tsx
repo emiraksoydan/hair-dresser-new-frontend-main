@@ -21,6 +21,8 @@ type Props = {
     wrapperStyle?: StyleProp<ViewStyle>;
     /** Sunucuda foto yokken (ör. sohbet) gösterilecek yerel görsel */
     placeholderAsset?: ImageSourcePropType;
+    /** Sosyal sohbet: yalnızca fallback/placeholder; User owner görseli çekme */
+    skipOwnerImageFetch?: boolean;
 };
 
 const OwnerAvatarInner: React.FC<Props> = ({
@@ -36,13 +38,17 @@ const OwnerAvatarInner: React.FC<Props> = ({
     iconContainerClassName,
     wrapperStyle,
     placeholderAsset,
+    skipOwnerImageFetch = false,
 }) => {
     const { colors } = useTheme();
 
     // fallbackUrl boş string veya null/undefined ise fetch yap
     const hasValidFallback = fallbackUrl && fallbackUrl.trim().length > 0;
     const shouldFetch =
-        !!ownerId && ownerType != null && (preferServer || !hasValidFallback);
+        !skipOwnerImageFetch &&
+        !!ownerId &&
+        ownerType != null &&
+        (preferServer || !hasValidFallback);
 
     const { data: images } = useGetImagesByOwnerQuery(
         { ownerId: ownerId ?? "", ownerType: ownerType as ImageOwnerType },

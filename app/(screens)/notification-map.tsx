@@ -2,7 +2,8 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { View, TouchableOpacity, StatusBar, Platform, ActivityIndicator } from "react-native";
 import { useLocalSearchParams } from "expo-router";
 import { Icon } from "react-native-paper";
-import { Marker } from "react-native-maps";
+import * as Location from "expo-location";
+import { Marker, Polyline } from "react-native-maps";
 import type MapViewType from "react-native-maps";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -16,20 +17,11 @@ import { getCurrentLocationSafe } from "../utils/location/location-helper";
 import { COLORS } from "../constants/colors";
 
 /**
- * Bildirim sheet'inden açılan generic harita ekranı.
+ * Bildirim sheet'inden açılan harita ekranı.
  *
- * Desteklenen hedef tipleri:
- *   - "store"      → Statik konum (payload'dan gelir, sabit). 30sn'de bir refetch
- *                    yine de yapılır ki dükkan adresi güncellendiyse yansır.
- *   - "freebarber" → CANLI konum: useTrackFreeBarberLocation hook'u FB tarafında
- *                    her 30sn / 100m hareket'te backend'e push eder. Burada 10sn'de
- *                    bir polling ile güncel konumu çekiyoruz (refetchInterval).
- *   - "customer"   → Şu an persist edilmiyor. Param ile lat/lng gelirse gösteririz
- *                    (snapshot). Aksi halde "henüz desteklenmiyor" mesajı.
- *
- * NOT: Customer canlı konumu için Appointment entity'sine RequestLatitude /
- * RequestLongitude alanlarının eklenmesi + push edilmesi gerekir. Şimdilik
- * notification payload'ında customer.latitude/longitude varsa kullanılır.
+ * - store: dükkan konumu (30sn refetch)
+ * - freebarber: canlı konum (10sn polling)
+ * - customer: randevu açılışındaki snapshot (Appointment.RequestLatitude/Longitude → payload)
  */
 
 type TargetType = "store" | "freebarber" | "customer";
@@ -50,6 +42,11 @@ const haversineKm = (lat1: number, lon1: number, lat2: number, lon2: number) => 
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   return R * c;
 };
+
+function formatDistanceKm(km: number): string {
+  if (km < 1) return `${Math.round(km * 1000)} m`;
+  return `${km.toFixed(1)} km`;
+}
 
 export default function NotificationMapScreen() {
   const router = useSafeNavigation();
@@ -108,16 +105,39 @@ export default function NotificationMapScreen() {
     return null;
   }, [targetType, fbQuery.data, storeQuery.data, initialLat, initialLng]);
 
-  // Kullanıcının kendi konumu (statik — açılışta bir kez alınır)
+  // Kullanıcının canlı konumu — hareket ettikçe mesafe ve çizgi güncellenir
   const [myCoords, setMyCoords] = useState<{ lat: number; lng: number } | null>(null);
   useEffect(() => {
     let cancelled = false;
+    let watchSub: Location.LocationSubscription | null = null;
+
     (async () => {
-      const r = await getCurrentLocationSafe();
-      if (!cancelled && r.ok) setMyCoords({ lat: r.lat, lng: r.lon });
+      const initial = await getCurrentLocationSafe();
+      if (!cancelled && initial.ok) {
+        setMyCoords({ lat: initial.lat, lng: initial.lon });
+      }
+
+      const { granted } = await Location.getForegroundPermissionsAsync();
+      if (cancelled || !granted) return;
+
+      watchSub = await Location.watchPositionAsync(
+        {
+          accuracy: Location.Accuracy.Balanced,
+          distanceInterval: 20,
+          timeInterval: 5000,
+        },
+        (pos) => {
+          const lat = pos.coords.latitude;
+          const lng = pos.coords.longitude;
+          if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+          setMyCoords({ lat, lng });
+        },
+      );
     })();
+
     return () => {
       cancelled = true;
+      watchSub?.remove();
     };
   }, []);
 
@@ -134,9 +154,44 @@ export default function NotificationMapScreen() {
     return undefined;
   }, [targetCoords]);
 
-  // Hedef konum değiştiğinde haritayı ÜZERİNE getir (FB hareket ederse takip etsin)
+  const distanceKm = useMemo(() => {
+    if (!myCoords || !targetCoords) return null;
+    return haversineKm(myCoords.lat, myCoords.lng, targetCoords.lat, targetCoords.lng);
+  }, [myCoords, targetCoords]);
+
+  const lineCoordinates = useMemo(() => {
+    if (!myCoords || !targetCoords) return null;
+    return [
+      { latitude: myCoords.lat, longitude: myCoords.lng },
+      { latitude: targetCoords.lat, longitude: targetCoords.lng },
+    ];
+  }, [myCoords, targetCoords]);
+
+  const fitBothOnMap = useCallback(() => {
+    if (!mapRef.current || !targetCoords) return;
+    const coords = myCoords
+      ? [
+          { latitude: myCoords.lat, longitude: myCoords.lng },
+          { latitude: targetCoords.lat, longitude: targetCoords.lng },
+        ]
+      : [{ latitude: targetCoords.lat, longitude: targetCoords.lng }];
+    mapRef.current.fitToCoordinates(coords, {
+      edgePadding: { top: insets.top + 96, right: 48, bottom: 48, left: 48 },
+      animated: true,
+    });
+  }, [myCoords, targetCoords, insets.top]);
+
+  const didInitialFitRef = useRef(false);
+  const hadMyCoordsForFitRef = useRef(false);
+
   useEffect(() => {
     if (!mapRef.current || !targetCoords) return;
+    if (!didInitialFitRef.current) {
+      didInitialFitRef.current = true;
+      fitBothOnMap();
+      return;
+    }
+    if (targetType !== "freebarber") return;
     mapRef.current.animateToRegion(
       {
         latitude: targetCoords.lat,
@@ -146,12 +201,13 @@ export default function NotificationMapScreen() {
       },
       500,
     );
-  }, [targetCoords?.lat, targetCoords?.lng]);
+  }, [targetCoords?.lat, targetCoords?.lng, targetType, fitBothOnMap]);
 
-  const distanceKm = useMemo(() => {
-    if (!myCoords || !targetCoords) return null;
-    return haversineKm(myCoords.lat, myCoords.lng, targetCoords.lat, targetCoords.lng);
-  }, [myCoords, targetCoords]);
+  useEffect(() => {
+    if (!myCoords || !targetCoords || hadMyCoordsForFitRef.current) return;
+    hadMyCoordsForFitRef.current = true;
+    fitBothOnMap();
+  }, [myCoords, targetCoords, fitBothOnMap]);
 
   const isLive = targetType === "freebarber";
   const isLoadingTarget =
@@ -177,17 +233,8 @@ export default function NotificationMapScreen() {
   }, [router]);
 
   const recenter = useCallback(() => {
-    if (!mapRef.current || !targetCoords) return;
-    mapRef.current.animateToRegion(
-      {
-        latitude: targetCoords.lat,
-        longitude: targetCoords.lng,
-        latitudeDelta: 0.01,
-        longitudeDelta: 0.01,
-      },
-      450,
-    );
-  }, [targetCoords]);
+    fitBothOnMap();
+  }, [fitBothOnMap]);
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.screenBg }}>
@@ -238,7 +285,7 @@ export default function NotificationMapScreen() {
             )}
             <Text style={{ color: colors.textSecondary, fontSize: 12 }} numberOfLines={1}>
               {headerLabel}
-              {distanceKm != null ? ` • ${distanceKm.toFixed(1)} km` : ""}
+              {distanceKm != null ? ` • ${formatDistanceKm(distanceKm)}` : ""}
             </Text>
           </View>
         </View>
@@ -284,7 +331,7 @@ export default function NotificationMapScreen() {
             </Text>
             {targetType === "customer" && (
               <Text style={{ color: colors.textSecondary, marginTop: 8, textAlign: "center", fontSize: 13 }}>
-                Müşterinin canlı konumu için randevu sistemine ek alanlar gerekir. Şimdilik bu özellik dükkan ve serbest berber için aktiftir.
+                {t("notification.mapCustomerSnapshotHint")}
               </Text>
             )}
           </View>
@@ -297,11 +344,25 @@ export default function NotificationMapScreen() {
             showsMyLocationButton={Platform.OS === "android"}
             userInterfaceStyle={isDark ? "dark" : "light"}
           >
-            {/* Hedef marker */}
+            {lineCoordinates && (
+              <Polyline
+                coordinates={lineCoordinates}
+                strokeColor={GOLD}
+                strokeWidth={3}
+                lineDashPattern={[10, 6]}
+                geodesic
+              />
+            )}
             <Marker
               coordinate={{ latitude: targetCoords.lat, longitude: targetCoords.lng }}
               title={targetName || headerLabel}
-              description={isLive ? "Canlı konum • 10sn'de bir güncellenir" : undefined}
+              description={
+                isLive
+                  ? t("notification.mapLiveTargetHint")
+                  : targetType === "customer"
+                    ? t("notification.mapCustomerSnapshotHint")
+                    : undefined
+              }
               pinColor={isLive ? "#22c55e" : "#f05e23"}
             />
           </OsmMapView>

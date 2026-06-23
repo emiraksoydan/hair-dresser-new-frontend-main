@@ -43,10 +43,16 @@ export const useAuth = (): AuthResult => {
         if (!token) return null;
         try {
             const decoded = jwtDecode<JwtPayload>(token);
-            const ut = decoded.userType?.toLowerCase();
-            if (ut === 'customer') return UserType.Customer;
-            if (ut === 'freebarber') return UserType.FreeBarber;
-            if (ut === 'barberstore') return UserType.BarberStore;
+            const raw = decoded.userType as string | number | undefined;
+            if (typeof raw === 'number' && Number.isFinite(raw)) {
+                if (raw === UserType.FreeBarber) return UserType.FreeBarber;
+                if (raw === UserType.BarberStore) return UserType.BarberStore;
+                return UserType.Customer;
+            }
+            const ut = String(raw ?? '').toLowerCase();
+            if (ut === 'customer' || ut === '0') return UserType.Customer;
+            if (ut === 'freebarber' || ut === 'free_barber' || ut === '1') return UserType.FreeBarber;
+            if (ut === 'barberstore' || ut === 'barber_store' || ut === '2') return UserType.BarberStore;
             return null;
         } catch {
             return null;

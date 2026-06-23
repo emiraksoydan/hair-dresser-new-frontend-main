@@ -25,3 +25,4 @@ export * from "./ui";
 export * from "./form";
 export * from "./bottomsheet";
 export * from "./filter";
+export * from "./social";

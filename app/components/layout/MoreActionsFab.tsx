@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useSegments } from "expo-router";
 import { FAB, Portal } from "react-native-paper";
 import { useTheme } from "../../hook/useTheme";
 import {
@@ -40,6 +41,8 @@ export function MoreActionsFab({
 }: Props) {
   const { isDark } = useTheme();
   const insets = useSafeAreaInsets();
+  const segments = useSegments();
+  const isSocialMode = (segments as string[])[0] === "(social)";
   const [open, setOpen] = useState(false);
   const onGold = getTextOnGold(isDark);
 
@@ -132,7 +135,7 @@ export function MoreActionsFab({
     [items, chipBackground, onGold, menuRowWrapper],
   );
 
-  if (items.length === 0) {
+  if (items.length === 0 || isSocialMode) {
     return null;
   }
 

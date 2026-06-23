@@ -27,6 +27,8 @@ import { useAuth } from '../../hook/useAuth';
 import { useLanguage } from '../../hook/useLanguage';
 import { useTheme } from '../../hook/useTheme';
 import { badgeCountLabel } from '../../utils/badgeDisplay';
+import { getChatAccent, getChatListRowStyle } from '../../constants/chatTheme';
+import { CHAT_THREADS_PAGE_SIZE, CHAT_THREADS_QUERY, isThreadVisibleInMainList } from '../../utils/chat/chatThreadStrip';
 
 const CHAT_AVATAR_PLACEHOLDER = require('../../../assets/images/profileempty.webp');
 
@@ -72,7 +74,6 @@ interface MessageThreadListProps {
 }
 
 const THREAD_ROW_STRIDE = 152;
-const THREADS_PAGE_SIZE = 30;
 /** RN `onEndReached` ilk layout'ta yanlış tetiklenebilir — footer spinner flash'ını önler. */
 const END_REACHED_GRACE_MS = 450;
 
@@ -89,7 +90,7 @@ export const MessageThreadList: React.FC<MessageThreadListProps> = ({ routePrefi
     const { token: authToken, userType: currentUserType } = useAuth();
     const dispatch = useAppDispatch();
     const { data: threads, isLoading, refetch, error, isError } = useGetChatThreadsQuery(
-        { limit: THREADS_PAGE_SIZE },
+        CHAT_THREADS_QUERY,
         { skip: !authToken },
     );
     const [toggleFavorite, { isLoading: favoriteToggleBusy }] = useToggleFavoriteMutation();
@@ -129,14 +130,14 @@ export const MessageThreadList: React.FC<MessageThreadListProps> = ({ routePrefi
         try {
             const result = await dispatch(
                 api.endpoints.getChatThreads.initiate(
-                    { before, beforeId, limit: THREADS_PAGE_SIZE },
+                    { before, beforeId, limit: CHAT_THREADS_PAGE_SIZE },
                     // subscribe:false — pagination dispatch'leri yeni subscriber yaratmasın.
                     // Aksi takdirde her sayfa için kalıcı anonim subscriber birikir; SignalR
                     // updateQueryData veya tag invalidation hepsini refetch tetikler.
                     { subscribe: false, forceRefetch: true },
                 ),
             ).unwrap();
-            if (!Array.isArray(result) || result.length < THREADS_PAGE_SIZE) {
+            if (!Array.isArray(result) || result.length < CHAT_THREADS_PAGE_SIZE) {
                 hasMoreRef.current = false;
             }
         } catch {
@@ -147,15 +148,18 @@ export const MessageThreadList: React.FC<MessageThreadListProps> = ({ routePrefi
     }, [dispatch, threads, isLoadingOlder]);
     const mutedTextColor = isDark ? '#94a3b8' : '#64748b';
     const tertiaryTextColor = isDark ? '#64748b' : '#94a3b8';
-    const unreadAccent = '#f05e23';
-    const cardShadowStyle = isDark
-        ? { shadowColor: '#000000', shadowOpacity: 0.3, shadowRadius: 8, shadowOffset: { width: 0, height: 4 }, elevation: 3 }
-        : { shadowColor: '#0f172a', shadowOpacity: 0.08, shadowRadius: 10, shadowOffset: { width: 0, height: 5 }, elevation: 2 };
+    const unreadAccent = getChatAccent(false);
 
     // Backend zaten filtreliyor - backend'den gelen thread'leri olduğu gibi kullan
     // Backend filtresi:
     // - Favori thread'ler: En az 1 aktif favori varsa görünür
     // - Randevu thread'leri: Sadece Pending/Approved durumunda görünür
+
+    // Backend zaten filtreliyor; SignalR sızıntısına karşı sosyal thread'leri client'ta da ayır.
+    const visibleThreads = useMemo(
+        () => (threads ?? []).filter(isThreadVisibleInMainList),
+        [threads],
+    );
 
     const renderItem = useCallback(({ item, index }: { item: ChatThreadListItemDto; index: number }) => {
         const hasUnread = item.unreadCount > 0;
@@ -168,6 +172,7 @@ export const MessageThreadList: React.FC<MessageThreadListProps> = ({ routePrefi
                 : null;
         const threadBackground = hasUnread ? (isDark ? '#1f2937' : '#f8fafc') : colors.cardBg;
         const threadBorder = hasUnread ? unreadAccent : colors.borderColor;
+        const rowSurface = getChatListRowStyle(isDark, hasUnread, unreadAccent, colors.cardBg);
 
         const handlePress = () => {
             router.push(`/(screens)/chat/${item.threadId}`);
@@ -318,14 +323,9 @@ export const MessageThreadList: React.FC<MessageThreadListProps> = ({ routePrefi
             <ScrollStackItem index={index} scroll={scrollY} vanish>
                 <TouchableOpacity
                     onPress={handlePress}
-                    className={`rounded-2xl mb-3 ${hasUnread ? "pt-3 px-4 pb-4" : "pt-2 p-4"}`}
+                    className={`mb-3 ${hasUnread ? "pt-3 px-4 pb-4" : "pt-2 p-4"}`}
                     activeOpacity={0.82}
-                    style={{
-                        backgroundColor: hasUnread ? threadBackground : colors.cardBg,
-                        borderWidth: 1,
-                        borderColor: hasUnread ? threadBorder : (isDark ? 'rgba(148,163,184,0.18)' : 'rgba(148,163,184,0.28)'),
-                        ...cardShadowStyle,
-                    }}
+                    style={rowSurface}
                 >
                     {statusText && statusColor ? (
                         <View className="flex-row items-center mb-2 justify-end gap-2">
@@ -463,9 +463,9 @@ export const MessageThreadList: React.FC<MessageThreadListProps> = ({ routePrefi
                 </TouchableOpacity>
             </ScrollStackItem>
         );
-    }, [router, routePrefix, iconSource, formatTime, currentUserType, t, isDark, colors, mutedTextColor, tertiaryTextColor, unreadAccent, cardShadowStyle, scrollY, toggleFavorite, refetch, favoriteToggleBusy]);
+    }, [router, routePrefix, iconSource, formatTime, currentUserType, t, isDark, colors, mutedTextColor, tertiaryTextColor, unreadAccent, scrollY, toggleFavorite, refetch, favoriteToggleBusy]);
 
-    const hasNoThreads = !threads || (Array.isArray(threads) && threads.length === 0);
+    const hasNoThreads = visibleThreads.length === 0;
     const [retryBusy, setRetryBusy] = useState(false);
     const handleRetry = useCallback(async () => {
         setRetryBusy(true);
@@ -499,7 +499,7 @@ export const MessageThreadList: React.FC<MessageThreadListProps> = ({ routePrefi
     return (
         <View className="flex-1" style={{ backgroundColor: colors.screenBg }}>
             <AnimatedLegendList
-                data={threads ?? []}
+                data={visibleThreads}
                 keyExtractor={((item: ChatThreadListItemDto) => item.threadId) as any}
                 estimatedItemSize={100}
                 scrollEventThrottle={16}

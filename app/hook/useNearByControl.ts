@@ -12,6 +12,9 @@ import { tokenStore } from "../lib/tokenStore";
 // Expo Go background location'ı desteklemez
 const IS_EXPO_GO = Constants.executionEnvironment === "storeClient";
 let backgroundPermissionInflight: Promise<boolean> | null = null;
+/** Birden fazla hook aynı native background task'ı paylaşır. */
+let backgroundTrackingOwners = 0;
+let backgroundTaskStartedGlobal = false;
 
 // Tab remount'larında fetchedOnce bayrağı sıfırlanmasın.
 // JS oturumu süresince yaşar (uygulama tamamen kapanırsa sıfırlanır — bu doğru davranış).
@@ -41,7 +44,8 @@ export function useNearbyControl({
     hardRefreshMs = 15_000,
     onFetch,
     error,
-    enableBackgroundTracking = false, // Sadece useTrackFreeBarberLocation'da true
+    enableBackgroundTracking = false, // Sadece useTrackFreeBarberLocation / bootstrap'ta true
+    foregroundTracking = true,
     persistKey,
 }: UseNearbyControlParams & { error?: any }) {
     const [locationStatus, setLocationStatus] = useState<LocationStatus>("unknown");
@@ -63,7 +67,7 @@ export function useNearbyControl({
 
     const watchRef = useRef<Location.LocationSubscription | null>(null);
     const inflightFetch = useRef(false);
-    const backgroundTaskStarted = useRef(false);
+    const ownsBackgroundTracking = useRef(false);
 
     // Başlangıç değeri undefined olarak ayarlandı
     const savedFetchHandler = useRef<((lat: number, lon: number) => Promise<void>) | undefined>(undefined);
@@ -148,11 +152,10 @@ export function useNearbyControl({
     async function startBackgroundLocation() {
         // Expo Go background location'ı desteklemez
         if (IS_EXPO_GO) {
-            // Background location Expo Go'da desteklenmiyor
             return;
         }
 
-        if (backgroundTaskStarted.current) return;
+        if (backgroundTaskStartedGlobal) return;
 
         try {
             // Aynı anda birden fazla hook mount olursa iOS iki kez dialog göstermesin.
@@ -167,36 +170,49 @@ export function useNearbyControl({
             const granted = await backgroundPermissionInflight;
 
             if (granted) {
-                // Background location task'ı başlat
                 await Location.startLocationUpdatesAsync(BACKGROUND_LOCATION_TASK, {
                     accuracy: Location.Accuracy.Balanced,
-                    distanceInterval: 100, // 100 metre yer değiştirirse güncelle
-                    timeInterval: 30000, // 30 saniyede bir güncelle
+                    distanceInterval: 100,
+                    timeInterval: 30000,
                     foregroundService: {
                         notificationTitle: 'Konum Güncelleniyor',
                         notificationBody: 'Uygulama arka planda konumunuzu güncelliyor',
                     },
                 });
-                backgroundTaskStarted.current = true;
+                backgroundTaskStartedGlobal = true;
             }
-        } catch (error) {
+        } catch {
             // Background location başlatma hatası sessizce atlanır
         }
+    }
+
+    function acquireBackgroundTracking() {
+        if (ownsBackgroundTracking.current) return;
+        ownsBackgroundTracking.current = true;
+        backgroundTrackingOwners += 1;
+    }
+
+    async function releaseBackgroundTracking() {
+        if (!ownsBackgroundTracking.current) return;
+        ownsBackgroundTracking.current = false;
+        backgroundTrackingOwners = Math.max(0, backgroundTrackingOwners - 1);
+        await stopBackgroundLocation();
     }
 
     async function stopBackgroundLocation() {
         // Expo Go background location'ı desteklemez
         if (IS_EXPO_GO) return;
 
-        if (!backgroundTaskStarted.current) return;
+        if (backgroundTrackingOwners > 0) return;
+        if (!backgroundTaskStartedGlobal) return;
 
         try {
             const isTaskDefined = TaskManager.isTaskDefined(BACKGROUND_LOCATION_TASK);
             if (isTaskDefined) {
                 await Location.stopLocationUpdatesAsync(BACKGROUND_LOCATION_TASK);
             }
-            backgroundTaskStarted.current = false;
-        } catch (error) {
+            backgroundTaskStartedGlobal = false;
+        } catch {
             // Background location durdurma hatası sessizce atlanır
         }
     }
@@ -212,11 +228,12 @@ export function useNearbyControl({
 
         setLocationMessage("");
         setLocationStatus("granted");
-        await startWatching();
+        if (foregroundTracking) {
+            await startWatching();
+        }
 
-        // Background location'ı sadece açıkça istenirse başlat (FreeBarber konum takibi).
-        // Ön plan izni diyaloğuyla arka plan izni diyaloğu üst üste gelmesin diye kısa gecikme.
         if (enableBackgroundTracking) {
+            acquireBackgroundTracking();
             await new Promise(r => setTimeout(r, 1500));
             await startBackgroundLocation();
         }
@@ -226,7 +243,9 @@ export function useNearbyControl({
 
     useEffect(() => {
         if (!enabled) {
-            if (enableBackgroundTracking) stopBackgroundLocation();
+            if (enableBackgroundTracking) {
+                void releaseBackgroundTracking();
+            }
             return;
         }
 
@@ -241,7 +260,9 @@ export function useNearbyControl({
             clearTimeout(safetyTimer);
             watchRef.current?.remove();
             watchRef.current = null;
-            if (enableBackgroundTracking) stopBackgroundLocation();
+            if (enableBackgroundTracking) {
+                void releaseBackgroundTracking();
+            }
         };
     }, [enabled]);
 
@@ -276,14 +297,14 @@ export function useNearbyControl({
 
                 if (permissionStatus.granted) {
                     // Watch aktif değilse veya daha önce denied idi ise, durumu güncelle ve fetch yap
-                    if (!watchRef.current) {
+                    if (!watchRef.current && foregroundTracking) {
                         setLocationStatus("granted");
                         setLocationMessage("");
                         await startWatching();
                     }
 
-                    // Background location'ı sadece açıkça istenirse başlat
-                    if (enabled && enableBackgroundTracking && !backgroundTaskStarted.current) {
+                    if (enabled && enableBackgroundTracking && !ownsBackgroundTracking.current) {
+                        acquireBackgroundTracking();
                         await startBackgroundLocation();
                     }
 
@@ -301,11 +322,13 @@ export function useNearbyControl({
                     setLocationMessage(i18n.t("location.permissionDenied"));
                     watchRef.current?.remove();
                     watchRef.current = null;
-                    stopBackgroundLocation();
+                    if (enableBackgroundTracking) {
+                        await releaseBackgroundTracking();
+                    }
                 }
             } else if (nextAppState === "background" || nextAppState === "inactive") {
-                // Uygulama background'a gittiğinde background location'ı başlat (sadece açıkça istenirse)
-                if (enabled && enableBackgroundTracking && locationStatus === "granted" && !backgroundTaskStarted.current) {
+                if (enabled && enableBackgroundTracking && !ownsBackgroundTracking.current) {
+                    acquireBackgroundTracking();
                     await startBackgroundLocation();
                 }
             }

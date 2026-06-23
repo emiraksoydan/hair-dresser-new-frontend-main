@@ -1,5 +1,6 @@
 import i18n from "../../i18n/config";
 import { ChatMessageItemDto, ChatMessageType } from "../../types/chat";
+import { parseSocialShareMessage, socialSharePreviewFromText, socialShareVisibleLine } from "../social/socialShareMessage";
 
 /**
  * RTK/Immer `updateQueryData` taslağından çıkan proxy, produce bitince geçersizlenir.
@@ -31,6 +32,11 @@ export function lastMessagePreviewFromChatMessage(m: ChatMessageItemDto | null |
   const raw = (m.text ?? "").trim();
 
   if (type === ChatMessageType.Text) {
+    if (parseSocialShareMessage(m.text)) {
+      const visible = socialShareVisibleLine(m.text);
+      if (visible) return visible.length > 60 ? visible.substring(0, 60) : visible;
+      return socialSharePreviewFromText(m.text);
+    }
     const t = m.text ?? "";
     return t.length > 60 ? t.substring(0, 60) : t;
   }

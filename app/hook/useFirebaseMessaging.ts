@@ -7,6 +7,7 @@ import { useNotificationOpener } from '../context/NotificationOpenerContext';
 import { useMultiAccount } from '../context/MultiAccountContext';
 import { api } from '../store/api';
 import { useAppDispatch } from '../store/hook';
+import { tryNavigateFromSocialPush } from '../utils/social/social-push-navigation';
 
 type RemoteMessage = {
   messageId?: string;
@@ -142,19 +143,21 @@ export function useFirebaseMessaging() {
       const forCurrentUser = isPushForCurrentUser(msg.data);
 
       try {
-        // Cache'i sadece aktif hesabın push'unda tazele.
         if (forCurrentUser) refreshAfterPush();
-        // Ekranın hazır olduğundan emin olmak için küçük bir gecikme.
-        // NOT: Yabancı hesap bildirimi tap'lenirse, openNotifications mevcut hesabın
-        // bildirim listesini açar — aradığı bildirimi görmez. Hesap geçişi entegrasyonu
-        // ileride eklenebilir; şimdilik en az bilgi olsun, app açılsın.
-        setTimeout(() => {
-          try {
-            openNotifications();
-          } catch {
-            // Context provider henüz yoksa sessizce geç.
-          }
-        }, 250);
+
+        const data = msg.data as Record<string, string> | undefined;
+        const navigatedSocial = data ? tryNavigateFromSocialPush(data) : false;
+
+        if (!navigatedSocial) {
+          // Randevu ve diğer bildirimler: mevcut sheet akışı
+          setTimeout(() => {
+            try {
+              openNotifications();
+            } catch {
+              // Context provider henüz yoksa sessizce geç.
+            }
+          }, 250);
+        }
       } catch {
         // ignore
       }

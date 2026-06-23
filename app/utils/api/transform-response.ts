@@ -54,9 +54,11 @@ export function transformBooleanResponse(response: unknown): boolean {
 /**
  * Transforms response with success/data wrapper
  */
-export function transformApiResponse<T>(response: unknown): { success: boolean; data: T; message?: string } | null {
-  if (!response || typeof response !== 'object') return null;
-  
+export function transformApiResponse<T>(response: unknown): { success: boolean; data: T; message?: string } {
+  if (!response || typeof response !== 'object') {
+    return { success: false, data: undefined as T };
+  }
+
   const resp = response as { success?: boolean; data?: unknown; message?: string };
   if (resp.success !== undefined && resp.data !== undefined) {
     return {
@@ -65,5 +67,5 @@ export function transformApiResponse<T>(response: unknown): { success: boolean; 
       message: resp.message,
     };
   }
-  return null;
+  return { success: false, data: undefined as T };
 }
