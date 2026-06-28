@@ -1,8 +1,22 @@
 diff --git a/node_modules/react-native-maps/ios/AirMaps/AIRMap.m b/node_modules/react-native-maps/ios/AirMaps/AIRMap.m
-index 07a4638..80e3083 100644
+index 07a4638..2498aa2 100644
 --- a/node_modules/react-native-maps/ios/AirMaps/AIRMap.m
 +++ b/node_modules/react-native-maps/ios/AirMaps/AIRMap.m
-@@ -135,7 +135,11 @@ const NSInteger AIRMapMaxZoomLevel = 20;
+@@ -104,6 +104,13 @@ const NSInteger AIRMapMaxZoomLevel = 20;
+ #pragma clang diagnostic push
+ #pragma clang diagnostic ignored "-Wobjc-missing-super-calls"
+ - (void)insertReactSubview:(id<RCTComponent>)subview atIndex:(NSInteger)atIndex {
++    // New Architecture (Fabric legacy interop) bazen nil bir subview gonderebiliyor
++    // (RCTLegacyViewManagerInteropComponentView finalizeUpdates sirasinda). Bu durumda
++    // NSMutableArray insertObject:nil "object cannot be nil" SIGABRT'i atiyor.
++    // nil ise sessizce cik — mount transaction'ini koruruz.
++    if (subview == nil) {
++        return;
++    }
+     // Our desired API is to pass up markers/overlays as children to the mapview component.
+     // This is where we intercept them and do the appropriate underlying mapview action.
+     if ([subview isKindOfClass:[AIRMapMarker class]]) {
+@@ -135,7 +142,11 @@ const NSInteger AIRMapMaxZoomLevel = 20;
              [self insertReactSubview:(UIView *)childSubviews[i] atIndex:atIndex];
          }
      }
